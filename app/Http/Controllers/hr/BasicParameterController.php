@@ -896,7 +896,7 @@ class BasicParameterController extends functionController
         }
 
         // ✅ Capture all request values
-        $data['level'] = trim($request->input('level'));
+        // $data['level'] = trim($request->input('level'));
         $data['designation'] = trim($request->input('designation'));
         $data['court'] = trim($request->input('court'));
         $data['department'] = trim($request->input('department'));
@@ -909,14 +909,14 @@ class BasicParameterController extends functionController
         if ($request->has('add')) {
             $request->validate([
                 'department' => 'required',
-                'level' => 'required',
+                // 'level' => 'required',
                 'designation' => 'required',
             ]);
 
             DB::table('tbldesignation')->insert([
                 'courtId' => $data['court'],
                 'departmentId' => $data['department'],
-                'grade' => $data['level'],
+                // 'grade' => $data['level'],
                 'designation' => strtoupper(trim($request->input('designation'))),
             ]);
 
@@ -1058,6 +1058,8 @@ class BasicParameterController extends functionController
         }
 
         $data['UnitList'] = $query->orderBy('d.unitID', 'desc')->paginate(20);
+
+        // dd($data['UnitList']);
 
         return view('hr.basicparameter.unit', $data);
     }

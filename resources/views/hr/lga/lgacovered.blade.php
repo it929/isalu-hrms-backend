@@ -6,7 +6,7 @@
 
 
 @section('content')
-    <style>
+    {{-- <style>
         .table>thead>tr>th {
             vertical-align: middle;
             text-align: center;
@@ -57,6 +57,83 @@
         .dataTables_length label:first-child {
             display: none !important;
         }
+    </style> --}}
+
+    <style>
+        /* Card Style */
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            margin-bottom: 20px;
+        }
+
+        .dataTables_length label:first-child {
+            display: none !important;
+        }
+
+        .dataTables_filter {
+            float: right !important;
+            margin-bottom: 10px !important;
+            display: none !important;
+
+
+        }
+
+        .card-header {
+            background: #337ab7;
+            color: #fff;
+            padding: 12px 15px;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+        }
+
+        .card-title {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .card-footer {
+            padding: 12px 15px;
+            background: #f7f7f7;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+            text-align: right;
+        }
+
+        /* Existing table enhancements */
+        .table>thead>tr>th {
+            vertical-align: middle;
+            text-align: center;
+            font-weight: 600;
+            background-color: #f0f0f0;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .table>tbody>tr:hover {
+            background-color: #f9f9f9;
+        }
+
+        .btn-xs {
+            padding: 3px 8px;
+            font-size: 12px;
+        }
+
+        .panel {
+            border-radius: 6px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+        }
+
+        /* .panel-heading {
+                    background-color: #337ab7 !important;
+                    color: #fff !important;
+                } */
     </style>
 
 
@@ -111,10 +188,11 @@
     </div>
 
 
-    <div class="box box-default">
+    <div class="box box-default panel panel-default">
         <div class="box-body box-profile">
-            <div class="box-header with-border hidden-print">
-                <h3 class="box-title">@yield('pageTitle') <span id='processing'></span></h3>
+            <div class="box-header with-border hidden-print panel-heading">
+                <h3 class="box-title panel-title"> <i class="glyphicon glyphicon-map-marker"></i> @yield('pageTitle') <span
+                        id='processing'></span></h3>
             </div>
             <div class="box-body">
                 <div class="row">
@@ -124,9 +202,15 @@
                         <form class="form-horizontal" role="form" method="post" action="{{ url('lga/covered/add') }}">
                             {{ csrf_field() }}
 
-                            <div class="panel panel-default">
-                                <div class="panel-heading">
+                            <div class="panel panel-primary">
+                                {{-- <div class="panel-heading">
                                     <h3 class="panel-title"><strong>Add New Local Government</strong></h3>
+                                </div> --}}
+                                <div class="panel-heading">
+                                    <h3 class="panel-title">
+                                        <i class="fa fa-plus-circle"></i>
+                                        <strong>Add New Local Government</strong>
+                                    </h3>
                                 </div>
                                 <div class="panel-body">
                                     <div class="row" style="padding: 10px">
@@ -184,52 +268,56 @@
 
                     </form>
 
-                    <div class="table-responsive col-md-12" style="font-size:13px; margin-top:10px;">
+
+
+
+
+                    <hr />
+                </div>
+
+                <div class="card" style="margin-top: 20px;">
+                    {{-- <div class="card-header">
+                        <h3 class="card-title">Local Government List</h3>
+                    </div> --}}
+
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <i class="glyphicon glyphicon-folder-open"></i>
+                            Local Government List
+                        </h3>
+                    </div>
+
+                    <div class="card-body table-responsive" style="font-size:13px;">
                         <table id="mytable" class="table table-bordered table-striped table-hover">
                             <thead>
-                                <tr style="background-color:#f5f5f5; color:#333;">
-
-
+                                <tr>
                                     <th style="width: 10%">S/N</th>
                                     <th style="width: 50%">NAME</th>
                                     <th style="width: 10%" class="text-center">Action</th>
                                 </tr>
                             </thead>
-                            @php $i=1;@endphp
+
+                            @php $i=1; @endphp
                             @foreach ($getLGA as $list)
                                 <tr>
-                                    <td style="widows: 10%">{{ $i++ }}</td>
-                                    <td style="width: 70%">{{ $list->lga }}</td>
+                                    <td>{{ $i++ }}</td>
+                                    <td>{{ $list->lga }}</td>
 
-
-                                    <td style="width: 20%" class="text-center">
-
+                                    <td class="text-center">
                                         <button type="button" class="btn btn-xs btn-primary"
-                                            onclick="editfunc('{{ $list->lga }}', '{{ $list->lgaId }}')"
-                                            class="" id="">
+                                            onclick="editfunc('{{ $list->lga }}', '{{ $list->lgaId }}')">
                                             <i class="fa fa-edit"></i> Edit
                                         </button>
-
-                                        {{-- <a style="color: #fff; cursor: pointer;" class="btn btn-xs btn-danger"
-                                            href="{{ url('lga/covered/remove/' . $list->lgaId) }}"
-                                            onclick="return confirm('Are you sure you want to delete this item?');"> <i
-                                                class="fa fa-trash"></i> Delete</a> --}}
 
                                         <button type="button" class="btn btn-xs btn-danger"
                                             onclick="deleteLGA({{ $list->lgaId }})">
                                             <i class="fa fa-trash"></i> Delete
                                         </button>
                                     </td>
-
                                 </tr>
                             @endforeach
                         </table>
-
                     </div>
-
-
-
-                    <hr />
                 </div>
 
             </div>

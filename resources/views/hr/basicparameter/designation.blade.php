@@ -28,12 +28,11 @@
 
         .panel {
             border-radius: 6px;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
         }
 
         .panel-heading {
-            background-color: #2c3e50;
-            color: #fff;
+            border-radius: 6px 6px 0 0 !important;
         }
 
         .form-group label {
@@ -55,9 +54,9 @@
                 'divisionid' => null,
             ];
     @endphp
-    <div class="box box-default">
-        <div class="box-header with-border hidden-print">
-            <h3 class="box-title">@yield('pageTitle') <span id='processing'></span></h3>
+    <div class=" panel panel-default">
+        <div class="box-header with-border hidden-print panel-heading">
+            <h3 class="box-title panel-title"> <i class="glyphicon glyphicon-dashboard" style="margin-right:6px;"></i> @yield('pageTitle') <span id='processing'></span></h3>
         </div>
         @if ($warning != '')
             <div class="alert alert-dismissible alert-danger">
@@ -86,9 +85,9 @@
             {{ csrf_field() }}
             <div class="box-body">
 
-                <div class="panel panel-default">
+                <div class="panel panel-primary">
                     <div class="panel-heading">
-                        <h3 class="panel-title"><strong>Add New Designation</strong></h3>
+                        <h3 class="panel-title"> <i class="fa fa-plus-circle"></i>  <strong>Add New Designation</strong></h3>
                     </div>
                     <div class="panel-body">
                         <div class="row">
@@ -112,7 +111,7 @@
                                 <input type="hidden" id="court" name="court" value="{{ $CourtInfo->courtid }}">
                             @endif
 
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <div class="form-group">
                                     <label>Department</label>
                                     <select name="department" class="form-control department" onchange="ReloadForm()"
@@ -128,7 +127,7 @@
                                 </div>
                             </div>
 
-                            <div class="col-md-3">
+                            {{-- <div class="col-md-3">
                                 <div class="form-group">
                                     <label>Grade Level</label>
                                     <select name="level" class="form-control" required>
@@ -138,17 +137,17 @@
                                         @endfor
                                     </select>
                                 </div>
-                            </div>
+                            </div> --}}
 
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <div class="form-group">
-                                    <label>Post</label>
-                                    <input type="text" name="designation" class="form-control" placeholder="Input Post"
-                                        required>
+                                    <label>Designation</label>
+                                    <input type="text" name="designation" class="form-control"
+                                        placeholder="Input Designation" required>
                                 </div>
                             </div>
 
-                            <div class="col-md-2">
+                            <div class="col-md-3">
                                 <div class="form-group" style="margin-top:25px;">
                                     <button type="submit" class="btn btn-success btn-block" name="add">
                                         <i class="fa fa-floppy-o"></i> Add New
@@ -163,52 +162,78 @@
                 <input id ="delcode" type="hidden" name="delcode">
 
 
-                <div class="table-responsive" style="font-size:13px; margin-top:10px;">
-                    <table class="table table-bordered table-striped table-hover">
-                        <thead>
-                            <tr style="background-color:#f5f5f5; color:#333;">
-                                <th width="5%">S/N</th>
-                                @if ($CourtInfo->courtstatus == 1)
-                                    <th>Court</th>
-                                @endif
-                                <th>Department</th>
-                                <th>Grade Level</th>
-                                <th>Designation</th>
-                                <th width="15%" class="text-center">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @php
-                                $serialNum = ($DesignationList->currentPage() - 1) * $DesignationList->perPage() + 1;
-                            @endphp
 
-                            @foreach ($DesignationList as $b)
-                                <tr>
-                                    <td>{{ $serialNum++ }}</td>
-                                    @if ($CourtInfo->courtstatus == 1)
-                                        <td>{{ $b->court_name }}</td>
-                                    @endif
-                                    <td>{{ $b->department }}</td>
-                                    <td>{{ $b->grade }}</td>
-                                    <td>{{ $b->designation }}</td>
-                                    <td class="text-center">
-                                        <button type="button" class="btn btn-xs btn-primary"
-                                            onclick="editfunc('{{ $b->designation }}', '{{ $b->id }}', '{{ $b->courtID }}', '{{ $b->departmentID }}')">
-                                            <i class="fa fa-edit"></i> Edit
-                                        </button>
-                                        <button type="button" class="btn btn-xs btn-danger"
-                                            onclick="delfunc('{{ $b->id }}', '{{ $b->departmentID }}', '{{ $b->courtID }}')">
-                                            <i class="fa fa-trash"></i> Delete
-                                        </button>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
 
-                    {{-- Pagination --}}
-                    <div class="text-right">
-                        {{ $DesignationList->links() }}
+                <div class="panel panel-primary">
+
+                    <!-- Card Header -->
+                    <div class="panel-heading">
+                        <h3 class="panel-title" style="font-weight:600;">
+                            <i class="glyphicon glyphicon-folder-open" style="margin-right:12px;"></i>
+                            Designation List
+                        </h3>
+                    </div>
+
+                    <!-- Card Body -->
+                    <div class="panel-body">
+
+                        <div class="table-responsive" style="font-size:13px; margin-top:10px;">
+                            <table class="table table-bordered table-striped table-hover">
+                                <thead>
+                                    <tr style="background-color:#f5f5f5; color:#333;">
+                                        <th width="5%">S/N</th>
+
+                                        @if ($CourtInfo->courtstatus == 1)
+                                            <th>Court</th>
+                                        @endif
+
+                                        <th>Department</th>
+                                        {{-- <th>Grade Level</th> --}}
+                                        <th>Designation</th>
+                                        <th width="15%" class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+                                    @php
+                                        $serialNum =
+                                            ($DesignationList->currentPage() - 1) * $DesignationList->perPage() + 1;
+                                    @endphp
+
+                                    @foreach ($DesignationList as $b)
+                                        <tr>
+                                            <td>{{ $serialNum++ }}</td>
+
+                                            @if ($CourtInfo->courtstatus == 1)
+                                                <td>{{ $b->court_name }}</td>
+                                            @endif
+
+                                            <td>{{ $b->department }}</td>
+                                            {{-- <td>{{ $b->grade }}</td>x --}}
+                                            <td>{{ $b->designation }}</td>
+
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-xs btn-primary"
+                                                    onclick="editfunc('{{ $b->designation }}', '{{ $b->id }}', '{{ $b->courtID }}', '{{ $b->departmentID }}')">
+                                                    <i class="fa fa-edit"></i> Edit
+                                                </button>
+
+                                                <button type="button" class="btn btn-xs btn-danger"
+                                                    onclick="delfunc('{{ $b->id }}', '{{ $b->departmentID }}', '{{ $b->courtID }}')">
+                                                    <i class="fa fa-trash"></i> Delete
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+
+                            <!-- Pagination -->
+                            <div class="text-right">
+                                {{ $DesignationList->links() }}
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 

@@ -189,18 +189,32 @@
                 margin-top: 10px;
             }
         }
+
+        .panel {
+            border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .panel-heading {
+            border-radius: 6px 6px 0 0 !important;
+        }
+
+        .table>thead>tr>th {
+            background: #f1f1f1;
+        }
     </style>
 
 
 
 
-    <div class="container" style="padding-top: 25px;">
+    <div style="padding-top: 25px;">
         <div class="panel "
             style="border-radius: 8px; background-color: #ecf0f5; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border: none;">
             <div class="panel-heading" style="border-top-left-radius: 8px; border-top-right-radius: 8px;">
                 <div class="row">
                     <div class="col-sm-6">
                         <h4 class="panel-title" style="margin: 0; color: #333;">
+                            <i class="fa fa-building"></i>
                             @yield('pageTitle')
                         </h4>
                     </div>
@@ -214,11 +228,11 @@
                 style="background-color: #f9f9f9; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
 
                 <!-- Add Department Form -->
-                <div class="box box-primary" style="border-radius: 6px; border: 1px solid #ddd;">
+                <div class="box box-primary" style="border-radius: 6px; border: 1px solid #337ab7;">
                     <div class="box-header with-border"
-                        style="background-color: #ecf0f5; color: #333; border-top-left-radius: 6px; border-top-right-radius: 6px;">
+                        style="background-color: #337ab7; color: #ecf0f5; border-top-left-radius: 6px; border-top-right-radius: 6px;">
                         <h4 class="box-title" style="margin: 0; line-height: 1.6;">
-                            <i class="fa fa-building"></i> Add Department
+                            <i class="fa fa-plus-circle"></i> Add Department
                         </h4>
                     </div>
 
@@ -264,50 +278,68 @@
                     </div>
                 </div>
 
-                <!-- Department Table -->
-                <div class="table-responsive" style="margin-top: 25px;">
-                    <table class="table table-hover table-bordered" style="background-color: #fff;">
-                        <thead style="background-color: #f1f1f1;">
-                            <tr>
-                                <th style="width: 60px;">S/N</th>
-                                <th>Department</th>
-                                <th style="width: 150px;text-align: center;">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @php
-                                $serialNum = ($DepartmentList->currentPage() - 1) * $DepartmentList->perPage() + 1;
-                            @endphp
-                            @foreach ($DepartmentList as $b)
-                                <tr>
-                                    <td style="width: 13%">{{ $serialNum++ }}</td>
-                                    <td style="width: 65%">{{ $b->department }}</td>
-                                    <td style="width: 20%; text-align: center;">
-                                        <button type="button" class="btn btn-xs btn-primary"
-                                            onclick="editDepartment('{{ $b->id }}', '{{ addslashes($b->department) }}')">
-                                            <i class="fa fa-edit"></i> Edit
-                                        </button>
 
-                                        <button type="button" class="btn btn-xs btn-danger"
-                                            onclick="DeletePromo('{{ $b->id }}', this)">
-                                            <i class="fa fa-trash"></i> Delete
-                                        </button>
-                                    </td>
-                                </tr>
-                            @endforeach
 
-                            @if (count($DepartmentList) == 0)
-                                <tr>
-                                    <td colspan="3" class="text-center text-muted" style="padding: 20px;">
-                                        No departments found.
-                                    </td>
-                                </tr>
-                            @endif
-                        </tbody>
-                    </table>
+                <div class="panel panel-primary" style="margin-top:20px;">
 
-                    <div class="text-right" style="margin-top: 15px;">
-                        {{ $DepartmentList->links() }}
+
+                    <div class="panel-heading">
+                        <h3 class="panel-title">
+                            <i class="glyphicon glyphicon-folder-open"></i> Department List
+                        </h3>
+                    </div>
+
+                    <div class="panel-body">
+
+                        <div class="table-responsive">
+                            <table class="table table-hover table-bordered">
+                                <thead style="background-color: #f7f7f7;">
+                                    <tr>
+                                        <th style="width: 60px;">S/N</th>
+                                        <th>Department</th>
+                                        <th style="width: 150px; text-align: center;">Action</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+                                    @php
+                                        $serialNum =
+                                            ($DepartmentList->currentPage() - 1) * $DepartmentList->perPage() + 1;
+                                    @endphp
+
+                                    @foreach ($DepartmentList as $b)
+                                        <tr>
+                                            <td>{{ $serialNum++ }}</td>
+                                            <td>{{ $b->department }}</td>
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-xs btn-primary"
+                                                    onclick="editDepartment('{{ $b->id }}', '{{ addslashes($b->department) }}')">
+                                                    <i class="fa fa-edit"></i> Edit
+                                                </button>
+
+                                                <button type="button" class="btn btn-xs btn-danger"
+                                                    onclick="DeletePromo('{{ $b->id }}', this)">
+                                                    <i class="fa fa-trash"></i> Delete
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+
+                                    @if (count($DepartmentList) == 0)
+                                        <tr>
+                                            <td colspan="3" class="text-center text-muted" style="padding: 20px;">
+                                                No departments found.
+                                            </td>
+                                        </tr>
+                                    @endif
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="text-right" style="margin-top: 15px;">
+                            {{ $DepartmentList->links() }}
+                        </div>
+
                     </div>
                 </div>
             </div>

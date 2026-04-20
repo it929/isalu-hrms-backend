@@ -44,6 +44,9 @@
             font-size: 18px !important;
             font-weight: 600;
         }
+
+
+    </style>
     </style>
     @php
         $CourtInfo =
@@ -55,69 +58,70 @@
                 'divisionid' => null,
             ];
     @endphp
-    <div class="box box-default">
-        <div class="box-header with-border hidden-print">
-            <h3 class="box-title">@yield('pageTitle') <span id='processing'></span></h3>
-        </div>
-        @if ($warning != '')
-            <div class="alert alert-dismissible alert-danger">
-                <button type="button" class="close" data-dismiss="alert">&times;</button>
-                <strong>{{ $warning }}</strong>
-            </div>
-        @endif
-        @if ($success != '')
-            <div class="alert alert-dismissible alert-success">
-                <button type="button" class="close" data-dismiss="alert">&times;</button>
-                <strong>{{ $success }}</strong>
-            </div>
-        @endif
-        @if (count($errors) > 0)
-            <div class="alert alert-danger alert-dismissible" role="alert">
-                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span
-                        aria-hidden="true">&times;</span>
-                </button>
-                <strong>Error!</strong>
-                @foreach ($errors->all() as $error)
-                    <p>{{ $error }}</p>
-                @endforeach
-            </div>
-        @endif
-        <form method="post" id="thisform1" name="thisform1">
-            {{ csrf_field() }}
-            <div class="box-body">
 
-                <div class="panel panel-default">
+
+    <div class="panel panel-default" style="margin-top:20px; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.1);">
+
+        <!-- Panel Header -->
+        <div class="panel-heading" style="border-radius:6px 6px 0 0;">
+            <h3 class="panel-title">
+                <i class="fa fa-folder-open"></i> @yield('pageTitle')
+                <span id="processing"></span>
+            </h3>
+        </div>
+
+        <div class="panel-body">
+
+            {{-- Warning Message --}}
+            @if ($warning != '')
+                <div class="alert alert-danger alert-dismissible">
+                    <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    <strong>{{ $warning }}</strong>
+                </div>
+            @endif
+
+            {{-- Success Message --}}
+            @if ($success != '')
+                <div class="alert alert-success alert-dismissible">
+                    <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    <strong>{{ $success }}</strong>
+                </div>
+            @endif
+
+            {{-- Validation Errors --}}
+            @if (count($errors) > 0)
+                <div class="alert alert-danger alert-dismissible">
+                    <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    <strong>Error!</strong>
+                    @foreach ($errors->all() as $error)
+                        <p>{{ $error }}</p>
+                    @endforeach
+                </div>
+            @endif
+
+
+
+            <form method="post" id="thisform1" name="thisform1">
+                {{ csrf_field() }}
+
+                <!-- Inner Card -->
+                <div class="panel panel-primary" style="border-radius:6px;">
                     <div class="panel-heading">
-                        <h3 class="panel-title"><strong>Add New Unit</strong></h3>
+                        <h3 class="panel-title">
+                            <i class="fa fa-plus-circle"></i> <strong>Add New Unit</strong>
+                        </h3>
                     </div>
+
                     <div class="panel-body">
+
                         <div class="row">
-                            {{-- @if ($CourtInfo->courtstatus == 1)
-                                <div class="col-md-3">
-                                    <div class="form-group">
-                                        <label class="control-label">Court</label>
-                                        <select required class="form-control" id="court" name="court"
-                                            onchange="ReloadForm()">
-                                            <option value="">- Select Court -</option>
-                                            @foreach ($CourtList as $list)
-                                                <option value="{{ $list->id }}"
-                                                    {{ $court == $list->id ? 'selected' : '' }}>
-                                                    {{ $list->court_name }}
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                </div>
-                            @else
-                                <input type="hidden" id="court" name="court" value="{{ $CourtInfo->courtid }}">
-                            @endif --}}
 
                             <div class="col-md-4">
                                 <div class="form-group">
                                     <label>Department</label>
                                     <select name="department" class="form-control department" onchange="ReloadForm()"
                                         required>
-                                        <option value=''>- Select Department -</option>
+                                        <option value="">- Select Department -</option>
                                         @foreach ($DepartmentList as $a)
                                             <option value="{{ $a->id }}"
                                                 {{ $department == $a->id ? 'selected' : '' }}>
@@ -127,18 +131,6 @@
                                     </select>
                                 </div>
                             </div>
-
-                            {{-- <div class="col-md-3">
-                                <div class="form-group">
-                                    <label>Grade Level</label>
-                                    <select name="level" class="form-control" required>
-                                        <option value="">Select Level</option>
-                                        @for ($i = 1; $i <= 17; $i++)
-                                            <option value="{{ $i }}">{{ $i }}</option>
-                                        @endfor
-                                    </select>
-                                </div>
-                            </div> --}}
 
                             <div class="col-md-4">
                                 <div class="form-group">
@@ -153,77 +145,78 @@
                                     <button type="submit" class="btn btn-success btn-block" name="add">
                                         <i class="fa fa-floppy-o"></i> Add New
                                     </button>
+
+
                                 </div>
                             </div>
                         </div>
+
                     </div>
                 </div>
 
+                <input id="delcode" type="hidden" name="delcode">
 
-                <input id ="delcode" type="hidden" name="delcode">
+                <!-- Table Card -->
+                <div class="panel panel-primary" style="margin-top:10px; border-radius:6px;">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">
+                            <i class="fa fa-list"></i> Unit List
+                        </h3>
+                    </div>
 
+                    <div class="panel-body">
 
-                <div class="table-responsive" style="font-size:13px; margin-top:10px;">
-                    <table class="table table-bordered table-striped table-hover">
-                        <thead>
-                            <tr style="background-color:#f5f5f5; color:#333;">
-                                <th width="5%">S/N</th>
-                                {{-- @if ($CourtInfo->courtstatus == 1)
-                                    <th>Court</th>
-                                @endif --}}
-                                <th>Department</th>
-                                {{-- <th>Grade Level</th> --}}
-                                <th>Designation</th>
-                                <th width="15%" class="text-center">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @php
-                                $serialNum = ($UnitList->currentPage() - 1) * $UnitList->perPage() + 1;
-                            @endphp
+                        <div class="table-responsive" style="font-size:13px;">
+                            <table class="table table-bordered table-striped table-hover">
+                                <thead>
+                                    <tr style="background:#f5f5f5; color:#333;">
+                                        <th width="5%">S/N</th>
+                                        <th>Department</th>
+                                        <th>Unit</th>
+                                        <th width="15%" class="text-center">Action</th>
+                                    </tr>
+                                </thead>
 
-                            @foreach ($UnitList as $b)
-                                <tr>
-                                    <td>{{ $serialNum++ }}</td>
-                                    {{-- @if ($CourtInfo->courtstatus == 1)
-                                        <td>{{ $b->court_name }}</td>
-                                    @endif --}}
-                                    <td>{{ $b->department }}</td>
-                                    {{-- <td>{{ $b->grade }}</td> --}}
-                                    <td>{{ $b->unit }}</td>
-                                    <td class="text-center">
-                                        {{-- <button type="button" class="btn btn-xs btn-primary"
-                                            onclick="editfunc('{{ $b->unit }}', '{{ $b->id }}',  '{{ $b->departmentID }}')">
-                                            <i class="fa fa-edit"></i> Edit
-                                        </button> --}}
-                                        <button type="button" class="btn btn-xs btn-primary"
-                                            onclick="editfunc('{{ $b->unit }}', '{{ $b->unitID }}', '{{ $b->departmentID }}')">
-                                            <i class="fa fa-edit"></i> Edit
-                                        </button>
-                                        <button type="button" class="btn btn-xs btn-danger"
-                                            onclick="delfunc('{{ $b->unitID }}', '{{ $b->departmentID }}', )">
-                                            <i class="fa fa-trash"></i> Delete
-                                        </button>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                                <tbody>
+                                    @php
+                                        $serialNum = ($UnitList->currentPage() - 1) * $UnitList->perPage() + 1;
+                                    @endphp
 
-                    {{-- Pagination --}}
-                    <div class="text-right">
-                        {{-- {{ $DesignationList->links() }} --}}
-                        {{ $UnitList->links() }}
+                                    @foreach ($UnitList as $b)
+                                        <tr>
+                                            <td>{{ $serialNum++ }}</td>
+                                            <td>{{ $b->department }}</td>
+                                            <td>{{ $b->unit }}</td>
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-xs btn-primary"
+                                                    onclick="editfunc('{{ $b->unit }}', '{{ $b->unitID }}', '{{ $b->departmentID }}')">
+                                                    <i class="fa fa-edit"></i> Edit
+                                                </button>
+
+                                                <button type="button" class="btn btn-xs btn-danger"
+                                                    onclick="delfunc('{{ $b->unitID }}', '{{ $b->departmentID }}')">
+                                                    <i class="fa fa-trash"></i> Delete
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+
+                                </tbody>
+                            </table>
+
+                            <!-- Pagination -->
+                            <div class="text-right">
+                                {{ $UnitList->links() }}
+                            </div>
+
+                        </div>
+
                     </div>
                 </div>
 
+            </form>
 
-
-
-            </div>
-
-        </form>
-
+        </div>
     </div>
 
 
@@ -252,7 +245,7 @@
                                 <div class="form-group">
                                     <label for="DepID" class="col-sm-3 control-label">Department</label>
                                     <div class="col-sm-8">
-                                        <select name="DeptID" id="DepID" class="form-control department" required>
+                                        <select name="DeptID" id="DeptID" class="form-control department" required>
                                             <option value="">-- Select Department --</option>
                                             @foreach ($DepartmentList as $a)
                                                 <option value="{{ $a->id }}">{{ $a->department }}</option>
@@ -266,7 +259,8 @@
                                     <div class="col-sm-8">
                                         {{-- <input type="text" class="form-control" id="designation" name="designation"
                                             placeholder="Enter designation"> --}}
-                                        <input type="text" class="form-control" id="unit" name="unit" placeholder="Enter unit">
+                                        <input type="text" class="form-control" id="unit" name="unit"
+                                            placeholder="Enter unit">
                                     </div>
                                 </div>
 
@@ -289,6 +283,8 @@
             </div>
         </div>
     </div>
+
+
 
 
     </div>

@@ -3,6 +3,24 @@
     <strong>Add New Employee</strong>
 @endsection
 
+<style>
+        .panel {
+            border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .panel-heading {
+            border-radius: 6px 6px 0 0 !important;
+        }
+
+        thead tr th{
+            font-size: 11px !important;
+        }
+        td{
+            font-size: 10px !important;
+        }
+</style>
+
 @section('content')
 
     <!-- Page Header -->
@@ -11,13 +29,13 @@
 
 
 
-    <div class="card-box">
+    <div class="panel panel-default">
 
         <!-- HEADER -->
-        <div class="card-header hidden-print">
+        <div class="panel-heading hidden-print">
             <div class="row">
                 <div class="col-xs-6">
-                    <h3 class="card-title">
+                    <h3 class="panel-title">
                         @yield('pageTitle')
                         <span id="processing"></span>
                     </h3>
@@ -44,7 +62,7 @@
         @endif
 
         <!-- FORM -->
-        <div id="addForm" style="display:none;" class="card-body">
+        <div id="addForm" style="display:none;" class="panel-body">
 
             <form method="post" action="{{ route('adminSaveNewStaff') }}" class="form-horizontal">
                 {{ csrf_field() }}
@@ -198,7 +216,7 @@
         </div>
 
         <div class="panel-body">
-            <div class="table-responsive" style="font-size: 12px;">
+            <div class="table-responsive" >
                 <table class="table table-bordered table-striped table-highlight" id="tablr">
                     <thead>
                         <tr bgcolor="#c7c7c7">
