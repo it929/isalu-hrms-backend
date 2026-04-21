@@ -1,4 +1,5 @@
 <!--profile picture update-->
+
 <div id="editProfilePic" class="modal fade">
     <div class="modal-dialog box box-default" role="document">
         <div class="modal-content">
@@ -976,7 +977,7 @@
 </div>
 
 <!--date of birth update -->
-<div id="editDOB" class="modal fade">
+{{-- <div id="editDOB" class="modal fade">
     <div class="modal-dialog modalm box box-default" role="document">
         <div class="modal-content">
             <div class="modal-header">
@@ -1039,10 +1040,94 @@
             </form>
         </div>
     </div>
+</div> --}}
+
+<div id="editDOB" class="modal fade">
+    <div class="modal-dialog modal-md" role="document">
+
+        <div class="modal-content">
+
+            <!-- HEADER -->
+            <div class="modal-header bg-primary" style="color:#fff;">
+                <button type="button" class="close" data-dismiss="modal" style="color:#fff;">&times;</button>
+                <h4 class="modal-title">
+                    <i class="fa fa-calendar"></i> Particulars of Date of Birth
+                </h4>
+            </div>
+
+            <form class="form-horizontal" action="{{ url('/profile/update-particulars-of-birth') }}"
+                method="post">
+                {{ csrf_field() }}
+
+                <div class="modal-body">
+
+                    <!-- CARD -->
+                    <div class="panel modal-card">
+
+                        <div class="panel-heading">
+                            <h4 class="panel-title">Edit Birth Information</h4>
+                        </div>
+
+                        <div class="panel-body">
+
+                            <input type="hidden" class="form-control" id="fileID2" name="fileID">
+
+                            <!-- DOB -->
+                            <div class="form-group">
+                                <label>Date of Birth</label>
+                                <input type="text" class="form-control date-field" id="dob"
+                                    name="date_of_birth" placeholder="YYYY-MM-DD" required>
+                            </div>
+
+                            <!-- PLACE OF BIRTH -->
+                            <div class="form-group">
+                                <label>Place of Birth</label>
+                                <select required class="form-control" id="pob" name="place_of_birth">
+                                    @foreach ($getState as $list)
+                                        <option value="{{ $list->StateID }}"
+                                            {{ old('place_of_birth') == $list->StateID ? 'selected' : '' }}>
+                                            {{ $list->State }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <!-- MARITAL STATUS -->
+                            <div class="form-group">
+                                <label>Marital Status</label>
+                                <select required class="form-control" id="ms" name="maritalStatus">
+                                    @foreach ($getMS as $list)
+                                        <option value="{{ $list->ID }}"
+                                            {{ old('maritalStatus') == $list->ID ? 'selected' : '' }}>
+                                            {{ $list->marital_status }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- FOOTER -->
+                <div class="modal-footer" style="background:#f1f1f1;">
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="fa fa-save"></i> Update
+                    </button>
+                    <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">
+                        Cancel
+                    </button>
+                </div>
+
+            </form>
+
+        </div>
+    </div>
 </div>
 
 {{-- <!-alary details update--> --}}
-<div id="editSALARYINFO" class="modal fade">
+{{-- <div id="editSALARYINFO" class="modal fade">
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header">
@@ -1167,7 +1252,296 @@
         </div>
 
     </div>
+</div> --}}
+
+<div id="editSALARYINFO" class="modal fade">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+
+            <!-- HEADER -->
+            <div class="modal-header bg-primary"
+                style="color:#fff; border-top-left-radius:4px; border-top-right-radius:4px;">
+                <button type="button" class="close" data-dismiss="modal"
+                    style="color:#fff; opacity:1;">&times;</button>
+                <h4 class="modal-title">
+                    <i class="fa fa-money"></i> Salary Details
+                </h4>
+            </div>
+
+            <form class="form-horizontal" action="{{ url('/profile/update-salary-details') }}" method="post">
+                {{ csrf_field() }}
+
+                <div class="modal-body" style="background:#f7f7f7;">
+
+                    <!-- CARD PANEL -->
+                    <div class="panel panel-primary" style="border-radius:6px;">
+                        <div class="panel-heading" style="border-radius:6px 6px 0 0;">
+                            <h3 class="panel-title">Edit Salary Information</h3>
+                        </div>
+
+                        <div class="panel-body" style="padding:15px 20px;">
+
+                            <input type="hidden" id="ID3" name="fileID">
+
+
+
+                            <!-- row 1 -->
+                            {{-- <div class="row form-row" >
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>First Appointment</label>
+                                        <input type="text" class="form-control date-field"
+                                            id="appointment_date" name="appointment_date" readonly ">
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>First Arrival</label>
+                                        <input type="text" class="form-control date-field"
+                                            id="firstarrival_date" name="firstarrival_date" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Employment Type</label>
+                                        <select class="form-control" id="employee_type" name="employee_type"
+                                            required>
+                                            @foreach ($getEmpType as $list)
+                                                <option value="{{ $list->id }}">{{ $list->employmentType }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+
+                            </div> --}}
+
+                            <!-- ROW 2 -->
+                            <div class="row form-row">
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Designation</label>
+                                        <select class="form-control" id="Designation" name="designation" required>
+                                            @foreach ($getDesignation as $list)
+                                                <option value="{{ $list->id }}">{{ $list->designation }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Department</label>
+                                        <select class="form-control" id="department" name="department" required>
+                                            @foreach ($getDepartment as $list)
+                                                <option value="{{ $list->id }}">{{ $list->department }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Section</label>
+                                        <input type="text" class="form-control" id="section"
+                                            name="section">
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <!-- ROW 3 -->
+
+                            <div class="row form-row">
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Incremental Date</label>
+                                        <input type="text" class="form-control date-field" id="incrementaldate"
+                                            name="incrementaldate" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Account Number</label>
+                                        <input type="text" class="form-control" id="accno"
+                                            name="accno">
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Bank</label>
+                                        <select class="form-control" id="bank" name="bank" required>
+                                            @foreach ($getBank as $list)
+                                                <option value="{{ $list->bankID }}">{{ $list->bank }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ROW 4 -->
+
+                            {{-- <div class="row form-row">
+                                <div class="col-md-4" >
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Bank Group</label>
+                                        <input type="text" class="form-control" id="bankgroup"
+                                            name="bankgroup">
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Bank Branch</label>
+                                        <input type="text" class="form-control" id="bankbranch"
+                                            name="bankbranch">
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Account Number</label>
+                                        <input type="text" class="form-control" id="accno"
+                                            name="accno">
+                                    </div>
+                                </div>
+                            </div> --}}
+
+                            <!-- ROW 5 -->
+
+                            {{-- <div class="row form-row">
+
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>NHF No.</label>
+                                        <input type="text" class="form-control" id="nhfno"
+                                            name="nhfno">
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="form-group" style="padding-left: 5px; padding-right: 5px">
+                                        <label>Incremental Date</label>
+                                        <input type="text" class="form-control date-field" id="incrementaldate"
+                                            name="incrementaldate" readonly>
+                                    </div>
+                                </div>
+
+                            </div>  --}}
+
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- FOOTER -->
+                <div class="modal-footer" style="background:#f1f1f1;">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fa fa-save"></i> Update
+                    </button>
+                    <button type="button" class="btn btn-default" data-dismiss="modal">
+                        Cancel
+                    </button>
+                </div>
+
+            </form>
+
+        </div>
+    </div>
 </div>
+
+@section('styles')
+    <style>
+        .form-group label {
+            font-weight: 600;
+        }
+
+        .form-control {
+            border-radius: 4px !important;
+            height: 36px;
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+            /* vertical space between rows */
+        }
+
+        .col-md-4 {
+            margin-bottom: 10px;
+
+            /* extra padding inside each column */
+        }
+
+        .panel-body {
+            margin-bottom: 15px;
+        }
+
+        .col-md-4 {
+            padding-right: 15px !important;
+            padding-left: 15px !important;
+            /* margin-left: 2px;
+                    margin-right: 2px; */
+        }
+
+        .panel {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+    <style>
+        /* Improve spacing between fields */
+        /* .form-group {
+                margin-bottom: 20px;
+            } */
+
+        /* Optional: make labels bold for cleaner UI */
+        .form-group label {
+            font-weight: 600;
+        }
+
+        /* Optional: add slight padding to row */
+        /* .row.form-row {
+                margin-bottom: 10px;
+
+            } */
+    </style>
+
+    <style>
+        /* Card look inside modal */
+        .modal-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            background: #fff;
+        }
+
+        .modal-card .panel-heading {
+            background: #337ab7;
+            color: #fff;
+            border-radius: 6px 6px 0 0;
+        }
+
+        .modal-body {
+            background: #f9f9f9;
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .modal-title {
+            font-weight: 600;
+        }
+    </style>
+@endsection
 
 
 @section('script')

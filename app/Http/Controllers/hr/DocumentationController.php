@@ -298,22 +298,22 @@ class DocumentationController extends DatabaseDocumentationController
         // $employmentType =   $request->input('employmentType');
         $employmentType =   1;
         $hremploymentType =   $request->input('hremploymentType');
-        //$state          =   $request->input('state');
-        $grade          =   $request->input('grade');
-        $step           =   $request->input('step');
+        // $state          =   $request->input('state');
+        // $grade          =   $request->input('grade');
+        // $step           =   $request->input('step');
         $department     =   $request->input('department');
         $departmentID     =   $request->input('department');
         $designation    =   $request->input('designation');
         $designationID    =   $request->input('designation');
         $presentApptmnt =   $request->input('presentAppointment2');
-        $fristApptmnt   =   $request->input('firstAppointment2');
-        $resumptionDate   =   $request->input('dateofResumption2');
+        // $fristApptmnt   =   $request->input('firstAppointment2');
+        // $resumptionDate   =   $request->input('dateofResumption2');
         // dd($designation);
         //dd(date('Y-m-d', strtotime($presentApptmnt)));
 
         if (!empty($fileNo)) {
 
-            $this->basicSetUp($fileNox, $fileNo, $title, $gender, date('Y-m-d', strtotime($dateofBirth)), $placeofBirth, $employmentType, $hremploymentType, $grade, $step, $department, $departmentID, $designation, $designationID, date('Y-m-d', strtotime($presentApptmnt)), date('Y-m-d', strtotime($fristApptmnt)), date('Y-m-d', strtotime($resumptionDate)));
+            $this->basicSetUp($fileNox, $fileNo, $title, $gender, date('Y-m-d', strtotime($dateofBirth)), $placeofBirth, $employmentType, $hremploymentType,  $department, $departmentID, $designation, $designationID, date('Y-m-d', strtotime($presentApptmnt)), );
             $d = Session::get('progress');
             if ($d < 7) {
                 $this->setProgress($fileNo, 7);
@@ -888,7 +888,7 @@ class DocumentationController extends DatabaseDocumentationController
 
             $data['staffDETAILS'] = DB::table('tblstaffAttachment')
                 ->select('tblstaffAttachment.staffID', 'tblstaffAttachment.filedesc', 'tblstaffAttachment.filepath', 'tblstaffAttachment.id')
-                ->where('staffid', '=', $data['fileNo'])
+                ->where('staffID', '=', $data['fileNo'])
                 ->get();
 
             $data['staffInfo'] = DB::Table('tblper')->where('ID', $data['fileNo'])->first();
@@ -1013,10 +1013,13 @@ class DocumentationController extends DatabaseDocumentationController
 
     public function submitAccount(Request $request)
     {
+
         $fileNo = Session::get('fileNo');
         $bankID = $request->input('bankName');
         $accountNumber = $request->input('accountNumber');
         $myPer = DB::table('tblper')->where('ID', $fileNo)->first();
+
+        // dd($myPer);
 
         if (!empty($fileNo)) {
             $this->accountSetUp($fileNo, $bankID, $accountNumber);
@@ -1031,9 +1034,9 @@ class DocumentationController extends DatabaseDocumentationController
                     'interviewCandidateId' => $myPer->interviewCandidateId,
                     'fileNo'      => $myPer->fileNo,
                     'courtID'                => 9,
-                    'old_grade'              => $myPer->grade,
-                    'old_step'               => $myPer->step,
-                    'due_date'               => $myPer->resumption_date,
+                    // 'old_grade'              => $myPer->grade,
+                    // 'old_step'               => $myPer->step,
+                    'due_date'               => $myPer->doj,
                     'month_payment'          => $data['PayrollActivePeriod']->month,
                     'year_payment'           => $data['PayrollActivePeriod']->year,
                 ));

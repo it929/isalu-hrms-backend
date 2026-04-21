@@ -81,18 +81,7 @@
                     </div>
                 </div>
 
-                {{-- @if (!empty($QueryStaffReport))
-                    <div class="row align-items-center mt-2">
-                        <div class="col-md-8">
-                            @if (count($QueryStaffReport) == 0)
-                                <span class="text-warning"><strong>{{ count($QueryStaffReport) }} Result</strong></span>
-                            @else
-                                <span class="text-success"><strong>{{ count($QueryStaffReport) }} Results</strong></span>
-                            @endif
-                        </div>
 
-                    </div>
-                @endif --}}
 
 
                 <input id="delcode" type="hidden" name="delcode">
@@ -150,7 +139,7 @@
                                     <td class="qua"><span class="btn btn-success text-white"><a
                                                 href="javascript: LoadSummary('{{ $b->ID }}')"
                                                 style="color:#FFF !important;">Record of Service</a></span>
-                                            
+
                                     </td>
 
                                     @if ($b->progress_regID < 18)

@@ -5,7 +5,7 @@
 
     <!-- CARD HEADER -->
     <div class="panel-heading">
-        <h3 class="panel-title text-center text-success" >
+        <h3 class="panel-title text-center text-success">
             <i class="glyphicon glyphicon-user"></i>
             <b>Basic Information</b>
         </h3>
@@ -22,29 +22,25 @@
             <!-- ROW 1 (4 columns) -->
             <div class="row">
 
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label>File Number</label>
                     <input type="text" class="form-control" name="fileNox"
                         value="{{ isset($mainStaffFileNo) ? $mainStaffFileNo : '' }}">
                 </div>
 
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label>Surname</label>
                     <input readonly class="form-control" name="surname"
                         value="{{ $staffInfo->surname ?? old('surname') }}">
                 </div>
 
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label>First Name</label>
                     <input readonly class="form-control" name="firstName"
                         value="{{ $staffInfo->first_name ?? old('firstName') }}">
                 </div>
 
-                <div class="col-md-3">
-                    <label>Other Names</label>
-                    <input readonly class="form-control" name="otherNames"
-                        value="{{ $staffInfo->othernames ?? old('otherNames') }}">
-                </div>
+
 
             </div>
 
@@ -53,7 +49,14 @@
             <!-- ROW 2 -->
             <div class="row">
 
-                <div class="col-md-3">
+
+                <div class="col-md-4">
+                    <label>Other Names</label>
+                    <input readonly class="form-control" name="otherNames"
+                        value="{{ $staffInfo->othernames ?? old('otherNames') }}">
+                </div>
+
+                <div class="col-md-4">
                     <label>Title *</label>
                     <select name="title" class="form-control" required>
                         <option value="">Select</option>
@@ -64,7 +67,7 @@
                     </select>
                 </div>
 
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label>Gender *</label>
                     <select name="gender" class="form-control" required>
                         <option value="">Select</option>
@@ -73,12 +76,21 @@
                     </select>
                 </div>
 
-                <div class="col-md-3">
+
+
+            </div>
+
+            <br>
+
+            <!-- ROW 3 -->
+            <div class="row">
+
+                <div class="col-md-4">
                     <label>Date of Birth</label>
                     <input type="date" class="form-control" name="dateofBirth">
                 </div>
 
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label>Place of Birth *</label>
                     <select name="placeofBirth" class="form-control" required>
                         <option value="">Select State</option>
@@ -88,14 +100,7 @@
                     </select>
                 </div>
 
-            </div>
-
-            <br>
-
-            <!-- ROW 3 -->
-            <div class="row">
-
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label>Employment Type *</label>
                     <select name="hremploymentType" class="form-control" required>
                         <option value="">Select</option>
@@ -105,7 +110,7 @@
                     </select>
                 </div>
 
-                <div class="col-md-3">
+                {{-- <div class="col-md-3">
                     <label>Grade Level *</label>
                     <select name="grade" class="form-control" required>
                         <option value="">Select</option>
@@ -115,9 +120,9 @@
                             @endif
                         @endfor
                     </select>
-                </div>
+                </div> --}}
 
-                <div class="col-md-3">
+                {{-- <div class="col-md-3">
                     <label>Step *</label>
                     <select name="step" class="form-control" required>
                         <option value="">Select</option>
@@ -125,9 +130,19 @@
                             <option value="{{ $i }}">{{ $i }}</option>
                         @endfor
                     </select>
-                </div>
+                </div> --}}
 
-                <div class="col-md-3">
+
+
+            </div>
+
+            <br>
+
+            <!-- ROW 4 -->
+            <div class="row">
+
+
+                <div class="col-md-4">
                     <label>Department *</label>
                     <select name="department" class="form-control" required>
                         <option value="">Select</option>
@@ -137,14 +152,7 @@
                     </select>
                 </div>
 
-            </div>
-
-            <br>
-
-            <!-- ROW 4 -->
-            <div class="row">
-
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label>Designation *</label>
                     <select name="designation" class="form-control" required>
                         @foreach ($designation as $list)
@@ -153,20 +161,20 @@
                     </select>
                 </div>
 
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label>Date of Appointment *</label>
                     <input type="date" class="form-control" name="presentAppointment2">
                 </div>
 
-                <div class="col-md-3">
+                {{-- <div class="col-md-3">
                     <label>First Appointment *</label>
                     <input type="date" class="form-control" name="firstAppointment2">
-                </div>
+                </div> --}}
 
-                <div class="col-md-3">
+                {{-- <div class="col-md-4">
                     <label>Effective Resumption *</label>
                     <input type="date" class="form-control" name="dateofResumption2">
-                </div>
+                </div> --}}
 
             </div>
 

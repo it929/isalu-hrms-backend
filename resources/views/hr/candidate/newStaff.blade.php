@@ -144,7 +144,7 @@
 
                     <div class="col-lg-3">
                         <label>Department</label>
-                        <select name="department_id" class="form-control" required>
+                        <select name="department_id" id="department_id" class="form-control" required>
                             <option value="">-Select-</option>
                             @foreach ($DepartmentList as $dept)
                                 <option value="{{ $dept->id }}">{{ $dept->department }}</option>
@@ -154,7 +154,7 @@
 
                     <div class="col-lg-3">
                         <label>Unit</label>
-                        <select name="unit_id" class="form-control" required>
+                        <select name="unit_id" id="unit_id" class="form-control" required>
                             <option value="">-Select-</option>
                             @foreach ($UnitList as $unit)
                                 <option value="{{ $unit->unitID }}">{{ $unit->unit }}</option>
@@ -190,7 +190,7 @@
 
                     <div class="col-lg-3">
                         <label>Designation</label>
-                        <select name="designation_id" class="form-control" required>
+                        <select name="designation_id" id="designation_id" class="form-control" required>
                             <option value="">-Select-</option>
                         </select>
                     </div>
@@ -229,7 +229,7 @@
                             <th>STATE OF ORIGIN</th>
                             <th>DATE OF APPOINTMENT</th>
                             <th>DESIGNATION</th>
-                            <th>DATE OF PRESENT APPOINTMENT</th>
+                            {{-- <th>DATE OF PRESENT APPOINTMENT</th> --}}
                             <th colspan="2">ACTIONS</th>
                         </tr>
                     </thead>
@@ -244,10 +244,10 @@
                             <td>{{ $b->maritalstatus }}</td>
                             <td>{{ $b->lga }}</td>
                             <td>{{ $b->State }}</td>
-                            <td>{{ $b->appointment_date ? date('d-M-Y', strtotime($b->appointment_date)) : 'N/A' }}</td>
+                            <td>{{ $b->doj ? date('d-M-Y', strtotime($b->doj)) : 'N/A' }}</td>
                             <td>{{ $b->designation }}</td>
-                            <td>{{ $b->date_present_appointment ? date('d-M-Y', strtotime($b->date_present_appointment)) : 'N/A' }}
-                            </td>
+                            {{-- <td>{{ $b->date_present_appointment ? date('d-M-Y', strtotime($b->date_present_appointment)) : 'N/A' }}
+                            </td> --}}
 
                             {{-- <td>
                                 <a class="btn btn-success btn-sm" href="javascript: LoadSummary('{{ $b->ID }}')">
@@ -267,7 +267,7 @@
                                 <a class="btn btn-success btn-sm" href="javascript: LoadSummary('{{ $b->ID }}')">
                                   Staff Record
                                 </a>
-                            </td>
+                               </td>
                             @endif
                         </tr>
                     @endforeach
@@ -276,6 +276,16 @@
             </div>
         </div>
     </div>
+
+       <form method="post" id="displayform" name="displayform" action="{{ url('/profile/details') }}" target="_blank">
+
+            {{ csrf_field() }}
+
+
+            <input type="hidden" id="fileno" name="fileNo">
+
+
+        </form>
 @endsection
 
 @section('styles')
@@ -309,11 +319,25 @@
 @endsection
 
 @section('scripts')
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script>
     <script src="{{ asset('assets/js/jquery-ui.min.js') }}"></script>
     <script src="{{ asset('ckeditor/ckeditor.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         CKEDITOR.replace('editor');
+    </script>
+
+    <script type="text/javascript">
+        function LoadSummary(staffid)
+
+        {
+
+            document.getElementById('fileno').value = staffid;
+            document.forms["displayform"].submit();
+
+            return;
+
+        }
     </script>
 
     <script type="text/javascript">

@@ -883,7 +883,7 @@ class ProfileController extends ParentController
                 ->leftjoin('tblmaritalStatus', 'tblmaritalStatus.ID', '=', 'tblper.maritalstatus')
                 ->leftjoin('tbldivision', 'tbldivision.divisionID', '=', 'tblper.divisionID')
                 ->leftjoin('tblbanklist', 'tblbanklist.bankID', '=', 'tblper.bankID')
-                ->select('*', 'tblper.grade as staffGrade', 'tblper.ID as staffID', 'tbltitle.ID as titleID', 'tblgender.ID as genderID', 'tblstates.ID as stateID', 'tbldivision.divisionID as divID', 'tblmaritalStatus.ID as msID', 'tblemployment_type.id as empID', 'tbldepartment.id as deptID', 'tblbanklist.bankID as bankID')
+                ->select('*', 'tblper.grade as staffGrade', 'tbldepartment.department as department ', 'tblper.title as title', 'tblper.gender as gender', 'tblper.ID as staffID', 'tbltitle.ID as titleID', 'tblgender.ID as genderID', 'tblstates.ID as stateID', 'tbldivision.divisionID as divID', 'tblmaritalStatus.ID as msID', 'tblemployment_type.id as empID', 'tbldepartment.id as deptID', 'tblbanklist.bankID as bankID')
                 ->where('tblper.ID', '=', $fileNo)
                 ->first();
         // dd($data['staffFullDetails']);
