@@ -1,26 +1,46 @@
-  @extends('layouts.layout')
-
+@extends('layouts.layout')
+@section('pageTitle')
+Self Service
+@endsection
 @section('content')
-<style>
-  table, th, td {
-      border: 1px solid black;
-      /* remove the .table-borded class for this to work */
-  }
-  td {
-      vertical-align: top;
-  }
-</style>
-@include('hr.profile.editModal')
+  <style>
+        table, th, td {
+            border: 1px solid black;  
+            /* remove the .table-borded class for this to work */
+        }
+        td {
+            vertical-align: top;
+        }
+  </style>
+@include('profile.editModal2')
 <div class="row">
   <div class="col-md-12">
     <div class="box box-default">
       <div class="box-header with-border hidden-print">
-        <h3 class="box-title">STAFF PROFILE <span id='processing'></span></h3>
-      </div>
+        <h3 class="box-title"><b>@yield('pageTitle')</b> <i class="fa fa-arrow-right"></i> <span id='processing'>
+                <strong><em>My Profile</em></strong> </span></h3>
+    </div>
+      <!--
+      <form method="post" action="{{ url('/profile/details') }}">
+        <div class="box-body row">
+             <div class="form-group col-md-10">
+                {{ csrf_field() }}
+               <input id="autocomplete" name="q" class="form-control input-lg" placeholder="Search By First Name, Surname or File Number">
+               <input type="hidden" id="fileNo"  name="fileNo">
+            </div>
+            <div class="col-md-2">
+              <button type="submit" name="searchName" id="searchName" class="btn btn-default btn-lg"><i class="fa fa-search"></i> Search</button>
+             
+            </div>
+        </div>
 
+      </form>
+      -->
+      <!--
       <div style="margin-left:10px;margin-bottom:10px;">
           <a href="{{ url('/profile/details') }}"><button type="submit" name="searchName" id="searchName" class="btn btn-default btn-lg"><i class="fa fa-search"></i> Search another</button></a>
       </div>
+      -->
       <br>
     </div>
   </div><!-- /.col -->
@@ -28,26 +48,55 @@
 
 <div class="box-body">
     <div class="row">
-
+        <div class="col-md-12">
+            @if (count($errors) > 0)
+                <div class="alert alert-danger alert-dismissible" role="alert">
+                  <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                  </button>
+                  <strong>Error!</strong> 
+                  @foreach ($errors->all() as $error)
+                      <p>{{ $error }}</p>
+                  @endforeach
+                  </div>
+                  @endif                       
+                        
+                  @if(session('msg'))
+                    <div class="alert alert-success alert-dismissible" role="alert">
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        <strong>Success!</strong> {{ session('msg') }}</div>                        
+                  @endif
+                  @if(session('err'))
+                    <div class="alert alert-warning alert-dismissible" role="alert">
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        <strong>Staff Not Available for this Division! <br></strong> {{ session('err') }}</div>                        
+                  @endif
+        </div>
     </div>
 </div>
 
-<div class="row">
+<div class="row">  
         <div class="col-md-3">
 
           <!--BIO-DATA-->
           <!-- Profile Image -->
-          <div class="box box-success" id="bio-data">
+          @if(isset($staffFullDetails) && $staffFullDetails)
+
+          <div class="box box-success">
           <h3 class="profile-username text-center">{{strtoupper('Bio-Data')}}</h3>
-            <div class="box-body box-profile">
+            <div class="box-body box-profile"> 
              @php $pic="/passport/" @endphp
-              {{-- <img class="profile-user-img img-responsive"
-              src="{{ $pic }}{{ $staffFullDetails->picture}}" alt="Staff profile picture"> --}}
-              <img class="profile-user-img img-responsive"
-              src="{{ $staffFullDetails->passport_url}}" alt="Staff profile picture">
-              {{-- <img class="profile-user-img img-responsive"
-              src="{{$fileNoImage}}" alt="Staff profile picture"> --}}
-              <div class="text-center no-print"><a onclick="profilePicEdit('{{ $staffFullDetails->staffID }}')" title="Edit Picture">Edit Picture</a></div>
+              <img class="profile-user-img img-responsive" 
+              src="{{ $pic }}{{ $staffFullDetails->picture }}" alt="Staff profile picture">
+              @if($getIDs->biodata==1)
+                <div class="text-center"><a onclick="profilePicEdit('{{ $staffFullDetails->staffID }}')" title="Edit Picture">Edit Picture</a></div>
+              @elseif($getIDs->biodata==0)
+                    
+              @endif
               <h4 class="profile-username text-center" id="fullName"></h4>
 
               <p class="text-muted text-center" id="decoration"></p>
@@ -56,6 +105,11 @@
                 <li class="list-group-item">
                   <div><b>File No:</b> <span class="pull-right">{{$staffFullDetails->fileNo}}</span></div>
                 </li>
+                <!--
+                <li class="list-group-item">
+                  <div><b>Division:</b> <span class="pull-right">{{$staffFullDetails->division}}</span></div>
+                </li>
+                -->
                 <li class="list-group-item">
                   <div><b>Title:</b> <span class="pull-right">{{ $staffFullDetails->title }}</span></div>
                 </li>
@@ -83,52 +137,32 @@
                 <li class="list-group-item">
                   <div><b>Nationality:</b> <div class="pull-right">{{$staffFullDetails->nationality}}</div></div>
                 </li>
-                {{-- <li class="list-group-item">
-                  <div><b>Staff Status:</b> <div class="pull-right">{{$staffFullDetails->staff_status}}</div></div>
-                </li> --}}
                 <li class="list-group-item">
-                    <div>
-                        <b>Staff Status:</b>
-                        <div class="pull-right">
-                            {{ $staffFullDetails->staff_status == 1 ? 'Active' : 'Inactive' }}
-                        </div>
-                    </div>
+                  <div><b>Staff Status:</b> <div class="pull-right">{{$staffFullDetails->status}}</div></div>
                 </li>
               </ul>
-                <div class="no-print">
-                    {{-- <a onclick="profileEdit('{{ $staffFullDetails->staffID }}','{{ $staffFullDetails->fileNo }}','{{ $staffFullDetails->divID }}','{{ $staffFullDetails->titleID }}','{{ $staffFullDetails->surname }}','{{ $staffFullDetails->first_name }}','{{ $staffFullDetails->othernames }}','{!! $staffFullDetails->home_address !!}','{{ $staffFullDetails->genderID }}','{{ $staffFullDetails->stateID }}','{{ $staffFullDetails->phone }}','{{ $staffFullDetails->nationality }}','{{ $staffFullDetails->staff_status }}')" style="cursor:pointer;" class="pull-left no-print" id="fileNoBioData"><i class="fa fa-edit"></i> Edits</a> --}}
-
-                    <a onclick='profileEdit(
-                        "{{ $staffFullDetails->staffID }}",
-                        "{{ $staffFullDetails->fileNo }}",
-                        "{{ $staffFullDetails->divID }}",
-                        "{{ $staffFullDetails->titleID }}",
-                        "{{ $staffFullDetails->surname }}",
-                        "{{ $staffFullDetails->first_name }}",
-                        "{{ $staffFullDetails->othernames }}",
-                        {!! json_encode($staffFullDetails->home_address) !!},
-                        "{{ $staffFullDetails->genderID }}",
-                        "{{ $staffFullDetails->stateID }}",
-                        "{{ $staffFullDetails->phone }}",
-                        "{{ $staffFullDetails->nationality }}",
-                        "{{ $staffFullDetails->staff_status }}"
-                        )'
-                        class="pull-left no-print" style="cursor:pointer;">
-                        <i class="fa fa-edit"></i> Edit
-                    </a>
-                    <a  onclick="printDiv('bio-data')" class="pull-right" id="fileNoBioData"  style="cursor:pointer"><i class="fa fa-print"></i> Print</a>
+                <div>
+                    @if($getIDs->biodata==1)
+                        <a onclick="profileEdit('{{ $staffFullDetails->staffID }}','{{ $staffFullDetails->fileNo }}','{{ $staffFullDetails->divID }}','{{ $staffFullDetails->titleID }}','{{ $staffFullDetails->surname }}','{{ $staffFullDetails->first_name }}','{{ $staffFullDetails->othernames }}','{!! $staffFullDetails->home_address !!}','{{ $staffFullDetails->genderID }}','{{ $staffFullDetails->stateID }}','{{ $staffFullDetails->phone }}','{{ $staffFullDetails->nationality }}','{{ $staffFullDetails->status }}')" style="cursor:pointer;" class="pull-left" id="fileNoBioData"><i class="fa fa-edit"></i> Edit</a>
+                    @elseif($getIDs->biodata==0)
+                    
+                    @endif
+                     
+                    <!--<a href="#" class="pull-right" id="fileNoBioData"><i class="fa fa-print"></i> Print</a>-->
                 </div>
             </div>
-          </div>
+          </div> 
+          @endif
 
-          <!--Details of service in the judiciary-->
-            <div class="box box-success" id="dos">
+          <!--Details of service in the forces-->
+          {{--
+            <div class="box box-success">
               <div class="box-body box-profile">
-                <h3 class="profile-username text-center">{{strtoupper('Details of service in the judiciary')}}</h3>
+                <h3 class="profile-username text-center">{{strtoupper('Details of service in the forces')}}</h3>
                     <table class="table table-condensed">
                           @php if($staffFullDetailsDetailsService != null){ @endphp
                           @foreach($staffFullDetailsDetailsService as $ds)
-                           <tbody class="">
+                           <tbody class="text-gray">
                               <tr>
                                 <td>
                                   <div><b>Arm of Service:</b><span class="pull-right">{{$ds->armOfservice}}</span></div>
@@ -153,60 +187,64 @@
                             @endforeach
                             @php } @endphp
                     </table>
-                  <div class="text-gray-c no-print">
-                      <a href="/update/detail-service/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                      <a onclick="printDiv('dos')" class="pull-right" style="cursor:pointer">
+                  <div class="text-gray-c">
+                      <a href="{{url('/update/detail-service/'.$staffFullDetails->fileNo)}}"><i class="fa fa-edit"></i> Edit</a> 
+                      <a href="{{url('/profile/DetailsServiceForce/report/'.$staffFullDetails->fileNo)}}" class="pull-right">
                           <i class="fa fa-print"></i> Print
-                      </a>
-
+                      </a> 
+                      <span class="pull-right"><i lass="fa fa-count">
+                        </i> Total: {{$totalDetailsService}} &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; 
+                      </span> 
                   </div>
             </div>
           </div>
+          --}}
+
           <!--Details of service in the forces-->
         </div>
           <!-- //BIO-DATA-->
-
+       
         <!-- /.col -->
 
         <!--EDUCATION-->
         <div class="col-md-6">
-          <div class="box box-success" id="edu">
-            <div class="box-body box-profile table-responsive">
-
+          <div class="box box-success">
+            <div class="box-body box-profile">
+              
               <h3 class="profile-username text-center">{{strtoupper('Education')}} </h3>
-
-
-
+              
+                  
+             
                 <table class="table table-reponsive">
-
+                 
 		        <thead class="text-gray-b">
 		          <tr>
-
+		          
 		            <th></th>
 		            <th>Degree and Professional Qualifications:</th>
 		            <th>Schools Attended</th>
 		            <th>From</th>
 		            <th>To</th>
 		            <th>Certificates Obtained:</th>
-
-		            <th colspan="3">Action</th>
-
-
+		           
+		            <th>Action</th>
+		           
+		            		            
 		          </tr>
 		        </thead>
-
-
-
+		           
+		          
+		          
 		         <tbody>
-
+		        
 		          @php
 		          $i=1;
 		          @endphp
 		          @php if($staffFullDetailsEducation != null){ @endphp
-
+		         
 		            @foreach($staffFullDetailsEducation as $edu)
-
-
+		            
+		             
     		           <tr>
     		               <td></td>
     		               <td>{{$edu->degreequalification}}</td>
@@ -215,51 +253,37 @@
     		               <td>{{date('d-m-Y', strtotime($edu->schoolto))}}</td>
                             <td>{{$edu->certificateheld}}</td>
     		                <td>
-    		               	<a onclick="educationEdit('{{ $edu->id }}','{{ $edu->staffid }}','{{$edu->degreequalification}}','{{ $edu->schoolattended }}','{{ date('d-m-Y', strtotime($edu->schoolfrom)) }}','{{ date('d-m-Y', strtotime($edu->schoolto)) }}','{{$edu->certificateheld}}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
+    		                 @if($getIDs->education==1)
+    		               	    <a onclick="educationEdit('{{ $edu->id }}','{{ $edu->staffid }}','{{$edu->degreequalification}}','{{ $edu->schoolattended }}','{{ date('d-m-Y', strtotime($edu->schoolfrom)) }}','{{ date('d-m-Y', strtotime($edu->schoolto)) }}','{{$edu->certificateheld}}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+    		                 @elseif($getIDs->education==0)
+    		                 
+    		                 @endif
     		               </td>
-
-
-                            <td>
-                                <a onclick="deleteFunction1('{{ $edu->id }}')" style="color:red; cursor:pointer">
-                                    <i class="glyphicon glyphicon-trash no-print"></i>
-                                </a>
-                            </td>
-
     		           </tr>
-
-
+    		            
+		          
 		            @endforeach
-
+		           
 		           @php } @endphp
-
-
+		        
+		            
 		            </tbody>
-
+		           
 		      </table>
-
-              <div class="text-gray-c no-print">
-
-                        <a href="/education/create/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-
-                        <a onclick="printDiv('edu')" class="pull-right" id="fileNoBioData" style="cursor:pointer"><i class="fa fa-print"></i> Print</a>
-
-
-
-                    <!--
-                    <a href="{{url('/profile/education/report/'.$staffFullDetails->fileNo)}}" class="pull-right" id="fileNoBioData"><i class="fa fa-print"></i> Print</a>
-                    <span class="pull-right"><i lass="fa fa-count"></i> Total: {{$totalEducation}} &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; </span>
-                    -->
-
-
+		     
+              <div class="text-gray-c">
+                
+                       
+                    
               </div>
             </div>
           </div>
           <!--LANGUAGES-->
-          <div class="box box-success" id="lng">
+          <div class="box box-success">
             <div class="box-body box-profile">
                <div class="table-responsive">
               <h3 class="profile-username text-center">{{strtoupper('Languages')}}</h3>
-
+              
                <table class="table table-reponsive">
                   <thead class="text-gray-b">
                         <tr>
@@ -269,56 +293,42 @@
                             <td><b>Written</b></td>
                             <td><b>Exam, Qualified</b></td>
                             <td><b>Checked By</b></td>
-                             <th colspan="3">Action</th>
+                             <th>Action</th>
                         </tr>
                   </thead>
                   <tbody>
                     @php
 		          $i=1;
 		          @endphp
-		          @php if($staffFullDetailsLanguage != null){ @endphp
-                        @foreach($staffFullDetailsLanguage as $i => $lan)
-                            <tr>
-                                <td>{{ $i + 1 }}</td>
-                                <td>{{ $lan->language_name }}</td>
-
-                                <td>{{ $lan->spoken_title ?? '' }}</td>
-                                <td>{{ $lan->written_title ?? '' }}</td>
-
-                                <td>{{ $lan->exam_qualified }}</td>
-                                <td>{{ $lan->checkedby }}</td>
-                                <td>
-                                    <a onclick="languageEdit('{{ $lan->langid }}','{{ $lan->staffid }}','{{ $lan->language_name }}','{{ $lan->spoken_title }}','{{ $lan->written_title }}','{{ $lan->exam_qualified }}','{{ $lan->checkedby }}')"
-                                    class="btn btn-success glyphicon glyphicon-edit btn-xs no-print"
-                                    style="cursor:pointer;"></a>
-                                </td>
-                                <td>
-
-
-
-
-                                    <a onclick="deleteFunction2('{{ $lan->langid }}')" style="color:red; cursor:pointer">
-                                    <i class="glyphicon glyphicon-trash no-print"></i>
-                                </a>
-
-                                </td>
-                            </tr>
-                        @endforeach
-                    @php } @endphp
-
+		           @php if($staffFullDetailsLanguage != null){ @endphp
+                    @foreach($staffFullDetailsLanguage as $lan)
+                        <tr>
+                            
+                          <td>{{ $i++ }}</td>
+                          <td>{{$lan->language}}</td>
+                          <td>{{$lan->spoken}}</td>
+                          <td>{{$lan->written}}</td>
+                          <td>{{$lan->exam_qualified}}</td>
+                          <td>{{$lan->checkedby}}</td>
+                          <td>
+                          @if($getIDs->language==1)
+		               	    <a onclick="languageEdit('{{ $lan->langid }}','{{ $lan->staffid }}','{{ $lan->language }}','{{ $lan->spoken }}','{{ $lan->written }}','{{ $lan->exam_qualified }}','{{$lan->checkedby}}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+		                  @elseif($getIDs->language==0)
+		                  
+		                  @endif
+		               </td>
+                        </tr>
+                      @endforeach
+                     @php } @endphp 
                   </tbody>
               </table>
             </div>
-              <div class="text-gray-c no-print">
-                  <a href="/update/languages/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                  <a onclick="printDiv('lng')" class="pull-right" style="cursor:pointer"><i class="fa fa-print"></i> Print</a>
-
-              </div>
+              
             </div>
           </div><!--//LANGUAGE-->
 
           <!--PARTICULARS OF CHILDREN-->
-          <div class="box box-success" id="child">
+          <div class="box box-success">
             <div class="box-body box-profile">
                <div class="table-responsive">
               <h3 class="profile-username text-center">{{strtoupper('Particulars of children')}}</h3>
@@ -340,46 +350,28 @@
                         <tr>
                           <td>{{ $i++ }}</td>
                           <td>{{$child->fullname}}</td>
-
-                         <td>{{ $child->gender_name ?? $child->gender }}</td>
-
-
-
-
+                          <td>{{$child->gender}}</td>
                           <td>{{date('d-m-Y', strtotime($child->dateofbirth))}}</td>
                           <td>{{$child->checked_children_particulars}}</td>
                            <td>
-		               	<a onclick="childrenEdit('{{ $child->id }}','{{ $child->staffid }}','{{ $child->fullname }}','{{ $child->gID }}','{{ date('d-m-Y', strtotime($child->dateofbirth)) }}','{{ $child->checked_children_particulars }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
+                         @if($getIDs->childrenparticulars==1)
+                           	<a onclick="childrenEdit('{{ $child->id }}','{{ $child->staff }}','{{ $child->fullname }}','{{ $child->gID }}','{{ date('d-m-Y', strtotime($child->dateofbirth)) }}','{{ $child->checked_children_particulars }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+		                 @elseif($getIDs->childrenparticulars==0)
+		                 
+		                 @endif
 		               </td>
-		               <td>
-
-
-
-
-                            <a href="javascript:void(0)"
-                            onclick="confirmChildDelete('{{ url('/children/remove/' . $child->id) }}')"
-                            style="color:red; cursor:pointer;">
-                            <i class="glyphicon glyphicon-trash no-print"></i>
-                            </a>
-
-
-    		           </td>
                         </tr>
                       @endforeach
                       @php } @endphp
                   </tbody>
               </table>
              </div>
-              <div class="text-gray-c no-print">
-                  <a id="nextofkinHref" href="{{url('/children/create/'.$staffFullDetails->staffID)}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                  <a onclick="printDiv('child')" class="pull-right" style="cursor:pointer"><i class="fa fa-print"></i> Print</a>
-
-              </div>
+              
             </div>
           </div><!--//PARTICULARS OF CHILDREN-->
 
           <!--NEXT OF KIN-->
-          <div class="box box-success" id="nok">
+          <div class="box box-success">
             <div class="box-body box-profile">
                <div class="table-responsive">
               <h3 class="profile-username text-center">{{strtoupper('Next of kin')}}</h3>
@@ -404,39 +396,21 @@
                           <td>{{ $nok->address }}</td>
                           <td>{{ $nok->relationship }}</td>
                           <td>{{ $nok->phoneno }}</td>
-                           <td>
-		               	<a onclick="nokEdit('{{ $nok->kinID }}','{{ $nok->staffid }}','{{ $nok->fullname }}','{!! $nok->address !!}','{{ $nok->relationship }}','{{ $nok->phoneno }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
+                          <td>
+		               	@if($getIDs->nok==1)
+		               	    <a onclick="nokEdit('{{ $nok->kinID }}','{{ $nok->staffid }}','{{ $nok->fullname }}','{!! $nok->address !!}','{{ $nok->relationship }}','{{ $nok->phoneno }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+		                @elseif($getIDs->nok==0)
+		                
+		                @endif
 		               </td>
-		               <td>
-
-
-
-
-
-                             <a href="javascript:void(0)"
-                            onclick="confirmKinDelete('{{ url('/remove/next-of-kin/' . $nok->kinID ) }}')"
-                            style="color:red; cursor:pointer;">
-                            <i class="glyphicon glyphicon-trash no-print"></i>
-                            </a>
-
-
-
-
-
-
-    		           </td>
                         </tr>
                     @endforeach
                      @php } @endphp
-
+                    
                   </tbody>
               </table>
              </div>
-              <div class="text-gray-c no-print">
-                  <a id="nextofkinHref" href="{{url('/update/next-of-kin/'.$staffFullDetails->staffID)}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                  <a onclick="printDiv('nok')" class="pull-right" style="cursor:pointer"><i class="fa fa-print"></i> Print</a>
-
-              </div>
+             
             </div>
           </div>
           <!--//NEXT OF KIN-->
@@ -446,9 +420,9 @@
 
         <!--//PERTICULAR OF BIRTH-->
         <div class="col-md-3">
-          <div class="box box-success" id="pob">
+          <div class="box box-success">
             <div class="box-body box-profile">
-
+              
               <h3 class="profile-username text-center">{{strtoupper('Particulars of Birth')}}</h3>
               <table class="table table-condensed">
                   <tr>
@@ -463,35 +437,35 @@
                   <tr>
                     <td><strong>Place of Birth:</strong> <span class="pull-right">@foreach($getState as $list) @if($list->StateID==$staffFullDetails->placeofbirth){{ $list->State }}@else @endif @endforeach</span></td>
                   </tr>
-
                   <tr>
                     <td><strong>Marital Status:</strong> <span class="pull-right">{{$staffFullDetails->marital_status}}</span></td>
                   </tr>
               </table>
-              <div class="text-gray-c no-print">
+               @if($getIDs->birthparticulars==1)
+              <div class="text-gray-c">
                   <a onclick="dobEdit('{{ $staffFullDetails->staffID }}','{{ date('d-m-Y', strtotime($staffFullDetails->dob)) }}','{{ $staffFullDetails->placeofbirth }}','{{ $staffFullDetails->msID }}')" style="cursor:pointer;">
                     <i class="fa fa-edit"></i> Edit
-                  </a>
-                  <a onclick="printDiv('pob')" class="pull-right" style="cursor:pointer">
-                    <i class="fa fa-print"></i> Print
-                  </a>
-
+                  </a> 
+                 
               </div>
+               @elseif($getIDs->birthparticulars==0)
+               
+               @endif
             </div>
           </div>
            <!--//PERTICULAR OF BIRTH-->
 
             <!--//ACCOUNT/SALARY DETAILS -->
-          <div class="box box-success" id="salary">
+          <div class="box box-success">
             <div class="box-body box-profile">
-
+              
               <h3 class="profile-username text-center">{{strtoupper('Salary Details')}}</h3>
               <table class="table table-condensed">
-                  {{-- <tr>
+                  <tr>
                     <td>
-                      <div><b>First Appointment:</b>
+                      <div><b>First Appointment:</b> 
                         <div class="pull-right">
-                        @php if((($staffFullDetails->appointment_date) == "0000-00-00") or (($staffFullDetails->appointment_date) == "")) { @endphp
+                        @php if((($staffFullDetails->appointment_date) == "0000-00-00") or (($staffFullDetails->appointment_date) == "")){ @endphp
                           {{$staffFullDetails->appointment_date}}
                         @php }else{ @endphp
                           {{date('d-m-Y', strtotime($staffFullDetails->appointment_date))}}
@@ -499,8 +473,8 @@
                         </div>
                       </div>
                    </td>
-                </tr> --}}
-                {{-- <tr>
+                </tr>
+                <tr>
                     <td>
                       <div><b>Resumption Date:</b> <div class="pull-right">
                        @php if((($staffFullDetails->firstarrival_date) == "0000-00-00") or (($staffFullDetails->firstarrival_date) == "")){ @endphp
@@ -510,18 +484,18 @@
                         @php } @endphp
                       </div></div>
                     </td>
-                </tr> --}}
-                {{-- <tr>
+                </tr>
+                <tr>
                     <td>
-                      <strong>Employer:</strong>
+                      <strong>Employer:</strong> 
                         <span class="pull-right">
                             {{$staffFullDetails->employmentType}}
                         </span>
                     </td>
-                </tr> --}}
+                </tr>
                 <tr>
                     <td>
-                      <strong>Designation:</strong>
+                      <strong>Designation:</strong> 
                         <div align="right" class="pull-right">
                             <small>{{$staffFullDetails->designation}}</small>
                         </div>
@@ -529,7 +503,7 @@
                 </tr>
                 <tr>
                     <td>
-                      <strong>Department:</strong>
+                      <strong>Department:</strong> 
                         <div align="right" class="pull-right">
                             {{$staffFullDetails->department}}
                         </div>
@@ -537,31 +511,31 @@
                 </tr>
                 <tr>
                     <td>
-                      <strong>Section:</strong>
+                      <strong>Section:</strong> 
                         <span class="pull-right">
-                            {{ $staffFullDetails->section }}
+                            {{$staffFullDetails->section}}
                         </span>
                     </td>
                 </tr>
-                {{-- <tr>
+                <tr>
                     <td>
-                      <strong>Grade Level:</strong>
+                      <strong>Grade Level:</strong> 
                         <span class="pull-right">
-                            {{$staffFullDetails->staffGrade}}
+                            {{$staffFullDetails->grade}}
                         </span>
                     </td>
-                </tr> --}}
-                {{-- <tr>
+                </tr>
+                <tr>
                     <td>
-                      <strong>Step:</strong>
+                      <strong>Step:</strong> 
                         <span class="pull-right">
                             {{$staffFullDetails->step}}
                         </span>
                     </td>
-                </tr> --}}
+                </tr>
                 <tr>
                     <td>
-                      <strong>Bank:</strong>
+                      <strong>Bank:</strong> 
                         <span class="pull-right">
                             {{$staffFullDetails->bank}}
                         </span>
@@ -569,54 +543,64 @@
                 </tr>
                 {{-- <tr>
                     <td>
-                      <strong>Bank Branch:</strong>
+                      <strong>Bank Group:</strong> 
                         <span class="pull-right">
-                            {{$staffFullDetails->bank_branch}}
+                            {{$staffFullDetails->bankGroup}}
                         </span>
                     </td>
                 </tr> --}}
                 <tr>
                     <td>
-                      <strong>Account No.:</strong>
+                      <strong>Bank Branch:</strong> 
+                        <span class="pull-right">
+                            {{$staffFullDetails->bank_branch}}
+                        </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                      <strong>Account No.:</strong> 
                         <span class="pull-right">
                             {{$staffFullDetails->AccNo}}
                         </span>
                     </td>
                 </tr>
-                {{-- <tr>
+                <tr>
                     <td>
-                      <strong>NHF No.:</strong>
+                      <strong>NHF No.:</strong> 
                         <span class="pull-right">
                             {{$staffFullDetails->nhfNo}}
                         </span>
                     </td>
-                </tr> --}}
+                </tr>
                 <tr>
                     <td>
-                      <strong>Incremental Date:</strong>
+                      <strong>Incremental Date:</strong> 
                         <span class="pull-right">
-                            {{ date('d-m-Y', strtotime($staffFullDetails->incremental_date)) }}
+                            {{ date('d-m-Y', strtotime($staffFullDetails->incremental_date))}}
                         </span>
                     </td>
                 </tr>
               </table>
-                  <div class="text-gray no-print">
-                        <a onclick="sEdit('{{ $staffFullDetails->staffID }}','{{ $staffFullDetails->Designation }}','{{ $staffFullDetails->deptID }}','{{ $staffFullDetails->section }}','{{ $staffFullDetails->bankID }}','{{ $staffFullDetails->AccNo }}','{{ date('d-m-Y', strtotime($staffFullDetails->incremental_date)) }}')" style="cursor:pointer;">
+              @if($getIDs->salary==1)
+                  <div class="text-gray"> 
+                        <a onclick="sEdit('{{ $staffFullDetails->staffID }}','{{ date('d-m-Y', strtotime($staffFullDetails->appointment_date)) }}','{{ date('d-m-Y', strtotime($staffFullDetails->firstarrival_date)) }}','{{ $staffFullDetails->empID }}','{{ $staffFullDetails->Designation }}','{{ $staffFullDetails->deptID }}','{{ $staffFullDetails->section }}','{{ $staffFullDetails->grade }}','{{ $staffFullDetails->step }}','{{ $staffFullDetails->bankID }}','{{ $staffFullDetails->bankGroup }}','{{ $staffFullDetails->bank_branch }}','{{ $staffFullDetails->AccNo }}','{{ $staffFullDetails->nhfNo }}','{{ date('d-m-Y', strtotime($staffFullDetails->incremental_date)) }}')" style="cursor:pointer;">
                             <i class="fa fa-edit"></i> Edit
-                        </a>
-                        <a onclick="printDiv('salary')" class="pull-right" style="cursor:pointer">
-                          <i class="fa fa-print"></i> Print
-                      </a>
+                        </a> 
+                        
                  </div>
+              @elseif($getIDs->salary==0)
+              
+              @endif
              </div>
           </div>
            <!--//salary details-->
 
           <!--//PARTICULAR OF WIFE-->
-          <div class="box box-success" id="wife">
+          <div class="box box-success">
             <div class="box-body box-profile">
-
-
+              
+             
               <div class="table-responsive">
               <h3 class="profile-username text-center">{{strtoupper('Particulars of Spouse')}}</h3>
               <table class="table table-condensed">
@@ -626,7 +610,7 @@
                             <td><b>Spouse Name</b></td>
                             <td><b>Date of Birth</b></td>
                             <td><b>Marriage Date</b></td>
-
+                            
                             <td><b></b></td>
                         </tr>
                   </thead>
@@ -639,39 +623,32 @@
                           <td>{{ $details->wifename }}</td>
                           <td>{{ date('d-m-Y', strtotime($details->wifedateofbirth)) }}</td>
                           <td>{{ date('d-m-Y', strtotime($details->dateofmarriage)) }}</td>
-
+                          
                            <td>
-		               	<a onclick="wifeEdit('{{ $details->particularID }}','{{ $details->staffid }}','{{ $details->wifename }}','{{ date('d-m-Y', strtotime($details->wifedateofbirth)) }}','{{ date('d-m-Y', strtotime($details->dateofmarriage)) }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
+                        @if($getIDs->wifeparticulars==1)
+		               	<a onclick="wifeEdit('{{ $details->particularID }}','{{ $details->staffid }}','{{ $details->wifename }}','{{ date('d-m-Y', strtotime($details->wifedateofbirth)) }}','{{ date('d-m-Y', strtotime($details->dateofmarriage)) }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+		                @elseif($getIDs->wifeparticulars==0)
+		                
+		                @endif
 		               </td>
-		               <td>
-
-                              <a onclick="deleteFunction3('{{ $details->particularID }}')" style="color:red; cursor:pointer">
-                                    <i class="glyphicon glyphicon-trash no-print"></i>
-                                </a>
-    		               </td>
                         </tr>
                     @endforeach
                      @php } @endphp
                   </tbody>
               </table>
              </div>
-              <div class="text-gray-c no-print">
-                  <a href="/particular/wife/create/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                  <a onclick="printDiv('wife')" class="pull-right" style="cursor:pointer">
-                      <i class="fa fa-print"></i> Print
-                  </a>
-              </div>
+              
             </div>
           </div>
-          <!--//PERTICULAR OF BIRTH WIFE-->
-        </div>
+          <!--//PERTICULAR OF BIRTH WIFE--> 
+        </div> 
 </div><!-- /main row -->
 
 
- <div class="row">
+ <div class="row">    
     <!--Details of Previous service-->
     <div class="col-md-12">
-          <div class="box box-success" id="ps">
+          <div class="box box-success">
             <div class="box-body box-profile">
               <h3 class="profile-username text-center">{{strtoupper('Details of Previous Service')}}</h3>
               <table class="table table-condensed">
@@ -696,30 +673,22 @@
                               <td>{{$ps->previousSchudule}}</td>
                               <td>{{date('d-m-Y', strtotime($ps->fromDate))}}</td>
                               <td>{{date('d-m-Y', strtotime($ps->toDate))}}</td>
-                              <td>&#8358;{{ number_format($ps->totalPreviousPay,2) }}</td>
+                               <td>&#8358;{{ number_format($ps->totalPreviousPay,2) }}</td>
                               <td>{{$ps->filePageRef}}</td>
                               <td>{{$ps->checkedby}}</td>
                             <td>
-		               	          <a onclick="previousServiceEdit('{{ $ps->doppsid }}','{{ $ps->staffid }}','{{ $ps->previousSchudule }}','{{ date('d-m-Y', strtotime($ps->fromDate)) }}','{{ date('d-m-Y', strtotime($ps->toDate)) }}','{{ $ps->totalPreviousPay }}','{{ $ps->filePageRef }}','{{ $ps->checkedby }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
+                                @if($getIDs->publicservice==1)
+		               	          <a onclick="previousServiceEdit('{{ $ps->doppsid }}','{{ $ps->staffid }}','{{ $ps->previousSchudule }}','{{ date('d-m-Y', strtotime($ps->fromDate)) }}','{{ date('d-m-Y', strtotime($ps->toDate)) }}','{{ $ps->totalPreviousPay }}','{{ $ps->filePageRef }}','{{ $ps->checkedby }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+		                        @elseif($getIDs->publicservice==0)
+		                        @endif
 		                    </td>
-		                    <td>
-
-
-                             <a onclick="deleteFunction4('{{ $ps->doppsid }}')" style="color:red; cursor:pointer">
-                                    <i class="glyphicon glyphicon-trash no-print"></i>
-                                </a>
-    		                </td>
                             </tr>
                             @endforeach
                          @php } @endphp
                       </tbody>
               </table>
-              <div class="text-gray-c no-print">
-                   <a href="/update/detailofprevservice/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                  <a onclick="printDiv('ps')" class="pull-right" style="cursor:pointer">
-                      <i class="fa fa-print"></i> Print
-                  </a>
-
+              <div class="text-gray-c">
+                   
               </div>
             </div>
           </div>
@@ -728,17 +697,57 @@
 
     <!--//Record of leave type-->
     <div class="col-md-6">
+          <div class="box box-success">
+            <div class="box-body box-profile">
+              <h3 class="profile-username text-center">{{strtoupper('Record of leave type')}}</h3>
+              <table class="table table-condensed">
+                     <thead style="color: #33AD0A;">
+                        <tr>
+                            <td><b>SN</b></td>
+                            <td><b>Type of Leave</b></td>
+                            <td><b>From</b></td>
+                            <td><b>To</b></td>
+                            <td><b>No. of Days</b></td>       
+                        </tr>
+                      </thead>
+                      <tbody>
+                       @php $i=1; @endphp
+                       @php if($staffFullDetailsCensure != null){ @endphp
+                           @foreach($staffFullDetailsCensure as $ps)
+                            <tr>
+                              <td>{{ $i++ }}</td>
+                              <td>{{$ps->typeleave}}</td>
+                              <td>{{date('d-m-Y', strtotime($ps->leavefrom))}}</td>
+                              <td>{{date('d-m-Y', strtotime($ps->leaveto))}}</td>
+                              <td>{{$ps->numberday}}</td>
+		                    </td>
+                            </tr>
+                            @endforeach
+                         @php } @endphp
+                      </tbody>
+              </table>
+              <div class="text-gray-c">
+                  
+                  
+              </div>
+            </div>
+          </div>
+    </div>
+    <!--//end Record of leave type-->
+
+    <!--//Record of Censures and commendations-->
+    <div class="col-md-6">
       <div class="box box-success">
         <div class="box-body box-profile">
-          <h3 class="profile-username text-center">{{strtoupper('Record of leave type')}}</h3>
+          <h3 class="profile-username text-center">{{strtoupper('Record of Censures and commendations')}}</h3>
           <table class="table table-condensed">
                  <thead class="text-gray-b">
                     <tr>
-                        <td><b>SN</b></td>
-                        <td><b>Type of Leave</b></td>
-                        <td><b>From</b></td>
-                        <td><b>To</b></td>
-                        <td><b>No. of Days</b></td>
+                        <td><b>Date</b></td>
+                        <td><b>File Page Ref.</b></td>
+                        <td><b>Summary.</b></td>
+                        <td><b>Compiled By</b></td>
+                        <td><b></b></td>
                     </tr>
                   </thead>
                   <tbody>
@@ -746,11 +755,15 @@
                    @php if($staffFullDetailsCensure != null){ @endphp
                        @foreach($staffFullDetailsCensure as $ps)
                         <tr>
-                          <td>{{ $i++ }}</td>
-                          <td>{{$ps->typeleave}}</td>
-                          <td>{{date('d-m-Y', strtotime($ps->leavefrom))}}</td>
-                          <td>{{date('d-m-Y', strtotime($ps->leaveto))}}</td>
-                          <td>{{$ps->numberday}}</td>
+                          <td>{{date('d-m-Y', strtotime($ps->commendationdate))}}</td>
+                          <td>{{$ps->fileref}}</td>
+                          <td>{{$ps->summary}}</td>
+                          <td>{{$ps->checked_commendation }}</td>
+                          <td>
+                            @if($getIDs->censors_recomm==1)
+                           <a onclick="censorsAndCommendationEdit('{{ $ps->id }}','{{ $ps->staffid }}','{{ $ps->typeleave }}','{{ date('d-m-Y', strtotime($ps->leavefrom)) }}','{{ date('d-m-Y', strtotime($ps->leaveto)) }}','{{ $ps->numberday }}','{{ date('d-m-Y', strtotime($ps->commendationdate)) }}','{{ $ps->fileref }}','{{ $ps->summary }}','{{ $ps->checked_commendation }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+                        @elseif($getIDs->censors_recomm==0)
+                        @endif
                     </td>
                         </tr>
                         @endforeach
@@ -758,60 +771,18 @@
                   </tbody>
           </table>
           <div class="text-gray-c">
-
-
+              
+              
           </div>
         </div>
       </div>
-</div>
-<!--//end Record of leave type-->
-
-<!--//Record of Censures and commendations-->
-<div class="col-md-6">
-  <div class="box box-success">
-    <div class="box-body box-profile">
-      <h3 class="profile-username text-center">{{strtoupper('Record of Censures and commendations')}}</h3>
-      <table class="table table-condensed">
-             <thead class="text-gray-b">
-                <tr>
-                    <td><b>Date</b></td>
-                    <td><b>File Page Ref.</b></td>
-                    <td><b>Summary.</b></td>
-                    <td><b>Compiled By</b></td>
-                    <td><b></b></td>
-                </tr>
-              </thead>
-              <tbody>
-               @php $i=1; @endphp
-               @php if($staffFullDetailsCensure != null){ @endphp
-                   @foreach($staffFullDetailsCensure as $ps)
-                    <tr>
-                      <td>{{date('d-m-Y', strtotime($ps->commendationdate))}}</td>
-                      <td>{{$ps->fileref}}</td>
-                      <td>{{$ps->summary}}</td>
-                      <td>{{$ps->checked_commendation }}</td>
-                      <td>
-
-                       <a onclick="censorsAndCommendationEdit('{{ $ps->id }}','{{ $ps->staffid }}','{{ $ps->typeleave }}','{{ date('d-m-Y', strtotime($ps->leavefrom)) }}','{{ date('d-m-Y', strtotime($ps->leaveto)) }}','{{ $ps->numberday }}','{{ date('d-m-Y', strtotime($ps->commendationdate)) }}','{{ $ps->fileref }}','{{ $ps->summary }}','{{ $ps->checked_commendation }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
-                </td>
-                    </tr>
-                    @endforeach
-                 @php } @endphp
-              </tbody>
-      </table>
-      <div class="text-gray-c">
-
-
-      </div>
-    </div>
-  </div>
 </div>
 <!--//Record of censures-->
 
     <!--//Record of gratuity payments-->
     <div class="col-md-12">
           <div class="box box-success">
-            <div class="box-body box-profile" id="grad">
+            <div class="box-body box-profile">
               <h3 class="profile-username text-center">{{strtoupper('Record of gratuity payments')}}</h3>
               <table class="table table-condensed">
                      <thead class="text-gray-b">
@@ -841,31 +812,23 @@
                               <td>{{$gratuity->periodyear}}</td>
                               <td>{{$gratuity->periodmonth}}</td>
                               <td>{{$gratuity->periodday}}</td>
-                              <td>{{ number_format($gratuity->rateofgratuity,2) }}</td>
+                              <td>{{$gratuity->rateofgratuity}}</td>
                               <td>&#8358;{{ number_format($gratuity->amountpaid,2) }}</td>
                               <td>{{$gratuity->pageref }}</td>
                               <td>{{$gratuity->gratuitycheckedby }}</td>
                               <td>
-                               <a onclick="gratuityEdit('{{ $gratuity->id }}','{{ $gratuity->staffid }}','{{ date('d-m-Y', strtotime($gratuity->dateofpayment)) }}','{{ date('d-m-Y', strtotime($gratuity->periodfrom)) }}','{{ date('d-m-Y', strtotime($gratuity->periodto)) }}','{{ $gratuity->periodyear }}','{{ $gratuity->periodmonth }}','{{ $gratuity->periodday }}','{{ $gratuity->rateofgratuity }}','{{ $gratuity->amountpaid }}','{{ $gratuity->pageref }}','{{ $gratuity->gratuitycheckedby }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
+                              @if($getIDs->gratuitypayment==1)
+                                <a onclick="gratuityEdit('{{ $gratuity->id }}','{{ $gratuity->staffid }}','{{ date('d-m-Y', strtotime($gratuity->dateofpayment)) }}','{{ date('d-m-Y', strtotime($gratuity->periodfrom)) }}','{{ date('d-m-Y', strtotime($gratuity->periodto)) }}','{{ $gratuity->periodyear }}','{{ $gratuity->periodmonth }}','{{ $gratuity->periodday }}','{{ $gratuity->rateofgratuity }}','{{ $gratuity->amountpaid }}','{{ $gratuity->pageref }}','{{ $gratuity->gratuitycheckedby }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+		                      @elseif($getIDs->gratuitypayment==0)
+		                      @endif
 		                      </td>
-		                      <td>
-
-
-                             <a onclick="deleteFunction5('{{ $gratuity->id }}')" style="color:red; cursor:pointer">
-                                    <i class="glyphicon glyphicon-trash no-print"></i>
-                                </a>
-    		                </td>
                             </tr>
                             @endforeach
                          @php } @endphp
                       </tbody>
               </table>
-              <div class="text-gray-c no-print">
-                   <a href="/gratuity/create/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                  <a onclick="printDiv('grad')" class="pull-right" style="cursor:pointer">
-                    <i class="fa fa-print"></i> Print
-                  </a>
-
+              <div class="text-gray-c">
+                  
               </div>
             </div>
           </div>
@@ -874,110 +837,64 @@
 
     <!--//Particular of termination of service-->
     <div class="col-md-12">
-          <div class="box box-success" id="terminate">
+          <div class="box box-success">
             <div class="box-body box-profile">
               <h3 class="profile-username text-center">{{strtoupper('Particulars of termination of service')}}</h3>
-
-              <table class="table table-condensed table-bordered">
-                <thead class="text-center">
-                    <tr>
-                    <th colspan="5" class="text-center bg-light">By Resignation / Invalidity</th>
-                    <th colspan="4" class="text-center bg-light">By Death</th>
-                    <th colspan="4" class="text-center bg-light">By Transfer</th>
-                    <th colspan="2" class="text-center bg-light">Actions</th>
-                    </tr>
-
-                    <tr>
-                    <!-- Resignation / Invalidity -->
-                    <th>Date Term.</th>
-                    <th>Pension / Contract</th>
-                    <th>Pension of (₦)</th>
-                    <th>Gratuity (₦)</th>
-                    <th>Contract Gratuity (₦)</th>
-
-                    <!-- Death -->
-                    <th>Date of Demise</th>
-                    <th>Gratuity Paid to Estate (₦)</th>
-                    <th>Widow’s Pension (₦ p.a) From</th>
-                    <th>Orphan’s Pension (₦ p.a) From</th>
-
-                    <!-- Transfer -->
-                    <th>Date of Transfer</th>
-                    <th>Pension / Contract</th>
-                    <th>Aggregate Service (Y-M-D)</th>
-                    <th>Aggregate Salary (₦)</th>
-
-                    <!-- Actions -->
-                    <th>Edit</th>
-                    <th>Delete</th>
-                    </tr>
-                </thead>
-
-                <tbody>
-                    @if($staffFullDetailsTerminationService)
-                    @foreach($staffFullDetailsTerminationService as $terminate)
+              <table class="table table-condensed ">
+                     <thead class="text-gray-b">
                         <tr>
-                        <!-- Resignation / Invalidity -->
-                        <td>{{ date('d-m-Y', strtotime($terminate->dateTerminated)) }}</td>
-                        <td>{{ $terminate->pension_contract_terminate }}</td>
-                        <td>{{ number_format($terminate->pensionAmount,2) }} p.a.<br>From {{ $terminate->pensionperanumfrom }}</td>
-                        <td>{{ number_format($terminate->gratuity,2) }}</td>
-                        <td>{{ number_format($terminate->contractGratuity,2) }}</td>
-
-                        <!-- Death -->
-                        <td>{{ date('d-m-Y', strtotime($terminate->dateOfDeath)) }}</td>
-                        <td>{{ number_format($terminate->gratuityPaidEstate,2) }}</td>
-                        <td>{{ number_format($terminate->widowsPension,2) }} p.a.<br>From {{ date('d-m-Y', strtotime($terminate->widowsPensionFrom)) }}</td>
-                        <td>{{ number_format($terminate->orphanPension,2) }} p.a.<br>From {{ date('d-m-Y', strtotime($terminate->orphanPensionFrom)) }}</td>
-
-                        <!-- Transfer -->
-                        <td>{{ date('d-m-Y', strtotime($terminate->dateOfTransfer)) }}</td>
-                        <td>{{ $terminate->pension_contract_transfer }}</td>
-                        <td>{{ $terminate->aggregateYears }}-{{ $terminate->aggregateMonths }}-{{ $terminate->aggregateDays }}</td>
-                        <td>{{ number_format($terminate->aggregateSalary,2) }}</td>
-
-                        <!-- Actions -->
-                        <td>
-                            <a onclick="terminateEdit(
-                            '{{ $terminate->terminateID }}',
-                            '{{ $terminate->staffid }}',
-                            '{{ date('d-m-Y', strtotime($terminate->dateTerminated)) }}',
-                            '{{ $terminate->pension_contract_terminate }}',
-                            '{{ $terminate->pensionAmount }}',
-                            '{{ $terminate->pensionperanumfrom }}',
-                            '{{ $terminate->gratuity }}',
-                            '{{ $terminate->contractGratuity }}',
-                            '{{ date('d-m-Y', strtotime($terminate->dateOfDeath)) }}',
-                            '{{ $terminate->gratuityPaidEstate }}',
-                            '{{ $terminate->widowsPension }}',
-                            '{{ date('d-m-Y', strtotime($terminate->widowsPensionFrom)) }}',
-                            '{{ $terminate->orphanPension }}',
-                            '{{ date('d-m-Y', strtotime($terminate->orphanPensionFrom)) }}',
-                            '{{ date('d-m-Y', strtotime($terminate->dateOfTransfer)) }}',
-                            '{{ $terminate->pension_contract_transfer }}',
-                            '{{ $terminate->aggregateYears }}',
-                            '{{ $terminate->aggregateMonths }}',
-                            '{{ $terminate->aggregateDays }}',
-                            '{{ $terminate->aggregateSalary }}'
-                            )" class="btn btn-success btn-xs glyphicon glyphicon-edit no-print"></a>
-                        </td>
-                        <td>
-                            <a onclick="deleteFunction6('{{ $terminate->terminateID }}')" class="text-danger" style="cursor:pointer">
-                            <i class="glyphicon glyphicon-trash no-print"></i>
-                            </a>
-                        </td>
+                          <th  colspan="5" class="text-center">By Resignation/Invalidity</th>
+                          <th  colspan="4" class="text-center">By Death</th>
+                          <th  colspan="4" class="text-center">By Transfer</th>
                         </tr>
-                    @endforeach
-                    @endif
-                </tbody>
-                </table>
+                        <tr>
+                          <th style="vertical-align: top;">Date Term.</th>
+                          <th style="vertical-align: top;">Pension/Contract</th>
+                          <th style="vertical-align: top;">Pension of &#8358;</th>
+                          <th style="vertical-align: top;">Gratuity of &#8358;</th>
+                          <th style="vertical-align: top;">Contract Gratuity of &#8358;</th>
 
-              <div class="text-gray-c no-print">
-                   <a href="/update/termination/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                  <a onclick="printDiv('terminate')" class="pull-right" style="cursor:pointer">
-                     <i class="fa fa-print"></i> Print
-                  </a>
+                          <th style="vertical-align: top;">Date of Demise</th>
+                          <th style="vertical-align: top;">Gratuity Paid to Estate &#8358;</th>
+                          <th style="vertical-align: top;">Widows Pension &#8358; p.a from</th>
+                          <th style="vertical-align: top;">Orphans Pension &#8358; p.a from</th>
 
+                          <th style="vertical-align: top;">Date of Trans.</th>
+                          <th style="vertical-align: top;">Pension/Cont.</th>
+                          <th style="vertical-align: top;">Aggregate Service In Nig.</th>
+                          <th style="vertical-align: top;">Aggregate Salary in Nig. &#8358;</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                       @php if($staffFullDetailsTerminationService != null){ @endphp
+                          @foreach($staffFullDetailsTerminationService as $terminate)
+                            <tr>
+                              <td>{{date('d-m-Y', strtotime($terminate->dateTerminated))}}</td>
+                              <td>{{$terminate->pension_contract_terminate}}</td>
+                              <td>{{ number_format($terminate->pensionAmount,2) }} p.a. From <br /> {{$terminate->pensionperanumfrom}}</td>
+                              <td>{{ number_format($terminate->gratuity,2) }}</td>
+                              <td>{{ number_format($terminate->contractGratuity,2) }}</td>
+                              <td>{{date('d-m-Y', strtotime($terminate->dateOfDeath))}}</td>
+                              <td>{{ number_format($terminate->gratuityPaidEstate,2)}}</td>
+                              <td>{{ number_format($terminate->widowsPension,2) }} p.a. From <br />{{ date('d-m-Y', strtotime($terminate->widowsPensionFrom)) }}</td>
+                              <td>{{ number_format($terminate->orphanPension,2) }} p.a. From <br /> {{ date('d-m-Y', strtotime($terminate->orphanPensionFrom)) }}</td>
+                              <td>{{date('d-m-Y', strtotime($terminate->dateOfTransfer))}}</td>
+                              <td>{{$terminate->pension_contract_transfer}}</td>
+                              <td>{{$terminate->aggregateYears." ".$terminate->aggregateMonths ." ".$terminate->aggregateDays}}</td>
+                              <td>{{ number_format($terminate->aggregateSalary,2) }}</td>
+                              <td>
+                              @if($getIDs->terminaofservice==1)
+                               <a onclick="terminateEdit('{{ $terminate->terminateID }}','{{ $terminate->staffid }}','{{ date('d-m-Y', strtotime($terminate->dateTerminated)) }}','{{ $terminate->pension_contract_terminate }}','{{ $terminate->pensionAmount }}','{{ $terminate->pensionperanumfrom }}','{{ $terminate->gratuity }}','{{ $terminate->contractGratuity }}','{{ date('d-m-Y', strtotime($terminate->dateOfDeath)) }}','{{ $terminate->gratuityPaidEstate }}','{{ $terminate->widowsPension }}','{{ date('d-m-Y', strtotime($terminate->widowsPensionFrom)) }}','{{ $terminate->orphanPension }}','{{ date('d-m-Y', strtotime($terminate->orphanPensionFrom)) }}','{{ date('d-m-Y', strtotime($terminate->dateOfTransfer)) }}','{{ $terminate->pension_contract_transfer }}','{{ $terminate->aggregateYears }}','{{ $terminate->aggregateMonths }}','{{ $terminate->aggregateDays }}','{{ $terminate->aggregateSalary }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+		                          @elseif($getIDs->terminaofservice==0)
+		                          @endif
+		                          </td>
+                            </tr>
+                          @endforeach
+                         @php } @endphp
+                      </tbody>
+              </table>
+              <div class="text-gray-c">
+                 
               </div>
             </div>
           </div>
@@ -986,10 +903,10 @@
 
     <!--//Tour and Leave Record-->
     <div class="col-md-12">
-          <div class="box box-success" id="tour">
+          <div class="box box-success">
             <div class="box-body box-profile">
               <h3 class="profile-username text-center">{{strtoupper('Tour and Leave Records')}}</h3>
-              <table class="table table-condensed">
+              <table class="table table-condensed ">
                      <thead>
                         <tr>
                           <th  rowspan="2" style="vertical-align: top;">Date Tour Started</th>
@@ -1002,7 +919,7 @@
                           <th  rowspan="2" style="vertical-align: top;">Date Extension Granted to</th>
                           <th  rowspan="2" style="vertical-align: top;">Salary Rule for Ext.</th>
                           <th  rowspan="2" style="vertical-align: top;">Date Resumed Duty</th>
-                          <th  colspan="2" class="text-center">Passage by<br/>Sea or Air</th>
+                          <th  colspan="2" class="text-center" style="vertical-align: top;">Passage by<br/>Sea or Air</th>
                           <th  colspan="2" class="text-center" style="vertical-align: top;">Resident</th>
                           <th  colspan="2" class="text-center" style="vertical-align: top;">Leave</th>
                         </tr>
@@ -1020,7 +937,7 @@
                        @php if($staffFullDetailsTourLeaveRecord != null){ @endphp
                            @foreach($staffFullDetailsTourLeaveRecord as $tourLeave)
                             <tr>
-
+                                
                               <td>{{date('d-m-Y', strtotime($tourLeave->dateTourStarted))}}</td>
                               <td>{{$tourLeave->tourGezetteNumber}}</td>
                               <td>{{$tourLeave->lengthOfTour}}</td>
@@ -1038,27 +955,19 @@
                               <td>{{$tourLeave->leaveMonths }}</td>
                               <td>{{$tourLeave->leaveDays }}</td>
                               <td>
-                                <a onclick="tourleaveEdit('{{ $tourLeave->tourLeaveID }}','{{ $tourLeave->staffid }}','{{ date('d-m-Y', strtotime($tourLeave->dateTourStarted)) }}','{{ $tourLeave->tourGezetteNumber }}','{{ $tourLeave->lengthOfTour }}','{{ date('d-m-Y', strtotime($tourLeave->leaveDueDate)) }}','{{ date('d-m-Y', strtotime($tourLeave->leaveDepartDate)) }}','{{ $tourLeave->leaveGezetteNumber }}','{{ date('d-m-Y', strtotime($tourLeave->leaveReturnDate)) }}','{{ date('d-m-Y', strtotime($tourLeave->dateExtensionGranted)) }}','{{ $tourLeave->salaryRuleForExt }}','{{ date('d-m-Y', strtotime($tourLeave->dateResumedDuty)) }}','{{ $tourLeave->toUK }}','{{ $tourLeave->fromUK }}','{{ $tourLeave->residentMonths }}','{{ $tourLeave->residentDays }}','{{ $tourLeave->leaveMonths }}','{{ $tourLeave->leaveDays }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
+                              @if($getIDs->tour_leave==1)
+                                <a onclick="tourleaveEdit('{{ $tourLeave->tourLeaveID }}','{{ $tourLeave->staffid }}','{{ date('d-m-Y', strtotime($tourLeave->dateTourStarted)) }}','{{ $tourLeave->tourGezetteNumber }}','{{ $tourLeave->lengthOfTour }}','{{ date('d-m-Y', strtotime($tourLeave->leaveDueDate)) }}','{{ date('d-m-Y', strtotime($tourLeave->leaveDepartDate)) }}','{{ $tourLeave->leaveGezetteNumber }}','{{ date('d-m-Y', strtotime($tourLeave->leaveReturnDate)) }}','{{ date('d-m-Y', strtotime($tourLeave->dateExtensionGranted)) }}','{{ $tourLeave->salaryRuleForExt }}','{{ date('d-m-Y', strtotime($tourLeave->dateResumedDuty)) }}','{{ $tourLeave->toUK }}','{{ $tourLeave->fromUK }}','{{ $tourLeave->residentMonths }}','{{ $tourLeave->residentDays }}','{{ $tourLeave->leaveMonths }}','{{ $tourLeave->leaveDays }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+		                      @elseif($getIDs->tour_leave==0)
+		                      @endif
 		                      </td>
-		                      <td>
-
-
-                                 <a onclick="deleteFunction7('{{ $tourLeave->tourLeaveID }}')" style="color:red; cursor:pointer">
-                                    <i class="glyphicon glyphicon-trash no-print"></i>
-                                </a>
-    		                  </td>
-
+		                      
                             </tr>
                             @endforeach
                          @php } @endphp
                       </tbody>
               </table>
-              <div class="text-gray-c no-print">
-                   <a href="/update/tour-leave-record/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                  <a onclick="printDiv('tour')" class="pull-right" style="cursor:pointer">
-                    <i class="fa fa-print"></i> Print
-                  </a>
-
+              <div class="text-gray-c">
+                  
               </div>
             </div>
           </div>
@@ -1067,7 +976,7 @@
 
      <!--//Record of service-->
     <div class="col-md-12">
-          <div class="box box-success" id="record">
+          <div class="box box-success">
             <div class="box-body box-profile">
               <h3 class="profile-username text-center">{{strtoupper('Record of service')}}</h3>
               <span>
@@ -1077,12 +986,12 @@
                   </center>
                 </small>
               </span>
-              <table class="table table-condensed">
+              <table class="table table-condensed table-bordered">
                      <thead>
                         <tr>
                           <th width="150" rowspan="2" style="vertical-align: top;">DATE ENTRY MADE</th>
                           <th rowspan="2" style="vertical-align: top;">DETAILS</th>
-                          <th colspan="2" class="text-center">CERTIFIED BY</th>
+                          <th colspan="2" class="text-center" style="vertical-align: top;">CERTIFIED BY</th>
                         </tr>
                         <tr>
                           <th>Signature</th>
@@ -1099,27 +1008,18 @@
                               <td>{{$rs->signature}}</td>
                               <td>{{$rs->namestamp}}</td>
                               <td>
-                                <a onclick="servicerecordEdit('{{ $rs->recID }}','{{ $rs->staffid }}','{{ date('d-m-Y', strtotime($rs->entryDate)) }}','{{ $rs->detail }}','{{ $rs->signature }}','{{ $rs->namestamp }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
+                              @if($getIDs->record_service==1)
+                                <a onclick="servicerecordEdit('{{ $rs->recID }}','{{ $rs->staffid }}','{{ date('d-m-Y', strtotime($rs->entryDate)) }}','{{ $rs->detail }}','{{ $rs->signature }}','{{ $rs->namestamp }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+		                      @elseif($getIDs->record_service==0)
+		                      @endif
 		                      </td>
-		                      <td>
-
-
-                                 <a onclick="deleteFunction8('{{ $rs->recID }}')" style="color:red; cursor:pointer">
-                                    <i class="glyphicon glyphicon-trash no-print"></i>
-                                </a>
-    		                  </td>
-
                             </tr>
                             @endforeach
                          @php } @endphp
                       </tbody>
               </table>
-              <div class="text-gray-c no-print">
-                   <a href="/update/recordofservice/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                  <a onclick="printDiv('record')" class="pull-right" style="cursor:pointer">
-                    <i class="fa fa-print"></i> Print
-                  </a>
-
+              <div class="text-gray-c">
+                 
               </div>
             </div>
           </div>
@@ -1128,7 +1028,7 @@
 
     <!--//Record of Emolument-->
     <div class="col-md-12">
-          <div class="box box-success" id="emolument">
+          <div class="box box-success">
             <div class="box-body box-profile">
               <h3 class="profile-username text-center">{{strtoupper('Record of Emoluments')}}</h3>
                 <table class="table table-condensed ">
@@ -1147,7 +1047,7 @@
                           <th><small>M</small></th>
                           <th><small>Yr</small></th>
                           <th>Signature</th>
-
+                        
                         </tr>
                         <th></th>
                       </thead>
@@ -1159,33 +1059,24 @@
                               <td>{{$rs->salaryScale}}</td>
                               <td>&#8358;{{ number_format($rs->basicSalaryPA,2) }}</td>
                               <td>&#8358;{{ number_format($rs->inducementPayPA,2) }}</td>
-                              <td>{{date('d-m-Y', strtotime($rs->datePaidFrom)) }}</td>
+                              <td>{{date('d-m-Y', strtotime($rs->datePaidFrom))}}</td>
                               <td>{{date('M', strtotime($rs->month))}}</td>
                               <td>{{$rs->year}}</td>
                               <td>{{$rs->authority}}</td>
                               <td>{{$rs->signature}}</td>
                               <td>
-                                <a onclick="emolumentrecordEdit('{{ $rs->emolumentID }}','{{ $rs->staffid }}','{{ date('d-m-Y', strtotime($rs->entryDateMade)) }}','{{ $rs->salaryScale }}','{{ $rs->basicSalaryPA }}','{{ $rs->inducementPayPA }}','{{ date('d-m-Y', strtotime($rs->datePaidFrom)) }}','{{ $rs->month }}','{{ $rs->year }}','{{ $rs->authority }}','{{ $rs->signature }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
+                              @if($getIDs->record_emolument==1)
+                                <a onclick="emolumentrecordEdit('{{ $rs->emolumentID }}','{{ $rs->staffid }}','{{ date('d-m-Y', strtotime($rs->entryDateMade)) }}','{{ $rs->salaryScale }}','{{ $rs->basicSalaryPA }}','{{ $rs->inducementPayPA }}','{{ date('d-m-Y', strtotime($rs->datePaidFrom)) }}','{{ $rs->month }}','{{ $rs->year }}','{{ $rs->authority }}','{{ $rs->signature }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs"  style="cursor:pointer;"></a>&nbsp;
+		                      @elseif($getIDs->record_emolument==0)
+		                      @endif
 		                      </td>
-		                      <td>
-
-
-                                <a onclick="deleteFunction9('{{ $rs->emolumentID}}')" style="color:red; cursor:pointer">
-                                    <i class="glyphicon glyphicon-trash no-print"></i>
-                                </a>
-    		                  </td>
                             </tr>
                             @endforeach
                          @php } @endphp
                       </tbody>
               </table>
-              <div class="text-gray-c no-print">
-                   <a href="/update/recordofemolument/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-
-                  <a onclick="printDiv('emolument')" class="pull-right" style="cursor:pointer">
-                    <i class="fa fa-print"></i> Print
-                  </a>
-
+              <div class="text-gray-c">
+                  
               </div>
             </div>
           </div>
@@ -1201,37 +1092,27 @@
 <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/1.5.2/css/buttons.dataTables.min.css">
 <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.19/css/jquery.dataTables.min.css">
 <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/1.5.2/css/buttons.dataTables.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
-
 @endsection
 @section('styles')
-<style>
-@media print
-{
-    .no-print, .no-print *
-    {
-        display: none !important;
-    }
-}
-
+<style> 
+  
+  
   #editSALARYINFO{
-
-
     display: table;
     height: 100%;
     width: 100%;
     position:absolute;
-    background-color:#FF0000;
+    background-color:#FF0000;   
     margin-top:250px;
 }
 
-  .textbox {
+  .textbox { 
     border: 1px;
-    background-color: #33AD0A;
-    outline:0;
-    height:25px;
-    width: 275px;
-  }
+    background-color: #33AD0A; 
+    outline:0; 
+    height:25px; 
+    width: 275px; 
+  } 
   $('.autocomplete-suggestions').css({
     color: '#0f3'
   });
@@ -1240,7 +1121,7 @@
     color:#fff;
     font-size: 15px;
   }
-</style>
+</style> 
 @endsection
 @section('scripts')
 <!--loading vuejs -->
@@ -1250,39 +1131,13 @@
 <!-- autocomplete js-->
 <script src="{{ asset('assets/js/jquery.autocomplete.min.js') }}" ></script>
 <script src="{{ asset('assets/js/my-hr.js') }}" type="text/javascript"></script>
-
-   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-     {{-- <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> --}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.5.0/js/bootstrap-datepicker.js"></script>
 <script src="https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/1.5.2/js/dataTables.buttons.min.js"></script>
 <!--<script src="https://cdn.datatables.net/buttons/1.5.2/js/buttons.print.min.js"></script>-->
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-
 
 <script>
-
- function deleteFunction(url, id, id2) {
-
-    var x = confirm("Do you want to delete?");
-    if(x==true)
-    {
-        document.location = url+'/'+id+'/'+id2;
-        //document.location='delete/'+id;
-    }
-
- }
- function printDiv(divName) {
-     var printContents = document.getElementById(divName).innerHTML;
-     var originalContents = document.body.innerHTML;
-
-     document.body.innerHTML = printContents;
-
-     window.print();
-
-     document.body.innerHTML = originalContents;
-}
-
+ 
  $(document).ready(function() {
     $('#').DataTable();
   } );
@@ -1300,7 +1155,7 @@
                           .prepend(
                               ''
                           );
-
+   
                       $(win.document.body).find( 'table' )
                           .addClass( 'compact' )
                           .css( 'font-size', 'inherit' );
@@ -1312,224 +1167,6 @@
 
 
 </script>
-<script>
-function deleteFunction1(id) {
-    Swal.fire({
-        title: "Are you sure?",
-        text: "This record will be permanently deleted.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
-        confirmButtonText: "Yes, delete it!",
-        cancelButtonText: "Cancel"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = '/education/remove/' + id;
-        }
-    });
-}
-</script>
-<script>
-function deleteFunction9(emolumentID) {
-    Swal.fire({
-        title: "Are you sure?",
-        text: "This record will be permanently deleted.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
-        confirmButtonText: "Yes, delete it!",
-        cancelButtonText: "Cancel"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = '/remove/recordofemolument/' + emolumentID;
-        }
-    });
-}
-</script>
-<script>
-function deleteFunction8(recID) {
-    Swal.fire({
-        title: "Are you sure?",
-        text: "This record will be permanently deleted.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
-        confirmButtonText: "Yes, delete it!",
-        cancelButtonText: "Cancel"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = '/remove/recordofservice/' + recID;
-        }
-    });
-}
-</script>
-<script>
-function deleteFunction7(tourLeaveID) {
-    Swal.fire({
-        title: "Are you sure?",
-        text: "This record will be permanently deleted.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
-        confirmButtonText: "Yes, delete it!",
-        cancelButtonText: "Cancel"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = '/remove/tour-leave-record/' + tourLeaveID;
-        }
-    });
-}
-</script>
-<script>
-function deleteFunction6(terminateID) {
-    Swal.fire({
-        title: "Are you sure?",
-        text: "This record will be permanently deleted.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
-        confirmButtonText: "Yes, delete it!",
-        cancelButtonText: "Cancel"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = '/remove/termination/' + terminateID;
-        }
-    });
-}
-</script>
-<script>
-function deleteFunction5(id) {
-    Swal.fire({
-        title: "Are you sure?",
-        text: "This record will be permanently deleted.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
-        confirmButtonText: "Yes, delete it!",
-        cancelButtonText: "Cancel"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = '/gratuity/remove/' + id;
-        }
-    });
-}
-</script>
-<script>
-function deleteFunction4(doppsid) {
-    Swal.fire({
-        title: "Are you sure?",
-        text: "This record will be permanently deleted.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
-        confirmButtonText: "Yes, delete it!",
-        cancelButtonText: "Cancel"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = '/remove/detailofprevservice/' + doppsid;
-        }
-    });
-}
-</script>
-<script>
-function deleteFunction3(particularID) {
-    Swal.fire({
-        title: "Are you sure?",
-        text: "This record will be permanently deleted.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
-        confirmButtonText: "Yes, delete it!",
-        cancelButtonText: "Cancel"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = '/remove/particular/' + particularID;
-        }
-    });
-}
-</script>
-<script>
-function deleteFunction2(langid) {
-    Swal.fire({
-        title: "Are you sure?",
-        text: "This record will be permanently deleted.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#3085d6",
-        confirmButtonText: "Yes, delete it!",
-        cancelButtonText: "Cancel"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = '/languages/remove/' + langid;
-        }
-    });
-}
-</script>
-
-
-@if (session('msg'))
-<script>
-Swal.fire({
-    toast: true,
-    position: 'top-end', // top-end, top-start, bottom-end, etc.
-    icon: 'success',
-    title: '{{ session("msg") }}',
-    showConfirmButton: false,
-    timer: 3000,
-    timerProgressBar: true,
-});
-</script>
-@endif
-
-<script>
-function confirmChildDelete(deleteUrl) {
-    Swal.fire({
-        title: 'Are you sure?',
-        text: "This record will be permanently deleted!",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // Redirect to the delete URL
-            window.location.href = deleteUrl;
-        }
-    });
-}
-</script>
-<script>
-function confirmKinDelete(url) {
-    Swal.fire({
-        title: "Are you sure?",
-        text: "This Next of Kin record will be permanently deleted!",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#3085d6",
-        cancelButtonColor: "#d33",
-        confirmButtonText: "Yes, delete it!"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = url;
-        }
-    });
-}
-</script>
-
-
-
-
 <script type="text/javascript">
   $(function() {
       $('#searchName').attr("disabled", false);
@@ -1544,88 +1181,489 @@ function confirmKinDelete(url) {
       });
   });
 </script>
-
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-    flatpickr(".date-field", {
-        dateFormat: "d-m-Y",     // Display format
-        altInput: true,          // Show pretty input box
-        altFormat: "F j, Y",     // e.g., January 5, 2025
-        allowInput: true,        // Allow typing too
-        defaultDate: null,
-        maxDate: "today",        // Optional: block future dates
-        disableMobile: false,    // Use native picker on mobile
-    });
-});
+<script type="text/javascript">
+    
+     //process date of appointment_date
+        $(document).ready(function () {
+                
+                $('#appointment_date').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#appointment_date').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        }); 
+        
+         //process date of firstarrival_date
+        $(document).ready(function () {
+                
+                $('#firstarrival_date').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#firstarrival_date').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        }); 
+        
+         //process date of incrementaldate
+        $(document).ready(function () {
+                
+                $('#incrementaldate').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#incrementaldate').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        }); 
+        
+        //process date of dob
+        $(document).ready(function () {
+                
+                $('#dob').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#dob').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        }); 
+        
+        //process date of education
+        $(document).ready(function () {
+                
+                $('#schoolfrom').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#schoolfrom').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+        
+        
+        $(document).ready(function () {
+                
+                $('#schoolto').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#schoolto').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        }); 
+        
+        //process date of particulars of children
+        $(document).ready(function () {
+                
+                $('#dateofbirth').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#dateofbirth').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+       
+       //process date of wife particulars
+        $(document).ready(function () {
+                
+                $('#wifedob').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#wifedob').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+        
+        
+        $(document).ready(function () {
+                
+                $('#marriagedate').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#marriagedate').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        //process date for previous public service
+        $(document).ready(function () {
+                
+                $('#prefrom').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#prefrom').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+        
+        
+        $(document).ready(function () {
+                
+                $('#preto').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#preto').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        //process date for censores and commendations
+        $(document).ready(function () {
+                
+                $('#leavefrom').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#leavefrom').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+        
+        
+        $(document).ready(function () {
+                
+                $('#leaveto').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#leaveto').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        $(document).ready(function () {
+                
+                $('#commendationdate').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#commendationdate').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        //process date for gratuity
+        $(document).ready(function () {
+                
+                $('#dateofpayment').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#dateofpayment').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+        
+        
+        $(document).ready(function () {
+                
+                $('#periodfrom').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#periodfrom').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        $(document).ready(function () {
+                
+                $('#periodto').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#periodto').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+         //process date for terminate of service
+        $(document).ready(function () {
+                
+                $('#dateTerminated').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#dateTerminated').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+        
+        
+        $(document).ready(function () {
+                
+                $('#pensionperanumfrom').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#pensionperanumfrom').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        $(document).ready(function () {
+                
+                $('#dateOfDeath').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#dateOfDeath').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        $(document).ready(function () {
+                
+                $('#dateOfTransfer').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#dateOfTransfer').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        $(document).ready(function () {
+                
+                $('#widowsPensionFrom').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#widowsPensionFrom').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        $(document).ready(function () {
+                
+                $('#orphanPensionFrom').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#orphanPensionFrom').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+         //process date for tour and leave
+        $(document).ready(function () {
+                
+                $('#dateTourStarted').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#dateTourStarted').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+        
+        
+        $(document).ready(function () {
+                
+                $('#leaveDueDate').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#leaveDueDate').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        $(document).ready(function () {
+                
+                $('#leaveDepartDate').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#leaveDepartDate').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        $(document).ready(function () {
+                
+                $('#leaveReturnDate').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#leaveReturnDate').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        $(document).ready(function () {
+                
+                $('#dateExtensionGranted').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#dateExtensionGranted').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+        $(document).ready(function () {
+                
+                $('#dateResumedDuty').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#dateResumedDuty').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });  
+        
+         //process date for record of service
+        $(document).ready(function () {
+                
+                $('#entryDate').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#entryDate').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+        
+         //process date for record of emolument
+        $(document).ready(function () {
+                
+                $('#eentryDate').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#eentryDate').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+        
+         $(document).ready(function () {
+                
+                $('#datePaidFrom').datepicker({
+                    format: "yyyy-mm-dd"
+                });  
+            
+            });
+            
+        $('#datePaidFrom').datepicker({
+        autoclose: true,  
+        format: "yyyy-mm-dd"
+        });
+        
+        
+        
 </script>
-
 <script>
 
  function profilePicEdit(x){
-
+     
       document.getElementById('PfileID').value = x;
-
+     
        $("#editProfilePic").modal('show')
-
+     
  }
-
+ 
 </script>
 
 <script>
 
-//  function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
+ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
+     
+      document.getElementById('fileID').value = x;
+      document.getElementById('fileNo').value = y;
+      document.getElementById('divs').value = z;
+      document.getElementById('titles').value = a;
+      document.getElementById('surname').value = b;
+      document.getElementById('firstname').value = c;
+      document.getElementById('othernames').value = d;
+      
+      document.getElementById('address').value = e;
+      document.getElementById('gender').value = f;
+      document.getElementById('currentstate').value = g;
+      document.getElementById('phone').value = h;
+      document.getElementById('nationality').value = i;
+      document.getElementById('status').value = j;
 
-//       document.getElementById('fileID').value = x;
-//       document.getElementById('fileNo').value = y;
-//       document.getElementById('divs').value = z;
-//       document.getElementById('titles').value = a;
-//       document.getElementById('surname').value = b;
-//       document.getElementById('firstname').value = c;
-//       document.getElementById('othernames').value = d;
-
-//       document.getElementById('address').value = e;
-//       document.getElementById('gender').value = f;
-//       document.getElementById('currentstate').value = g;
-//       document.getElementById('phone').value = h;
-//       document.getElementById('nationality').value = i;
-//       document.getElementById('status').value = j;
-
-//        $("#editBIO").modal('show')
-
-//  }
-
-function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
-
-    console.log(x,y,z,a,b,c,d,e,f,g,h,i,j); // DEBUG
-
-    const setVal = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.value = val;
-    };
-
-    setVal('fileID', x);
-    setVal('fileNo', y);
-    setVal('divs', z);
-    setVal('titles', a);
-    setVal('surname', b);
-    setVal('firstname', c);
-    setVal('othernames', d);
-    setVal('address', e);
-    setVal('gender', f);
-    setVal('currentstate', g);
-    setVal('phone', h);
-    setVal('nationality', i);
-    setVal('status', j);
-
-    $("#editBIO").modal('show');
-}
-
+       $("#editBIO").modal('show')
+     
+ }
+ 
 </script>
 
 <script>
     function educationEdit(x,y,z,a,b,c,d){
-
-
+     
+       
       document.getElementById('eduID').value = x;
       document.getElementById('fID').value = y;
       document.getElementById('degreequalification').value = z;
@@ -1633,17 +1671,17 @@ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
       document.getElementById('schoolfrom').value = b;
       document.getElementById('schoolto').value = c;
       document.getElementById('certificateheld').value = d;
-
+      
       $("#editEDU").modal('show')
-
-
+      
+      
  }
 </script>
 
 <script>
     function languageEdit(x,y,z,a,b,c,d){
-
-
+     
+       
       document.getElementById('langID').value = x;
       document.getElementById('stID').value = y;
       document.getElementById('language').value = z;
@@ -1651,68 +1689,68 @@ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
       document.getElementById('written').value = b;
       document.getElementById('exam_qualified').value = c;
       document.getElementById('checkedby').value = d;
-
+      
       $("#editLANGUAGE").modal('show')
-
-
+      
+      
  }
 </script>
 
 <script>
     function childrenEdit(x,y,z,a,b,c){
-
-
+     
+       
       document.getElementById('recordID').value = x;
       document.getElementById('parentID').value = y;
       document.getElementById('fullname').value = z;
       document.getElementById('gender2').value = a;
       document.getElementById('dateofbirth').value = b;
       document.getElementById('checked_children_particulars').value = c;
-
+     
       $("#editCHILDREN").modal('show')
-
-
+      
+      
  }
 </script>
 
 <script>
     function nokEdit(x,y,z,a,b,c){
-
-
+     
+       
       document.getElementById('nokID').value = x;
       document.getElementById('nokparentID').value = y;
       document.getElementById('nokfullname').value = z;
       document.getElementById('nokaddress').value = a;
       document.getElementById('nokrelationship').value = b;
       document.getElementById('nokphoneno').value = c;
-
+     
       $("#editNOK").modal('show')
-
-
+      
+      
  }
 </script>
 
 <script>
     function wifeEdit(x,y,z,a,b){
-
+     
        //var t=x;
-
+      
       document.getElementById('wifeID').value = x;
       document.getElementById('husbandID').value = y;
       document.getElementById('wifename').value = z;
       document.getElementById('wifedob').value = a;
       document.getElementById('marriagedate').value = b;
-
+      
       $("#editWIFE").modal('show')
-
+       
  }
 </script>
 
 <script>
     function previousServiceEdit(x,y,z,a,b,c,d,e){
-
+     
        //var t=x;
-
+      
       document.getElementById('serviceID').value = x;
       document.getElementById('userID').value = y;
       document.getElementById('preemployer').value = z;
@@ -1721,17 +1759,17 @@ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
       document.getElementById('prepay').value = c;
       document.getElementById('prefileref').value = d;
       document.getElementById('precheckedby').value = e;
-
+      
       $("#editPRECIOUSSERVICE").modal('show')
-
+       
  }
 </script>
 
 <script>
     function censorsAndCommendationEdit(x,y,z,a,b,c,d,e,f,g){
-
+     
        //var t=x;
-
+      
       document.getElementById('censorID').value = x;
       document.getElementById('censorUserID').value = y;
       document.getElementById('leavetype').value = z;
@@ -1742,17 +1780,17 @@ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
       document.getElementById('censorfileref').value = e;
       document.getElementById('summary').value = f;
       document.getElementById('checked_commendation').value = g;
-
+      
       $("#editCENSORSANDCOMMENDATION").modal('show')
-
+       
  }
 </script>
 
 <script>
     function gratuityEdit(x,y,z,a,b,c,d,e,f,g,h,i){
-
+     
        //var t=x;
-
+      
       document.getElementById('gratuityID').value = x;
       document.getElementById('gratuityUserID').value = y;
       document.getElementById('dateofpayment').value = z;
@@ -1765,15 +1803,15 @@ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
       document.getElementById('amountpaid').value = g;
       document.getElementById('pageref').value = h;
       document.getElementById('gratuitycheckedby').value = i;
-
+      
       $("#editGRATUITY").modal('show')
-
+       
  }
 </script>
 
 <script>
     function terminateEdit(x,y,z,a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q){
-
+     
       document.getElementById('terminateID').value = x;
       document.getElementById('terminateUserID').value = y;
       document.getElementById('dateTerminated').value = z;
@@ -1794,15 +1832,15 @@ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
       document.getElementById('aggregateMonths').value = o;
       document.getElementById('aggregateDays').value = p;
       document.getElementById('aggregateSalary').value = q;
-
+      
       $("#editTERMINATE").modal('show')
-
+       
  }
 </script>
 
 <script>
     function tourleaveEdit(x,y,z,a,b,c,d,e,f,g,h,i,j,k,l,m,n,o){
-
+     
       document.getElementById('tourLeaveID').value = x;
       document.getElementById('leaveUserID').value = y;
       document.getElementById('dateTourStarted').value = z;
@@ -1821,31 +1859,31 @@ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
       document.getElementById('residentDays').value =m;
       document.getElementById('leaveMonths').value = n;
       document.getElementById('leaveDays').value = o;
-
-
+      
+      
       $("#editTOURLEAVE").modal('show')
-
+       
  }
 </script>
 
 <script>
     function servicerecordEdit(x,y,z,a,b,c){
-
+     
       document.getElementById('recID').value = x;
       document.getElementById('serviceUserID').value = y;
       document.getElementById('entryDate').value = z;
       document.getElementById('detail').value = a;
       document.getElementById('signature').value = b;
       document.getElementById('namestamp').value = c;
-
+      
       $("#editSERVICERECORD").modal('show')
-
+       
  }
 </script>
 
 <script>
     function emolumentrecordEdit(x,y,z,a,b,c,d,e,f,g,h){
-
+     
       document.getElementById('emolumentID').value = x;
       document.getElementById('emolumentUserID').value = y;
       document.getElementById('eentryDate').value = z;
@@ -1857,17 +1895,17 @@ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
       document.getElementById('year').value = f;
       document.getElementById('authority').value = g;
       document.getElementById('ssignature').value = h;
-
+      
       $("#editEMOLUMENTRECORD").modal('show')
-
+       
  }
 </script>
 
-{{-- <script>
+<script>
     function dobEdit(x,y,z,r){
-
+     
        //var t=x;
-
+      
       document.getElementById('fileID2').value = x;
       document.getElementById('dob').value = y;
       document.getElementById('pob').value = z;
@@ -1875,84 +1913,55 @@ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
       $("#editDOB").modal('show')
         //$.get('/get-dob-details?fileID='+t, function(data){
        // console.log(data);
-
+       
        // $.each(data, function(index, obj){
             // $('#dob').val(obj.degreequalification);
              //$('#pob').val(obj.schoolattended);
              //$('#ms').val(obj.schoolfrom);
-
+             
              //$("#editDOB").modal('show')
        // });
-
-
+         
+        
        // })
-
+      
  }
-</script> --}}
-
-<script>
-function dobEdit(staffID, dob, placeOfBirth, maritalStatus) {
-    const parts = dob.split("-");
-    let formattedDob = dob;
-    if (parts[0].length === 2) { // dd-mm-yyyy
-        formattedDob = `${parts[2]}-${parts[1]}-${parts[0]}`;
-    }
-
-    document.getElementById('fileID2').value = staffID;
-    document.getElementById('dob').value = formattedDob;
-    document.getElementById('pob').value = placeOfBirth;
-    document.getElementById('ms').value = maritalStatus;
-    $("#editDOB").modal('show');
-}
 </script>
 
-
 <script>
-    function sEdit(x,b,c,d,g,j,l){
-
+    function sEdit(x,y,z,a,b,c,d,e,f,g,h,i,j,k,l){
+     
        //var t=x;
-
+      
       document.getElementById('ID3').value = x;
-    //   document.getElementById('appointment_date').value = y;
-    //   document.getElementById('firstarrival_date').value = z;
-    //   document.getElementById('employee_type').value = a;
+      document.getElementById('appointment_date').value = y;
+      document.getElementById('firstarrival_date').value = z;
+      document.getElementById('employee_type').value = a;
       document.getElementById('Designation').value = b;
       document.getElementById('department').value = c;
       document.getElementById('section').value = d;
-
-    //   document.getElementById('grade').value = e;
-    //   document.getElementById('step').value = f;
+      
+      document.getElementById('grade').value = e;
+      document.getElementById('step').value = f;
       document.getElementById('bank').value = g;
-    //   document.getElementById('bankgroup').value = h;
-    //   document.getElementById('bankbranch').value = i;
+      document.getElementById('bankgroup').value = h;
+      document.getElementById('bankbranch').value = i;
       document.getElementById('accno').value = j;
-    //   document.getElementById('nhfno').value = k;
+      document.getElementById('nhfno').value = k;
       document.getElementById('incrementaldate').value = l;
-
+      
       $("#editSALARYINFO").modal('show')
-
-
+        
+      
  }
 </script>
 
 <script type="text/javascript">
    // When the document is ready
     $("#refreshPage").click(function(){
-
+        
             history.pushState('Staff Page', 'Judicial Payroll', 'https://jippis.njc.gov.ng/profile/details');
-
+         
     });
-</script>
-
-<script>
-    $(document).ready(function () {
-    var status = $("#status").val(); // gets 0 or 1
-
-    if (status == "1") {
-        $("#status").val("Active");
-    } else if (status == "0") {
-        $("#status").val("Inactive");
-    }
-});
 </script>
 @endsection

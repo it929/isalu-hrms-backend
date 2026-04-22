@@ -83,39 +83,12 @@
                 <li class="list-group-item">
                   <div><b>Nationality:</b> <div class="pull-right">{{$staffFullDetails->nationality}}</div></div>
                 </li>
-                {{-- <li class="list-group-item">
-                  <div><b>Staff Status:</b> <div class="pull-right">{{$staffFullDetails->staff_status}}</div></div>
-                </li> --}}
                 <li class="list-group-item">
-                    <div>
-                        <b>Staff Status:</b>
-                        <div class="pull-right">
-                            {{ $staffFullDetails->staff_status == 1 ? 'Active' : 'Inactive' }}
-                        </div>
-                    </div>
+                  <div><b>Staff Status:</b> <div class="pull-right">{{$staffFullDetails->staff_status}}</div></div>
                 </li>
               </ul>
                 <div class="no-print">
-                    {{-- <a onclick="profileEdit('{{ $staffFullDetails->staffID }}','{{ $staffFullDetails->fileNo }}','{{ $staffFullDetails->divID }}','{{ $staffFullDetails->titleID }}','{{ $staffFullDetails->surname }}','{{ $staffFullDetails->first_name }}','{{ $staffFullDetails->othernames }}','{!! $staffFullDetails->home_address !!}','{{ $staffFullDetails->genderID }}','{{ $staffFullDetails->stateID }}','{{ $staffFullDetails->phone }}','{{ $staffFullDetails->nationality }}','{{ $staffFullDetails->staff_status }}')" style="cursor:pointer;" class="pull-left no-print" id="fileNoBioData"><i class="fa fa-edit"></i> Edits</a> --}}
-
-                    <a onclick='profileEdit(
-                        "{{ $staffFullDetails->staffID }}",
-                        "{{ $staffFullDetails->fileNo }}",
-                        "{{ $staffFullDetails->divID }}",
-                        "{{ $staffFullDetails->titleID }}",
-                        "{{ $staffFullDetails->surname }}",
-                        "{{ $staffFullDetails->first_name }}",
-                        "{{ $staffFullDetails->othernames }}",
-                        {!! json_encode($staffFullDetails->home_address) !!},
-                        "{{ $staffFullDetails->genderID }}",
-                        "{{ $staffFullDetails->stateID }}",
-                        "{{ $staffFullDetails->phone }}",
-                        "{{ $staffFullDetails->nationality }}",
-                        "{{ $staffFullDetails->staff_status }}"
-                        )'
-                        class="pull-left no-print" style="cursor:pointer;">
-                        <i class="fa fa-edit"></i> Edit
-                    </a>
+                    <a onclick="profileEdit('{{ $staffFullDetails->staffID }}','{{ $staffFullDetails->fileNo }}','{{ $staffFullDetails->divID }}','{{ $staffFullDetails->titleID }}','{{ $staffFullDetails->surname }}','{{ $staffFullDetails->first_name }}','{{ $staffFullDetails->othernames }}','{!! $staffFullDetails->home_address !!}','{{ $staffFullDetails->genderID }}','{{ $staffFullDetails->stateID }}','{{ $staffFullDetails->phone }}','{{ $staffFullDetails->nationality }}','{{ $staffFullDetails->staff_status }}')" style="cursor:pointer;" class="pull-left no-print" id="fileNoBioData"><i class="fa fa-edit"></i> Edit</a>
                     <a  onclick="printDiv('bio-data')" class="pull-right" id="fileNoBioData"  style="cursor:pointer"><i class="fa fa-print"></i> Print</a>
                 </div>
             </div>
@@ -487,7 +460,7 @@
 
               <h3 class="profile-username text-center">{{strtoupper('Salary Details')}}</h3>
               <table class="table table-condensed">
-                  {{-- <tr>
+                  <tr>
                     <td>
                       <div><b>First Appointment:</b>
                         <div class="pull-right">
@@ -499,8 +472,8 @@
                         </div>
                       </div>
                    </td>
-                </tr> --}}
-                {{-- <tr>
+                </tr>
+                <tr>
                     <td>
                       <div><b>Resumption Date:</b> <div class="pull-right">
                        @php if((($staffFullDetails->firstarrival_date) == "0000-00-00") or (($staffFullDetails->firstarrival_date) == "")){ @endphp
@@ -510,15 +483,15 @@
                         @php } @endphp
                       </div></div>
                     </td>
-                </tr> --}}
-                {{-- <tr>
+                </tr>
+                <tr>
                     <td>
                       <strong>Employer:</strong>
                         <span class="pull-right">
                             {{$staffFullDetails->employmentType}}
                         </span>
                     </td>
-                </tr> --}}
+                </tr>
                 <tr>
                     <td>
                       <strong>Designation:</strong>
@@ -543,22 +516,22 @@
                         </span>
                     </td>
                 </tr>
-                {{-- <tr>
+                <tr>
                     <td>
                       <strong>Grade Level:</strong>
                         <span class="pull-right">
                             {{$staffFullDetails->staffGrade}}
                         </span>
                     </td>
-                </tr> --}}
-                {{-- <tr>
+                </tr>
+                <tr>
                     <td>
                       <strong>Step:</strong>
                         <span class="pull-right">
                             {{$staffFullDetails->step}}
                         </span>
                     </td>
-                </tr> --}}
+                </tr>
                 <tr>
                     <td>
                       <strong>Bank:</strong>
@@ -567,14 +540,14 @@
                         </span>
                     </td>
                 </tr>
-                {{-- <tr>
+                <tr>
                     <td>
                       <strong>Bank Branch:</strong>
                         <span class="pull-right">
                             {{$staffFullDetails->bank_branch}}
                         </span>
                     </td>
-                </tr> --}}
+                </tr>
                 <tr>
                     <td>
                       <strong>Account No.:</strong>
@@ -583,14 +556,14 @@
                         </span>
                     </td>
                 </tr>
-                {{-- <tr>
+                <tr>
                     <td>
                       <strong>NHF No.:</strong>
                         <span class="pull-right">
                             {{$staffFullDetails->nhfNo}}
                         </span>
                     </td>
-                </tr> --}}
+                </tr>
                 <tr>
                     <td>
                       <strong>Incremental Date:</strong>
@@ -601,7 +574,7 @@
                 </tr>
               </table>
                   <div class="text-gray no-print">
-                        <a onclick="sEdit('{{ $staffFullDetails->staffID }}','{{ $staffFullDetails->Designation }}','{{ $staffFullDetails->deptID }}','{{ $staffFullDetails->section }}','{{ $staffFullDetails->bankID }}','{{ $staffFullDetails->AccNo }}','{{ date('d-m-Y', strtotime($staffFullDetails->incremental_date)) }}')" style="cursor:pointer;">
+                        <a onclick="sEdit('{{ $staffFullDetails->staffID }}','{{ date('d-m-Y', strtotime($staffFullDetails->appointment_date)) }}','{{ date('d-m-Y', strtotime($staffFullDetails->firstarrival_date)) }}','{{ $staffFullDetails->empID }}','{{ $staffFullDetails->Designation }}','{{ $staffFullDetails->deptID }}','{{ $staffFullDetails->section }}','{{ $staffFullDetails->grade }}','{{ $staffFullDetails->step }}','{{ $staffFullDetails->bankID }}','{{ $staffFullDetails->bankGroup }}','{{ $staffFullDetails->bank_branch }}','{{ $staffFullDetails->AccNo }}','{{ $staffFullDetails->nhfNo }}','{{ date('d-m-Y', strtotime($staffFullDetails->incremental_date)) }}')" style="cursor:pointer;">
                             <i class="fa fa-edit"></i> Edit
                         </a>
                         <a onclick="printDiv('salary')" class="pull-right" style="cursor:pointer">
@@ -1573,52 +1546,26 @@ document.addEventListener("DOMContentLoaded", function() {
 
 <script>
 
-//  function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
+ function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
 
-//       document.getElementById('fileID').value = x;
-//       document.getElementById('fileNo').value = y;
-//       document.getElementById('divs').value = z;
-//       document.getElementById('titles').value = a;
-//       document.getElementById('surname').value = b;
-//       document.getElementById('firstname').value = c;
-//       document.getElementById('othernames').value = d;
+      document.getElementById('fileID').value = x;
+      document.getElementById('fileNo').value = y;
+      document.getElementById('divs').value = z;
+      document.getElementById('titles').value = a;
+      document.getElementById('surname').value = b;
+      document.getElementById('firstname').value = c;
+      document.getElementById('othernames').value = d;
 
-//       document.getElementById('address').value = e;
-//       document.getElementById('gender').value = f;
-//       document.getElementById('currentstate').value = g;
-//       document.getElementById('phone').value = h;
-//       document.getElementById('nationality').value = i;
-//       document.getElementById('status').value = j;
+      document.getElementById('address').value = e;
+      document.getElementById('gender').value = f;
+      document.getElementById('currentstate').value = g;
+      document.getElementById('phone').value = h;
+      document.getElementById('nationality').value = i;
+      document.getElementById('status').value = j;
 
-//        $("#editBIO").modal('show')
+       $("#editBIO").modal('show')
 
-//  }
-
-function profileEdit(x,y,z,a,b,c,d,e,f,g,h,i,j){
-
-    console.log(x,y,z,a,b,c,d,e,f,g,h,i,j); // DEBUG
-
-    const setVal = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.value = val;
-    };
-
-    setVal('fileID', x);
-    setVal('fileNo', y);
-    setVal('divs', z);
-    setVal('titles', a);
-    setVal('surname', b);
-    setVal('firstname', c);
-    setVal('othernames', d);
-    setVal('address', e);
-    setVal('gender', f);
-    setVal('currentstate', g);
-    setVal('phone', h);
-    setVal('nationality', i);
-    setVal('status', j);
-
-    $("#editBIO").modal('show');
-}
+ }
 
 </script>
 
@@ -1908,25 +1855,25 @@ function dobEdit(staffID, dob, placeOfBirth, maritalStatus) {
 
 
 <script>
-    function sEdit(x,b,c,d,g,j,l){
+    function sEdit(x,y,z,a,b,c,d,e,f,g,h,i,j,k,l){
 
        //var t=x;
 
       document.getElementById('ID3').value = x;
-    //   document.getElementById('appointment_date').value = y;
-    //   document.getElementById('firstarrival_date').value = z;
-    //   document.getElementById('employee_type').value = a;
+      document.getElementById('appointment_date').value = y;
+      document.getElementById('firstarrival_date').value = z;
+      document.getElementById('employee_type').value = a;
       document.getElementById('Designation').value = b;
       document.getElementById('department').value = c;
       document.getElementById('section').value = d;
 
-    //   document.getElementById('grade').value = e;
-    //   document.getElementById('step').value = f;
+      document.getElementById('grade').value = e;
+      document.getElementById('step').value = f;
       document.getElementById('bank').value = g;
-    //   document.getElementById('bankgroup').value = h;
-    //   document.getElementById('bankbranch').value = i;
+      document.getElementById('bankgroup').value = h;
+      document.getElementById('bankbranch').value = i;
       document.getElementById('accno').value = j;
-    //   document.getElementById('nhfno').value = k;
+      document.getElementById('nhfno').value = k;
       document.getElementById('incrementaldate').value = l;
 
       $("#editSALARYINFO").modal('show')
@@ -1942,17 +1889,5 @@ function dobEdit(staffID, dob, placeOfBirth, maritalStatus) {
             history.pushState('Staff Page', 'Judicial Payroll', 'https://jippis.njc.gov.ng/profile/details');
 
     });
-</script>
-
-<script>
-    $(document).ready(function () {
-    var status = $("#status").val(); // gets 0 or 1
-
-    if (status == "1") {
-        $("#status").val("Active");
-    } else if (status == "0") {
-        $("#status").val("Inactive");
-    }
-});
 </script>
 @endsection

@@ -16,7 +16,7 @@ class DateOfBirthWifeController extends ParentController
 
 
 
-    public function create($staffid = Null)
+    public function createOLD($staffid = Null)
     {
         //check if parameters are Null
         if (is_null($staffid)) {
@@ -36,6 +36,8 @@ class DateOfBirthWifeController extends ParentController
             $data['KinList']     = DB::table('tbldateofbirth_wife')->where('staffid', '=', $staffid)->get();
             $data['getStaff']             = $getStaff;
 
+
+
             return view('hr.dateOfBirthWife.create', $data);
         } else {
             $data['details']     = "";
@@ -43,6 +45,30 @@ class DateOfBirthWifeController extends ParentController
             $data['getStaff']             = $getStaff;
             return view('hr.dateOfBirthWife.create', $data);
         }
+    }
+
+    public function create($staffid = null)
+    {
+        if (is_null($staffid)) {
+            return redirect('/profile/details');
+        }
+
+        Session::put('staffid', $staffid);
+
+        $getStaff = DB::table('tblper')->where('ID', $staffid)->first();
+
+        $KinList = DB::table('tbldateofbirth_wife')
+            ->where('staffid', $staffid)
+            ->get();
+
+        $data = [
+            'staffid' => $staffid,
+            'details' => "",
+            'KinList' => $KinList,
+            'getStaff' => $getStaff,
+        ];
+
+        return view('hr.dateOfBirthWife.create', $data);
     }
 
 
@@ -123,16 +149,16 @@ class DateOfBirthWifeController extends ParentController
                 'dateOfMarriage'   => 'required|date',
                 'wifeName'         => 'required|regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
                 'wifeDateOfBirth'  => 'required|date',
-                'checkedBy'        => 'required|regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
-                'checkedBy2'       => 'regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
+                // 'checkedBy'        => 'required|regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
+                // 'checkedBy2'       => 'regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
             ]
         );
         $homePlace             = trim($request['homePlace']);
         $dateOfMarriage        = trim($request['dateOfMarriage']);
         $wifeName                 = trim($request['wifeName']);
         $wifeDateOfBirth       = trim($request['wifeDateOfBirth']);
-        $checkedBy             = trim($request['checkedBy']);
-        $checkedBy2               = trim($request['checkedBy2']);
+        // $checkedBy             = trim($request['checkedBy']);
+        // $checkedBy2               = trim($request['checkedBy2']);
         $hiddenName               = trim($request['hiddenName']);
         $particularID          = trim($request['particularID']);
         $date                   = date("Y-m-d");
@@ -144,8 +170,8 @@ class DateOfBirthWifeController extends ParentController
                 'dateofmarriage'        => $dateOfMarriage,
                 'wifename'              => $wifeName,
                 'wifedateofbirth'        => $wifeDateOfBirth,
-                'checkedby1'            => $checkedBy,
-                'checkedby2'            => $checkedBy2,
+                // 'checkedby1'            => $checkedBy,
+                // 'checkedby2'            => $checkedBy2,
                 'updated_at'            => $date
             ));
             $this->addLog('Record updated for Staff ID: ' . $staffid . 'on  wife Date Of Birth and division: ' . $staffid);
@@ -157,8 +183,8 @@ class DateOfBirthWifeController extends ParentController
                 'dateofmarriage'        => $dateOfMarriage,
                 'wifename'              => $wifeName,
                 'wifedateofbirth'        => $wifeDateOfBirth,
-                'checkedby1'            => $checkedBy,
-                'checkedby2'            => $checkedBy2,
+                // 'checkedby1'            => $checkedBy,
+                // 'checkedby2'            => $checkedBy2,
                 'updated_at'            => $date
             ));
             $this->addLog('wife date of birth record added for Staff ID: ' . $staffid . ', division: ' . $staffid);

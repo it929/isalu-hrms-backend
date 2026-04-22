@@ -120,13 +120,13 @@ class ParticularsOfChildrenController extends ParentController
                 'fullName'                        => 'required|regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
                 'gender'                        => 'required|regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
                 'dateOfBirth'                      => 'required|date',
-                'checkedChildrenParticulars'     => 'required|regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
+                // 'checkedChildrenParticulars'     => 'required|regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
             ]
         );
         $fullName                     = trim($request['fullName']);
         $gender                     = trim($request['gender']);
         $dateOfBirth                      = trim($request['dateOfBirth']);
-        $checkedChildrenParticulars = trim($request['checkedChildrenParticulars']);
+        // $checkedChildrenParticulars = trim($request['checkedChildrenParticulars']);
         $id                             = trim($request['id']);
         $date                           = date("Y-m-d");
 
@@ -136,7 +136,7 @@ class ParticularsOfChildrenController extends ParentController
                 'fullname'                         => $fullName,
                 'gender'                         => $gender,
                 'dateofbirth'                   => $dateOfBirth,
-                'checked_children_particulars'  => $checkedChildrenParticulars,
+                // 'checked_children_particulars'  => $checkedChildrenParticulars,
                 'updated_at'                    => $date,
             ));
             $this->addLog('Children particular Record updated for Staff ID: ' . $staffid . ' Division: ' . $this->division);
@@ -148,7 +148,7 @@ class ParticularsOfChildrenController extends ParentController
                 'fullname'                         => $fullName,
                 'gender'                         => $gender,
                 'dateofbirth'                   => $dateOfBirth,
-                'checked_children_particulars'  => $checkedChildrenParticulars,
+                // 'checked_children_particulars'  => $checkedChildrenParticulars,
                 'created_at'                    => $date,
                 'updated_at'                    => $date
             ));
