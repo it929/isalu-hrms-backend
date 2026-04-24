@@ -2,7 +2,7 @@
   color: #333;
 }
 #processing {
-	color: green;
+	color: #00c0ef;
 }
 .skin-green .main-header .navbar .dropdown-menu li a {
     color: #000;
@@ -14,12 +14,12 @@
   -moz-animation-name: blink;
   -moz-animation-iteration-count: infinite;
   -moz-animation-direction: alternate;
-  
+
   -webkit-animation-duration: 1500ms;
   -webkit-animation-name: blink;
   -webkit-animation-iteration-count: infinite;
   -webkit-animation-direction: alternate;
-  
+
   animation-duration: 1500ms;
   animation-name: blink;
   animation-iteration-count: infinite;
@@ -32,7 +32,7 @@
   from {
     opacity: 1;
   }
-  
+
   to {
     opacity: 0.2;
   }
@@ -42,7 +42,7 @@
   from {
     opacity: 1;
   }
-  
+
   to {
     opacity: 0.2;
   }
@@ -52,7 +52,7 @@
   from {
     opacity: 1;
   }
-  
+
   to {
     opacity: 0.2;
   }

@@ -199,7 +199,7 @@
     <div class="modal-dialog modal-md" role="document">
         <div class="modal-content">
 
-            <form class="form-horizontal"
+        <form class="form-horizontal"
                             action="{{ url('/profile/update') }}"
                             method="post">
 
@@ -381,7 +381,7 @@
                                         <label>Title</label>
                                         <select class="form-control" id="titles" name="title">
                                             @foreach ($getTitles as $list)
-                                                <option value="{{ $list->ID }}">{{ $list->title }}</option>
+                                                <option value="{{ $list->title }}">{{ $list->title }}</option>
                                             @endforeach
                                         </select>
                                     </div>
@@ -421,7 +421,7 @@
                                         <label>Gender</label>
                                         <select class="form-control" id="gender" name="gender">
                                             @foreach ($getGender as $list)
-                                                <option value="{{ $list->ID }}">{{ $list->gender }}</option>
+                                                <option value="{{ $list->gender }}">{{ $list->gender }}</option>
                                             @endforeach
                                         </select>
                                     </div>
@@ -1456,7 +1456,7 @@
                                 <label>Marital Status</label>
                                 <select required class="form-control" id="ms" name="maritalStatus">
                                     @foreach ($getMS as $list)
-                                        <option value="{{ $list->ID }}"
+                                        <option value="{{ $list->marital_status }}"
                                             {{ old('maritalStatus') == $list->ID ? 'selected' : '' }}>
                                             {{ $list->marital_status }}
                                         </option>

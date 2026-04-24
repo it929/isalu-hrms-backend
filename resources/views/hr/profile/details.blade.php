@@ -26,142 +26,179 @@
   </div><!-- /.col -->
 </div><!-- /.row -->
 
-<div class="box-body">
+{{-- <div class="box-body">
     <div class="row">
 
     </div>
-</div>
+</div> --}}
 
 <div class="row">
         <div class="col-md-3">
 
           <!--BIO-DATA-->
           <!-- Profile Image -->
-          <div class="box box-success" id="bio-data">
-          <h3 class="profile-username text-center">{{strtoupper('Bio-Data')}}</h3>
-            <div class="box-body box-profile">
-             @php $pic="/passport/" @endphp
-              {{-- <img class="profile-user-img img-responsive"
-              src="{{ $pic }}{{ $staffFullDetails->picture}}" alt="Staff profile picture"> --}}
-              <img class="profile-user-img img-responsive"
-              src="{{ $staffFullDetails->passport_url}}" alt="Staff profile picture">
-              {{-- <img class="profile-user-img img-responsive"
-              src="{{$fileNoImage}}" alt="Staff profile picture"> --}}
-              <div class="text-center no-print"><a onclick="profilePicEdit('{{ $staffFullDetails->staffID }}')" title="Edit Picture">Edit Picture</a></div>
-              <h4 class="profile-username text-center" id="fullName"></h4>
+           <div class="box box-success" id="bio-data">
+                <h3 class="profile-username text-center">{{ strtoupper('Bio-Data') }}</h3>
 
-              <p class="text-muted text-center" id="decoration"></p>
+                <div class="box-body box-profile">
 
-              <ul class="list-group list-group-unbordered">
-                <li class="list-group-item">
-                  <div><b>File No:</b> <span class="pull-right">{{$staffFullDetails->fileNo}}</span></div>
-                </li>
-                <li class="list-group-item">
-                  <div><b>Title:</b> <span class="pull-right">{{ $staffFullDetails->title }}</span></div>
-                </li>
-                <li class="list-group-item">
-                  <div><b>Surname:</b> <span class="pull-right">{{$staffFullDetails->surname}}</span></div>
-                </li>
-                <li class="list-group-item">
-                  <div><b>First Name:</b> <span class="pull-right">{{$staffFullDetails->first_name}}</span></div>
-                </li>
-                <li class="list-group-item">
-                  <div><b>Other Names:</b> <span class="pull-right">{{$staffFullDetails->othernames}}</span></div>
-                </li>
-                <li class="list-group-item">
-                  <div><b>Gender:</b> <span class="pull-right">{{$staffFullDetails->gender}}</span></div>
-                </li>
-                <li class="list-group-item">
-                  <div><b>Home Address:</b> <div class="text-right">{{$staffFullDetails->home_address}}</div></div>
-                </li>
-                <li class="list-group-item">
-                  <div><b>Phone:</b> <div class="pull-right">{{$staffFullDetails->phone}}</div></div>
-                </li>
-                 <li class="list-group-item">
-                  <div><b>Current State:</b> <div class="pull-right">{{$staffFullDetails->State}}</div></div>
-                </li>
-                <li class="list-group-item">
-                  <div><b>Nationality:</b> <div class="pull-right">{{$staffFullDetails->nationality}}</div></div>
-                </li>
-                {{-- <li class="list-group-item">
-                  <div><b>Staff Status:</b> <div class="pull-right">{{$staffFullDetails->staff_status}}</div></div>
-                </li> --}}
-                <li class="list-group-item">
-                    <div>
-                        <b>Staff Status:</b>
-                        <div class="pull-right">
-                            {{ $staffFullDetails->staff_status == 1 ? 'Active' : 'Inactive' }}
-                        </div>
+                    {{-- Passport --}}
+                    <img class="profile-user-img img-responsive img-circle"
+                        src="{{ $staffFullDetails->passport_url }}"
+                        alt="Staff profile picture">
+
+                    <div class="text-center no-print" style="margin-top: 5px;">
+                        <a onclick="profilePicEdit('{{ $staffFullDetails->staffID }}')" style="cursor:pointer;">
+                            Edit Picture
+                        </a>
                     </div>
-                </li>
-              </ul>
-                <div class="no-print">
-                    {{-- <a onclick="profileEdit('{{ $staffFullDetails->staffID }}','{{ $staffFullDetails->fileNo }}','{{ $staffFullDetails->divID }}','{{ $staffFullDetails->titleID }}','{{ $staffFullDetails->surname }}','{{ $staffFullDetails->first_name }}','{{ $staffFullDetails->othernames }}','{!! $staffFullDetails->home_address !!}','{{ $staffFullDetails->genderID }}','{{ $staffFullDetails->stateID }}','{{ $staffFullDetails->phone }}','{{ $staffFullDetails->nationality }}','{{ $staffFullDetails->staff_status }}')" style="cursor:pointer;" class="pull-left no-print" id="fileNoBioData"><i class="fa fa-edit"></i> Edits</a> --}}
 
-                    <a onclick='profileEdit(
-                        "{{ $staffFullDetails->staffID }}",
-                        "{{ $staffFullDetails->fileNo }}",
-                        "{{ $staffFullDetails->divID }}",
-                        "{{ $staffFullDetails->titleID }}",
-                        "{{ $staffFullDetails->surname }}",
-                        "{{ $staffFullDetails->first_name }}",
-                        "{{ $staffFullDetails->othernames }}",
-                        {!! json_encode($staffFullDetails->home_address) !!},
-                        "{{ $staffFullDetails->genderID }}",
-                        "{{ $staffFullDetails->stateID }}",
-                        "{{ $staffFullDetails->phone }}",
-                        "{{ $staffFullDetails->nationality }}",
-                        "{{ $staffFullDetails->staff_status }}"
+                    {{-- Full Name --}}
+                    <h4 class="profile-username text-center" id="fullName"></h4>
+                    <p class="text-muted text-center" id="decoration"></p>
+
+                    {{-- Bio-Data List --}}
+                    <ul class="list-group list-group-unbordered">
+
+                        <li class="list-group-item">
+                            <strong>File No:</strong>
+                            <span class="pull-right">{{ $staffFullDetails->fileNo }}</span>
+                        </li>
+
+                        <li class="list-group-item">
+                            <strong>Title:</strong>
+                            <span class="pull-right">{{ $staffFullDetails->title }}</span>
+                        </li>
+
+                        <li class="list-group-item">
+                            <strong>Surname:</strong>
+                            <span class="pull-right">{{ $staffFullDetails->surname }}</span>
+                        </li>
+
+                        <li class="list-group-item">
+                            <strong>First Name:</strong>
+                            <span class="pull-right">{{ $staffFullDetails->first_name }}</span>
+                        </li>
+
+                        <li class="list-group-item">
+                            <strong>Other Names:</strong>
+                            <span class="pull-right">{{ $staffFullDetails->othernames }}</span>
+                        </li>
+
+                        <li class="list-group-item">
+                            <strong>Gender:</strong>
+                            <span class="pull-right">{{ $staffFullDetails->gender }}</span>
+                        </li>
+
+                        <li class="list-group-item" style="height: 75px;">
+                            <strong>Home Address:</strong>
+                            {{-- <p class="pull-right text-right" style="width: 70%;">
+                                {{ $staffFullDetails->home_address }}
+                            </p> --}}
+                            <span class="pull-right">{{ $staffFullDetails->home_address }}</span>
+                        </li>
+
+                        <li class="list-group-item">
+                            <strong>Phone:</strong>
+                            <span class="pull-right">{{ $staffFullDetails->phone }}</span>
+                        </li>
+
+                        <li class="list-group-item">
+                            <strong>Current State:</strong>
+                            <span class="pull-right">{{ $staffFullDetails->State }}</span>
+                        </li>
+
+                        <li class="list-group-item">
+                            <strong>Nationality:</strong>
+                            <span class="pull-right">{{ $staffFullDetails->nationality }}</span>
+                        </li>
+
+                        <li class="list-group-item">
+                            <strong>Staff Status:</strong>
+                            <span class="pull-right">
+                                {{ $staffFullDetails->staff_status == 1 ? 'Active' : 'Inactive' }}
+                            </span>
+                        </li>
+
+                    </ul>
+
+                    {{-- Buttons --}}
+                    <div class="clearfix no-print" style="margin-top: 10px;">
+                        <a onclick='profileEdit(
+                            "{{ $staffFullDetails->staffID }}",
+                            "{{ $staffFullDetails->fileNo }}",
+                            "{{ $staffFullDetails->divID }}",
+                            "{{ $staffFullDetails->titleID }}",
+                            "{{ $staffFullDetails->surname }}",
+                            "{{ $staffFullDetails->first_name }}",
+                            "{{ $staffFullDetails->othernames }}",
+                            {!! json_encode($staffFullDetails->home_address) !!},
+                            "{{ $staffFullDetails->genderID }}",
+                            "{{ $staffFullDetails->stateID }}",
+                            "{{ $staffFullDetails->phone }}",
+                            "{{ $staffFullDetails->nationality }}",
+                            "{{ $staffFullDetails->staff_status }}"
                         )'
-                        class="pull-left no-print" style="cursor:pointer;">
-                        <i class="fa fa-edit"></i> Edit
-                    </a>
-                    <a  onclick="printDiv('bio-data')" class="pull-right" id="fileNoBioData"  style="cursor:pointer"><i class="fa fa-print"></i> Print</a>
+                        class="pull-left" style="cursor:pointer;">
+                            <i class="fa fa-edit"></i> Edit
+                        </a>
+
+                        <a onclick="printDiv('bio-data')" class="pull-right" style="cursor:pointer;">
+                            <i class="fa fa-print"></i> Print
+                        </a>
+                    </div>
+
                 </div>
             </div>
-          </div>
 
-          <!--Details of service in the judiciary-->
-            <div class="box box-success" id="dos">
-              <div class="box-body box-profile">
-                <h3 class="profile-username text-center">{{strtoupper('Details of service in the judiciary')}}</h3>
+
+            {{-- DETAILS OF SERVICE --}}
+            {{-- <div class="box box-success" id="dos" style="margin-top: 20px;">
+                <div class="box-body box-profile">
+
+                    <h3 class="profile-username text-center">
+                        {{ strtoupper('Details of Service in the Judiciary') }}
+                    </h3>
+
                     <table class="table table-condensed">
-                          @php if($staffFullDetailsDetailsService != null){ @endphp
-                          @foreach($staffFullDetailsDetailsService as $ds)
-                           <tbody class="">
-                              <tr>
-                                <td>
-                                  <div><b>Arm of Service:</b><span class="pull-right">{{$ds->armOfservice}}</span></div>
-                                </td>
-                              </tr>
-                              <tr>
-                                 <td>
-                                    <div><b>Service No.:</b><span class="pull-right">{{$ds->serviceNumber}}</span></div>
-                                  </td>
-                              </tr>
-                              <tr>
-                                  <td>
-                                    <div><b>Last Unit:</b><span class="pull-right">{{$ds->lastUnit}}</span></div>
-                                  </td>
-                              </tr>
-                              <tr>
-                                 <td>
-                                    <div><b>Reason for Leaving:</b><span class="pull-right">{{$ds->reasonForLeaving}}</span></div>
-                                 </td>
-                              </tr>
-                            </tbody>
+                        @if($staffFullDetailsDetailsService)
+                            @foreach($staffFullDetailsDetailsService as $ds)
+                                <tr>
+                                    <td><strong>Arm of Service:</strong>
+                                        <span class="pull-right">{{ $ds->armOfservice }}</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Service No.:</strong>
+                                        <span class="pull-right">{{ $ds->serviceNumber }}</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Last Unit:</strong>
+                                        <span class="pull-right">{{ $ds->lastUnit }}</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Reason for Leaving:</strong>
+                                        <span class="pull-right">{{ $ds->reasonForLeaving }}</span>
+                                    </td>
+                                </tr>
                             @endforeach
-                            @php } @endphp
+                        @endif
                     </table>
-                  <div class="text-gray-c no-print">
-                      <a href="/update/detail-service/{{$staffFullDetails->staffID}}"><i class="fa fa-edit"></i> Add/Edit</a>
-                      <a onclick="printDiv('dos')" class="pull-right" style="cursor:pointer">
-                          <i class="fa fa-print"></i> Print
-                      </a>
 
-                  </div>
-            </div>
-          </div>
+                    <div class="clearfix no-print">
+                        <a href="/update/detail-service/{{ $staffFullDetails->staffID }}">
+                            <i class="fa fa-edit"></i> Add/Edit
+                        </a>
+
+                        <a onclick="printDiv('dos')" class="pull-right" style="cursor:pointer;">
+                            <i class="fa fa-print"></i> Print
+                        </a>
+                    </div>
+
+                </div>
+            </div> --}}
           <!--Details of service in the forces-->
         </div>
           <!-- //BIO-DATA-->
@@ -255,7 +292,7 @@
             </div>
           </div>
           <!--LANGUAGES-->
-          <div class="box box-success" id="lng">
+          {{-- <div class="box box-success" id="lng">
             <div class="box-body box-profile">
                <div class="table-responsive">
               <h3 class="profile-username text-center">{{strtoupper('Languages')}}</h3>
@@ -315,7 +352,8 @@
 
               </div>
             </div>
-          </div><!--//LANGUAGE-->
+          </div> --}}
+          <!--//LANGUAGE-->
 
           <!--PARTICULARS OF CHILDREN-->
           <div class="box box-success" id="child">
@@ -329,7 +367,7 @@
                             <td><b>Full Name</b></td>
                             <td><b>Sex</b></td>
                             <td><b>Date of Birth</b></td>
-                            <td><b>Checked By</b></td>
+                            {{-- <td><b>Checked By</b></td> --}}
                             <td><b></b></td>
                         </tr>
                   </thead>
@@ -347,10 +385,10 @@
 
 
                           <td>{{date('d-m-Y', strtotime($child->dateofbirth))}}</td>
-                          <td>{{$child->checked_children_particulars}}</td>
+
                            <td>
-		               	<a onclick="childrenEdit('{{ $child->id }}','{{ $child->staffid }}','{{ $child->fullname }}','{{ $child->gID }}','{{ date('d-m-Y', strtotime($child->dateofbirth)) }}','{{ $child->checked_children_particulars }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
-		               </td>
+                            <a onclick="childrenEdit('{{ $child->id }}','{{ $child->staffid }}','{{ $child->fullname }}','{{ $child->gID }}','{{ date('d-m-Y', strtotime($child->dateofbirth)) }}','{{ $child->checked_children_particulars }}')" class="btn btn-success  glyphicon glyphicon-edit btn-xs no-print"  style="cursor:pointer;"></a>&nbsp;
+                           </td>
 		               <td>
 
 
@@ -465,7 +503,7 @@
                   </tr>
 
                   <tr>
-                    <td><strong>Marital Status:</strong> <span class="pull-right">{{$staffFullDetails->marital_status}}</span></td>
+                    <td><strong>Marital Status:</strong> <span class="pull-right">{{$staffFullDetails->maritalstatus}}</span></td>
                   </tr>
               </table>
               <div class="text-gray-c no-print">
@@ -536,12 +574,12 @@
                     </td>
                 </tr>
                 <tr>
-                    <td>
+                    {{-- <td>
                       <strong>Section:</strong>
                         <span class="pull-right">
-                            {{ $staffFullDetails->section }}
+                            {{ $staffFullDetails->unitname ?? 'N/A' }}
                         </span>
-                    </td>
+                    </td> --}}
                 </tr>
                 {{-- <tr>
                     <td>

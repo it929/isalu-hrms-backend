@@ -1,0 +1,33 @@
+/* HEADER WRAPPER */
+.custom-navbar {
+    background: #0B610B !important;
+    padding: 12px 0;
+    border-bottom: 3px solid #084a08;
+}
+
+/* CENTER CONTENT */
+.header-content {
+    text-align: center;
+    color: #fff;
+}
+
+/* MAIN TITLE */
+.brand-title {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+/* SUB TITLE */
+.brand-subtitle {
+    font-size: 18px;
+    font-weight: 400;
+    margin-top: 5px;
+    opacity: 0.9;
+}
+
+/* OPTIONAL: Add hover effect */
+.custom-header:hover .custom-navbar {
+    background: #0d6b0d !important;
+}

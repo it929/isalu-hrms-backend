@@ -287,6 +287,8 @@ class ProfileController extends ParentController
 
 
 
+
+
     //UPDATE SALARY DETAILS
     public function updateSALARYDETAILSOLD(Request $request)
     {
@@ -835,6 +837,246 @@ class ProfileController extends ParentController
         return $result;
     }
 
+    public function details_23_04_2026(Request $request)
+    {
+
+        $data['getTitles'] = DB::table('tbltitle')->get();
+        $data['getDivision'] = DB::table('tbldivision')->get();
+        $data['getGender'] = DB::table('tblgender')->get();
+        $data['getState'] = DB::table('tblstates')->get();
+        $data['getLga'] = DB::table('lga')->get();
+        $data['getMS'] = DB::table('tblmaritalStatus')->get();
+        $data['getEmpType'] = DB::table('tblemployment_type')->get();
+        $data['getDesignation'] = DB::table('tbldesignation')->get();
+        $data['getDepartment'] = DB::table('tbldepartment')->get();
+        $data['getGrade'] = DB::table('tblgrades')->get();
+        $data['getStep'] = DB::table('tblsteps')->get();
+        $data['getBank'] = DB::table('tblbanklist')->get();
+
+        $this->validate($request, [
+            'fileNo' => 'required|regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
+        ]);
+        $fileNo = trim($request['fileNo']);
+
+        //check if staff belongs to this this->division
+        $getstaffDiv = DB::table('tblper')
+            ->join('tbldivision', 'tbldivision.divisionID', '=', 'tblper.divisionID')
+            ->where('tblper.ID', '=', $fileNo)
+            ->select('division')
+            ->first();
+
+        //check if you can view
+        /*if(!(DB::table('tblper')->select('divisionID')->where('fileNo', '=', $fileNo)->where('divisionID', $this->divisionID)->count())){
+            return back()->with('err', 'Staff Details cannot be viewed in this Division. Staff belongs to '. $getstaffDiv->division .'  division. This means, Staff can only be viewed from '. $getstaffDiv->division .' division');
+         }*/
+        //end checking
+
+        //Bid-Data
+        if (DB::table('tblper')->where('ID', $fileNo)->count() > 0) {
+            $data['staffFullDetails'] = DB::table('tblper')
+                ->leftjoin('tblstatus', 'tblstatus.id', '=', 'tblper.staff_status')
+                ->leftjoin('tblstates', 'tblstates.id', '=', 'tblper.stateID')
+                ->leftjoin('tbldesignation', 'tblper.Designation', '=', 'tbldesignation.id')
+                ->leftjoin('tblsections', 'tblsections.id', '=', 'tblper.section')
+                // ->leftjoin('tbltitle', 'tbltitle.ID', '=', 'tblper.title')
+                // ->leftjoin('tblgender', 'tblgender.ID', '=', 'tblper.gender')
+                ->leftjoin('tblemployment_type', 'tblemployment_type.id', '=', 'tblper.employee_type')
+                ->leftjoin('tbldepartment', 'tbldepartment.id', '=', 'tblper.department')
+                ->leftjoin('tblmaritalStatus', 'tblmaritalStatus.ID', '=', 'tblper.maritalstatus')
+                ->leftjoin('tbldivision', 'tbldivision.divisionID', '=', 'tblper.divisionID')
+                ->leftjoin('tblbanklist', 'tblbanklist.bankID', '=', 'tblper.bankID')
+                ->select('*', 'tblper.grade as staffGrade', 'tbldepartment.department as department ', 'tblper.title as title',   'tblper.ID as staffID', 'tbltitle.ID as titleID', 'tblgender.ID as genderID', 'tblstates.ID as stateID', 'tbldivision.divisionID as divID', 'tblmaritalStatus.ID as msID', 'tblemployment_type.id as empID', 'tbldepartment.id as deptID', 'tblbanklist.bankID as bankID')
+                ->where('tblper.ID', '=', $fileNo)
+                ->first();
+            // dd($data['staffFullDetails']);
+        } else {
+            $data['staffFullDetails']    = "";
+        }
+
+
+
+        // dd($data['staffFullDetails']->staffGrade);
+        // dd($data['staffFullDetails']->picture);
+        //check for profile image
+        if (File::exists(base_path() . '/public/passport/' . $data['staffFullDetails']->fileNo . '.jpg')) //check folder
+        {
+            $data['fileNoImage'] = $data['staffFullDetails']->fileNo . ".jpg";
+        } else {
+            $data['fileNoImage'] = "default.png";
+        }
+
+
+        //Education
+        if ($count = DB::table('tbleducations')->where('staffid', $fileNo)->count() > 0) {
+
+            $data['staffFullDetailsEducation'] = DB::table('tbleducations')->where('staffid', $fileNo)->get();
+        } else {
+
+            $data['staffFullDetailsEducation']    = "";
+            //$data['staffFullDetailsEducation'] = DB::table('tbleducations')->where('fileNo', $fileNo)->first();
+        }
+
+
+
+        //Languages
+        if (DB::table('languages')->where('staffid', $fileNo)->count() > 0) {
+            // $data['staffFullDetailsLanguage']    = DB::table('languages')
+            //     ->join('language_details', 'language_details.languageID', '=', 'languages.language')
+            //     ->join('fluency_details', 'fluency_details.fluencyID', '=', 'languages.spoken')
+            //     /*->join('fluency_details', function ($join) {
+            //   $join->on('fluency_details.fluencyID', '=', 'languages.spoken')->on('fluency_details.fluencyID', '=', 'languages.written');
+            //  })*/
+            //     // ->select('*','fluency_details.')
+            //     ->where('staffid', $fileNo)->get();
+            $data['staffFullDetailsLanguage'] = DB::table('languages')
+                ->join('language_details', 'language_details.languageID', '=', 'languages.language')
+                ->leftJoin('fluency_details as spoken_fluency', 'spoken_fluency.fluencyID', '=', 'languages.spoken')
+                ->leftJoin('fluency_details as written_fluency', 'written_fluency.fluencyID', '=', 'languages.written')
+                ->select(
+                    'languages.*',
+                    'language_details.language_name',
+                    'spoken_fluency.fluency_title as spoken_title',
+                    'written_fluency.fluency_title as written_title'
+                )
+                ->where('staffid', $fileNo)
+                ->get();
+        } else {
+            $data['staffFullDetailsLanguage']    = "";
+        }
+
+
+        //particulars of Children
+        if (DB::table('tblchildren_particulars')->where('staffid', $fileNo)->count() > 0) {
+            $data['staffFullDetailsChildren'] = DB::table('tblchildren_particulars')
+                ->where('staffid', $fileNo)
+                ->leftJoin('tblgender', 'tblchildren_particulars.gender', '=', 'tblgender.ID')
+                ->select(
+                    'tblchildren_particulars.*',
+                    'tblgender.gender as gender_name',
+                    'tblgender.ID as gID'
+                )
+                ->get();
+        } else {
+            $data['staffFullDetailsChildren']    = "";
+        }
+
+        //Details of previous service
+        if (DB::table('previous_servicedetails')->where('staffid', $fileNo)->count() > 0) {
+            $data['staffFullDetailsPreviousService']    = DB::table('previous_servicedetails')
+                ->where('staffid', $fileNo)
+                ->get();
+        } else {
+            $data['staffFullDetailsPreviousService']    = "";
+        }
+
+
+        //Details of service in the forces
+        if (DB::table('detailsofservice')->where('staffid', $fileNo)->count() > 0) {
+            $data['staffFullDetailsDetailsService']    = DB::table('detailsofservice')->where('staffid', $fileNo)->get();
+        } else {
+            $data['staffFullDetailsDetailsService']    = "";
+        }
+
+
+        //Record of censures and recommendations
+        if (DB::table('tblcensures_commendations')->where('staffid', $fileNo)->count() > 0) {
+            $data['staffFullDetailsCensure']    = DB::table('tblcensures_commendations')->where('staffid', $fileNo)->get();
+        } else {
+            $data['staffFullDetailsCensure']    = "";
+        }
+
+        //Gratuity Payment
+        if (DB::table('tblgratuity_payment')->where('staffid', $fileNo)->count() > 0) {
+            $data['staffFullDetailsGratuityPayment']    = DB::table('tblgratuity_payment')->where('staffid', $fileNo)->get();
+        } else {
+            $data['staffFullDetailsGratuityPayment']    = "";
+        }
+
+
+        //Particular of termination of service
+        if (DB::table('service_termination')->where('staffid', $fileNo)->count() > 0) {
+            $data['staffFullDetailsTerminationService']    = DB::table('service_termination')->where('staffid', $fileNo)->get();
+        } else {
+            $data['staffFullDetailsTerminationService']    = "";
+        }
+
+        //Particular of tour and leave
+        if (DB::table('tourleave_record')->where('staffid', $fileNo)->count() > 0) {
+            $data['staffFullDetailsTourLeaveRecord']    = DB::table('tourleave_record')->where('staffid', $fileNo)->get();
+        } else {
+            $data['staffFullDetailsTourLeaveRecord'] = "";
+        }
+
+
+        //Record of service
+        if (DB::table('recordof_service')->where('staffid', $fileNo)->count() > 0) {
+            $data['staffFullDetailsRecordService']    = DB::table('recordof_service')->where('staffid', $fileNo)->get();
+        } else {
+            $data['staffFullDetailsRecordService'] = "";
+        }
+
+
+        //Record of record of emolument
+        if (DB::table('recordof_emolument')->where('staffid', $fileNo)->count() > 0) {
+            $data['staffFullDetailsRecordEmolument'] = DB::table('recordof_emolument')
+                //->join('recordof_service', 'recordof_service.recID', '=', 'recordof_emolument.entryDateMade')
+                ->where('recordof_emolument.staffid', $fileNo)
+                ->get();
+        } else {
+            $data['staffFullDetailsRecordEmolument'] = "";
+        }
+
+        //Next of Kin
+        if (DB::table('tblnextofkin')->where('staffid', $fileNo)->count() > 0) {
+
+            $data['nextOfKin'] = DB::table('tblnextofkin')
+                ->where('staffid', $fileNo)
+                ->get();
+        } else {
+            $data['nextOfKin']       = "";
+        }
+
+        //get particular of wife
+        if (DB::table('tbldateofbirth_wife')->where('staffid', $fileNo)->count() > 0) {
+
+            $data['staffFullDetailsWife'] = DB::table('tbldateofbirth_wife')
+                ->where('staffid', $fileNo)
+                ->get();
+        } else {
+            $data['staffFullDetailsWife']       = "";
+        }
+
+        /*GET TOTAL RECORDS*/
+        //count Next of kin
+        $data['totalNextofKin']             = DB::table('tblnextofkin')->where('staffid', $fileNo)->count();
+        //count education
+        $data['totalEducation']             = DB::table('tbleducations')->where('staffid', $fileNo)->count();
+        //count particular of wife
+        $data['totalParticularOfWife']      = DB::table('tbldateofbirth_wife')->where('staffid', $fileNo)->count();
+        //count languages
+        $data['totallanguages']             = DB::table('languages')->where('staffid', $fileNo)->count();
+        //count children
+        $data['totalChildren']              = DB::table('tblchildren_particulars')->where('staffid', $fileNo)->count();
+        //count Details of service in the forces
+        $data['totalDetailsService']        = DB::table('detailsofservice')->where('staffid', $fileNo)->count();
+        //count Details of previous service
+        $data['totalPreviousService']       = DB::table('previous_servicedetails')->where('staffid', $fileNo)->count();
+        //count Details of previous service
+        $data['totalRecordCensures']        = DB::table('tblcensures_commendations')->where('staffid', $fileNo)->count();
+        //count gratuity payment
+        $data['totalGratuityPayment']       = DB::table('tblgratuity_payment')->where('staffid', $fileNo)->count();
+        //count Termination of service
+        $data['totalTerminationService']    = DB::table('service_termination')->where('staffid', $fileNo)->count();
+        //count Termination of service
+        $data['totalTourLeave']             = DB::table('tourleave_record')->where('staffid', $fileNo)->count();
+        //count Record of services
+        $data['totalRecordService']         = DB::table('recordof_service')->where('staffid', $fileNo)->count();
+        //count Record of Emoluments
+        $data['totalRecordEmolument']       = DB::table('recordof_emolument')->where('staffid', $fileNo)->count();
+
+        return view('hr.profile.details', $data);
+    }
+
     public function details(Request $request)
     {
 
@@ -883,10 +1125,10 @@ class ProfileController extends ParentController
                 ->leftjoin('tblmaritalStatus', 'tblmaritalStatus.ID', '=', 'tblper.maritalstatus')
                 ->leftjoin('tbldivision', 'tbldivision.divisionID', '=', 'tblper.divisionID')
                 ->leftjoin('tblbanklist', 'tblbanklist.bankID', '=', 'tblper.bankID')
-                ->select('*', 'tblper.grade as staffGrade', 'tbldepartment.department as department ', 'tblper.title as title', 'tblper.gender as gender', 'tblper.ID as staffID', 'tbltitle.ID as titleID', 'tblgender.ID as genderID', 'tblstates.ID as stateID', 'tbldivision.divisionID as divID', 'tblmaritalStatus.ID as msID', 'tblemployment_type.id as empID', 'tbldepartment.id as deptID', 'tblbanklist.bankID as bankID')
+                ->select('*', 'tblper.grade as staffGrade', 'tblper.ID as staffID', 'tbltitle.ID as titleID', 'tblper.title as title', 'tblper.gender as gender', 'tblgender.ID as genderID', 'tblstates.ID as stateID', 'tbldivision.divisionID as divID', 'tblmaritalStatus.ID as msID', 'tblemployment_type.id as empID', 'tbldepartment.id as deptID', 'tblbanklist.bankID as bankID')
                 ->where('tblper.ID', '=', $fileNo)
                 ->first();
-        // dd($data['staffFullDetails']);
+            // dd($data['staffFullDetails']);
         } else {
             $data['staffFullDetails']    = "";
         }

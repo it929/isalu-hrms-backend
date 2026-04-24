@@ -5,7 +5,7 @@
 @endsection
 
 @section('content')
- <div class="panel panel-default">
+ <div class="panel panel-primary">
     <div class="panel-body">
     	<div class="panel-heading hidden-print">
         	<h3 class="panel-title"><b>@yield('pageTitle')</b>
@@ -158,7 +158,7 @@
                                 <td>{{ $list->homeplace }}</td>
                                 <td>{{ date('d-m-Y', strtotime($list->dateofmarriage)) }}</td>
                                 <td>{{ date('d-m-Y', strtotime($list->wifedateofbirth)) }}</td>
-                               
+
                                 <td>
                                     <a href="{{ url('/particular/edit/'.$list->particularID) }}"
                                     class="btn btn-success btn-sm fa fa-edit" title="Edit">
