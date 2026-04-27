@@ -67,6 +67,7 @@ Route::get('/', 'MainController@userArea');
 
 Route::get('/assign-widgets', 'MainController@index')->name('role-widget.form');
 Route::post('/assign-widgets', 'MainController@store')->name('role-widget.store');
+Route::post('/widget/add', 'MainController@add')->name('widget.add');
 Route::delete('/role-widgets/{id}', 'MainController@destroy')->name('role-widget.destroy');
 Route::get('/get-widgets/{roleId}', 'MainController@getWidgetsByRole');
 

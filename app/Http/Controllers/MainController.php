@@ -19,133 +19,149 @@ class MainController extends Controller
 
 
     public function userArea()
-{
-    $userID = Auth::id();
+    {
+        $userID = Auth::id();
 
-    // Get user's role ID using helper
-    $userRoleID = \App\Helpers\DashboardHelper::getUserRoleID();
-    
-    // Get user's division
-    $userDivision = DB::table('users')
-        ->join('tbldivision', 'users.divisionID', '=', 'tbldivision.divisionID')
-        ->where('users.id', $userID)
-        ->select('tbldivision.division')
-        ->first();
+        // Get user's role ID using helper
+        $userRoleID = \App\Helpers\DashboardHelper::getUserRoleID();
 
-    $divisionName = $userDivision ? $userDivision->division : 'No Division Assigned';
+        // Get user's division
+        $userDivision = DB::table('users')
+            ->join('tbldivision', 'users.divisionID', '=', 'tbldivision.divisionID')
+            ->where('users.id', $userID)
+            ->select('tbldivision.division')
+            ->first();
 
-    // Get widgets assigned to user's role
-    $assignedWidgets = \App\Helpers\DashboardHelper::getUserWidgets();
+        $divisionName = $userDivision ? $userDivision->division : 'No Division Assigned';
 
-    // Fetch data for dashboard cards
-    $dashboardData = $this->getDashboardData($assignedWidgets);
+        // Get widgets assigned to user's role
+        $assignedWidgets = \App\Helpers\DashboardHelper::getUserWidgets();
 
-    // Merge all data
-    $data = array_merge([
-        'divisionName' => $divisionName,
-        'assignedWidgets' => $assignedWidgets,
-        'userRoleID' => $userRoleID,
-        'userRoleName' => \App\Helpers\DashboardHelper::getUserRoleName(),
-        'hasAnyWidget' => \App\Helpers\DashboardHelper::hasAnyWidget()
-    ], $dashboardData);
 
-    return view('dashboard.userArea', $data);
-}
 
-private function getDashboardData($assignedWidgets = [])
-{
-    $data = [];
-    
-    // Initialize counters
-    $data['activeStaffCount'] = 0;
-    $data['inactiveStaffCount'] = 0;
-    $data['justicesCount'] = 0;
-    $data['contractorsCount'] = 0;
-    $data['totalStaff'] = 0;
-    $data['totalVouchers'] = 0;
-    $data['processedVouchers'] = 0;
-    $data['activeStaffPercentage'] = 0;
-    $data['inactiveStaffPercentage'] = 0;
-    $data['processedPercentage'] = 0;
-    $data['currentMonthVouchers'] = 0;
-    
-    // Check if user has any widgets
-    if (empty($assignedWidgets)) {
+        // dd($assignedWidgets);
+
+        // Fetch data for dashboard cards
+        $dashboardData = $this->getDashboardData($assignedWidgets);
+
+        // dd($dashboardData);
+
+        // Merge all data
+        $data = array_merge([
+            'divisionName' => $divisionName,
+            'assignedWidgets' => $assignedWidgets,
+            'userRoleID' => $userRoleID,
+            'userRoleName' => \App\Helpers\DashboardHelper::getUserRoleName(),
+            'hasAnyWidget' => \App\Helpers\DashboardHelper::hasAnyWidget()
+        ], $dashboardData);
+
+        return view('dashboard.userArea', $data);
+    }
+
+    private function getDashboardData($assignedWidgets = [])
+    {
+        $data = [];
+
+        // Initialize counters
+        $data['activeStaffCount'] = 0;
+        $data['inactiveStaffCount'] = 0;
+        // $data['justicesCount'] = 0;
+        $data['contractorsCount'] = 0;
+        $data['totalStaff'] = 0;
+        $data['totalStaffCount'] = 0;
+        $data['totalVouchers'] = 0;
+        $data['processedVouchers'] = 0;
+        $data['activeStaffPercentage'] = 0;
+        $data['inactiveStaffPercentage'] = 0;
+        $data['processedPercentage'] = 0;
+        $data['currentMonthVouchers'] = 0;
+
+        // Check if user has any widgets
+        if (empty($assignedWidgets)) {
+            return $data;
+        }
+
+        // Calculate data only for assigned widgets
+        if (in_array('Total Staff', $assignedWidgets)) {
+            $data['totalStaffCount'] = DB::table('tblper')
+                // ->where('staff_status', 1)
+                ->where(function ($query) {
+                    $query->where('employee_type', '!=', 2)
+                        ->orWhereNull('employee_type');
+                })
+                ->count();
+        }
+        if (in_array('Active Staff', $assignedWidgets)) {
+            $data['activeStaffCount'] = DB::table('tblper')
+                ->where('staff_status', 1)
+                ->where(function ($query) {
+                    $query->where('employee_type', '!=', 2)
+                        ->orWhereNull('employee_type');
+                })
+                ->count();
+        }
+
+        if (in_array('Inactive Staff', $assignedWidgets)) {
+            $data['inactiveStaffCount'] = DB::table('tblper')
+                ->where('staff_status', 0)
+                ->count();
+        }
+
+        // if (in_array('Justices', $assignedWidgets)) {
+        //     $data['justicesCount'] = DB::table('tblper')
+        //         ->where('employee_type', 2)
+        //         ->count();
+        // }
+
+        if (in_array('Contractors', $assignedWidgets)) {
+            $data['contractorsCount'] = DB::table('tblcontractor')
+                ->count();
+        }
+
+        if (in_array('Total Vouchers Raised', $assignedWidgets)) {
+            $data['totalVouchers'] = DB::table('tblpaymentTransaction')
+                ->where(function ($query) {
+                    $query->where('is_special', '!=', 1)
+                        ->orWhereNull('is_special');
+                })
+                ->count();
+        }
+
+        if (in_array('Processed Vouchers', $assignedWidgets)) {
+            $data['processedVouchers'] = DB::table('tblpaymentTransaction')
+                ->where('status', '>=', 6)
+                ->where(function ($query) {
+                    $query->where('is_special', '!=', 1)
+                        ->orWhereNull('is_special');
+                })
+                ->count();
+        }
+
+        // Calculate total staff if needed for charts
+        $hasStaffChart = in_array('Staff Distribution', $assignedWidgets) ||
+            in_array('Workforce Composition', $assignedWidgets);
+
+        if ($hasStaffChart) {
+            $data['totalStaff'] = DB::table('tblper')
+                ->where(function ($query) {
+                    $query->where('employee_type', '!=', 2)
+                        ->orWhereNull('employee_type');
+                })
+                ->count();
+        }
+
+        // Calculate percentages
+        if ($data['totalStaff'] > 0) {
+            $data['activeStaffPercentage'] = round(($data['activeStaffCount'] / $data['totalStaff']) * 100);
+            $data['inactiveStaffPercentage'] = round(($data['inactiveStaffCount'] / $data['totalStaff']) * 100);
+        }
+
+        if ($data['totalVouchers'] > 0) {
+            $data['processedPercentage'] = round(($data['processedVouchers'] / $data['totalVouchers']) * 100);
+        }
+
         return $data;
     }
-    
-    // Calculate data only for assigned widgets
-    if (in_array('Active Staff', $assignedWidgets)) {
-        $data['activeStaffCount'] = DB::table('tblper')
-            ->where('staff_status', 1)
-            ->where(function ($query) {
-                $query->where('employee_type', '!=', 2)
-                    ->orWhereNull('employee_type');
-            })
-            ->count();
-    }
-    
-    if (in_array('Inactive Staff', $assignedWidgets)) {
-        $data['inactiveStaffCount'] = DB::table('tblper')
-            ->where('staff_status', 0)
-            ->count();
-    }
-    
-    if (in_array('Justices', $assignedWidgets)) {
-        $data['justicesCount'] = DB::table('tblper')
-            ->where('employee_type', 2)
-            ->count();
-    }
-    
-    if (in_array('Contractors', $assignedWidgets)) {
-        $data['contractorsCount'] = DB::table('tblcontractor')
-            ->count();
-    }
-    
-    if (in_array('Total Vouchers Raised', $assignedWidgets)) {
-        $data['totalVouchers'] = DB::table('tblpaymentTransaction')
-            ->where(function ($query) {
-                $query->where('is_special', '!=', 1)
-                    ->orWhereNull('is_special');
-            })
-            ->count();
-    }
-    
-    if (in_array('Processed Vouchers', $assignedWidgets)) {
-        $data['processedVouchers'] = DB::table('tblpaymentTransaction')
-            ->where('status', '>=', 6)
-            ->where(function ($query) {
-                $query->where('is_special', '!=', 1)
-                    ->orWhereNull('is_special');
-            })
-            ->count();
-    }
-    
-    // Calculate total staff if needed for charts
-    $hasStaffChart = in_array('Staff Distribution', $assignedWidgets) || 
-                     in_array('Workforce Composition', $assignedWidgets);
-    
-    if ($hasStaffChart) {
-        $data['totalStaff'] = DB::table('tblper')
-            ->where(function ($query) {
-                $query->where('employee_type', '!=', 2)
-                    ->orWhereNull('employee_type');
-            })
-            ->count();
-    }
-    
-    // Calculate percentages
-    if ($data['totalStaff'] > 0) {
-        $data['activeStaffPercentage'] = round(($data['activeStaffCount'] / $data['totalStaff']) * 100);
-        $data['inactiveStaffPercentage'] = round(($data['inactiveStaffCount'] / $data['totalStaff']) * 100);
-    }
-    
-    if ($data['totalVouchers'] > 0) {
-        $data['processedPercentage'] = round(($data['processedVouchers'] / $data['totalVouchers']) * 100);
-    }
-    
-    return $data;
-}
 
 
     public function index(Request $request)
@@ -154,7 +170,7 @@ private function getDashboardData($assignedWidgets = [])
         $roles = DB::table('user_role')
             ->orderBy('rolename')
             ->get();
-        
+
         // Get all widgets from widget table
         $widgets = DB::table('widget')
             ->orderBy('name', 'asc')
@@ -171,7 +187,7 @@ private function getDashboardData($assignedWidgets = [])
         // Initialize variables that the layout expects
         $warning = session('warning', '');
         $success = session('success', '');
-        
+
         $CourtInfo = (object) [
             'courtstatus' => 1,
             'courtid' => null,
@@ -183,8 +199,8 @@ private function getDashboardData($assignedWidgets = [])
         $DesignationList = collect([]);
 
         return view('dashboard.role-widget.form', compact(
-            'roles', 
-            'widgets', 
+            'roles',
+            'widgets',
             'assignments',
             'warning',
             'success',
@@ -234,16 +250,51 @@ private function getDashboardData($assignedWidgets = [])
             }
 
             DB::commit();
-            
+
             return redirect()->route('role-widget.form')->with('success', 'Widgets assigned successfully!');
-            
         } catch (\Exception $e) {
             DB::rollBack();
-            
+
             return redirect()->back()
                 ->with('error', 'Error assigning widgets: ' . $e->getMessage())
                 ->withInput();
         }
+    }
+
+    public function add_27_04_26(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255|unique:widget,name',
+        ]);
+
+        DB::table('widget')->insert([
+            'name'       => $request->name,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->back()->with('success', 'Widget added successfully!');
+    }
+
+    public function add(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255|unique:widget,name',
+        ]);
+
+        $id = DB::table('widget')->insertGetId([
+            'name'       => trim($request->name),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'widget' => [
+                'id' => $id,
+                'name' => $request->name
+            ]
+        ]);
     }
 
 
@@ -264,7 +315,7 @@ private function getDashboardData($assignedWidgets = [])
         try {
             // Check if assignment exists
             $assignment = DB::table('role_widget')->where('id', $id)->first();
-            
+
             if (!$assignment) {
                 return response()->json([
                     'success' => false,
@@ -287,7 +338,6 @@ private function getDashboardData($assignedWidgets = [])
                     'message' => 'Failed to delete assignment'
                 ], 500);
             }
-            
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -295,5 +345,4 @@ private function getDashboardData($assignedWidgets = [])
             ], 500);
         }
     }
-
 }

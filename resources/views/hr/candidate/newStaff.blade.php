@@ -180,7 +180,7 @@
 
                     <div class="col-lg-3">
                         <label>Date of Joining</label>
-                        <input type="date" name="date_of_joining" class="form-control">
+                        <input type="date" name="date_of_joining" class="form-control" min="{{ date('Y-m-d') }}">
                     </div>
 
                     <div class="col-lg-3">
