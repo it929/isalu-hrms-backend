@@ -128,7 +128,7 @@ class StaffReportController extends functionController
         return view('hr.Report.StaffNominalRoll', $data);
     }
 
-    public function staffList(Request $request)
+    public function staffList_28_04_26_OLD(Request $request)
     {
         $data['error'] = "";
         $data['warning'] = "";
@@ -145,18 +145,100 @@ class StaffReportController extends functionController
         $data['department'] = $department;
         $data['DesignationList'] = DB::table('tbldesignation')->where('courtID', $court)->get();
         $data['DepartmentList'] = $this->DepartmentList($court);
+        // $data['QueryStaffReport'] = DB::table('tblper')
+        //     // ->where('tblper.grade', '!=', 0)
+        //     // ->where('tblper.step', '!=', 0)
+        //     ->where('isAdmin', '=', 1)
+        //     ->leftjoin('lga', 'tblper.lgaID', '=', 'lga.lgaId')
+        //     ->leftjoin('tblstates', 'tblper.stateID', '=', 'tblstates.StateID')
+        //     ->leftjoin('tbldesignation', 'tblper.designationID', '=', 'tbldesignation.id')
+        //     ->get();
+
         $data['QueryStaffReport'] = DB::table('tblper')
-            // ->where('tblper.grade', '!=', 0)
-            // ->where('tblper.step', '!=', 0)
             ->where('isAdmin', '=', 1)
             ->leftjoin('lga', 'tblper.lgaID', '=', 'lga.lgaId')
             ->leftjoin('tblstates', 'tblper.stateID', '=', 'tblstates.StateID')
             ->leftjoin('tbldesignation', 'tblper.designationID', '=', 'tbldesignation.id')
+            ->when($request->department, function ($query) use ($request) {
+                return $query->where('tblper.departmentID', $request->department);
+            })
+            ->when($request->designation, function ($query) use ($request) {
+                return $query->where('tblper.designationID', $request->designation);
+            })
             ->get();
 
         return view('hr.Report.StaffList', $data);
     }
-    public function getStaffList(Request $request)
+
+    public function staffList(Request $request)
+    {
+        $data['error'] = "";
+        $data['warning'] = "";
+        $data['success'] = "";
+        $data['CourtInfo'] = $this->CourtInfo();
+
+        if ($data['CourtInfo']->courtstatus == 0) {
+            $request['court'] = $data['CourtInfo']->courtid;
+        }
+        if ($data['CourtInfo']->divisionstatus == 0) {
+            $request['division'] = $data['CourtInfo']->divisionid;
+        }
+
+        $court = trim($request['court']);
+        $department = trim($request['department']);
+
+        $data['department'] = $department;
+        $data['selectedDepartment']  = $request->department;
+        $data['selectedDesignation'] = $request->designation;
+
+        $data['DesignationList'] = DB::table('tbldesignation')->where('courtID', $court)->get();
+        $data['DepartmentList'] = $this->DepartmentList($court);
+
+        $data['QueryStaffReport'] = DB::table('tblper')
+            ->where('isAdmin', '=', 1)
+            ->leftjoin('lga', 'tblper.lgaID', '=', 'lga.lgaId')
+            ->leftjoin('tblstates', 'tblper.stateID', '=', 'tblstates.StateID')
+            ->leftjoin('tbldesignation', 'tblper.designationID', '=', 'tbldesignation.id')
+            ->when($request->department, function ($query) use ($request) {
+                return $query->where('tblper.departmentID', $request->department);
+            })
+            ->when($request->designation, function ($query) use ($request) {
+                return $query->where('tblper.designationID', $request->designation);
+            })
+            ->get();
+
+        return view('hr.Report.StaffList', $data);
+    }
+
+    public function staffList_28_04_26(Request $request)
+    {
+        $q = DB::table('tblper')
+            ->where('isAdmin', 1)
+            ->join('tblsteps', 'tblper.step', '=', 'tblsteps.id')
+            ->join('tblgrades', 'tblper.grade', '=', 'tblgrades.id')
+            ->join('lga', 'tblper.lgaID', '=', 'lga.lgaId')
+            ->join('tblstates', 'tblper.stateID', '=', 'tblstates.StateID')
+            ->join('tbldesignation', 'tblper.designationID', '=', 'tbldesignation.id');
+
+        if ($request->department) {
+            $q->where('tblper.departmentID', $request->department);
+        }
+
+        if ($request->designation) {
+            $q->where('tblper.designationID', $request->designation);
+        }
+
+        $data['QueryStaffReport'] = $q->get();
+
+        $data['DesignationList'] = DB::table('tbldesignation')->get();
+        $data['DepartmentList'] = $this->DepartmentList($this->CourtInfo()->courtid);
+
+        $data['selectedDepartment'] = $request->department;
+        $data['selectedDesignation'] = $request->designation;
+
+        return view('hr.Report.StaffList', $data);
+    }
+    public function getStaffList_28_04_2026(Request $request)
     {
         $designation = $request->designation;
         $grade = $request->grade;
@@ -217,6 +299,76 @@ class StaffReportController extends functionController
 	  ->join('tbldesignation','tblper.designation','=','tbldesignation.id')->get();
 	  //dd($data['QueryStaffReport']); */
         return view('hr.Report.StaffList', $data);
+    }
+
+    public function getStaffList(Request $request)
+    {
+        $q = DB::table('tblper')
+            ->where('isAdmin', 1)
+            ->join('tblsteps', 'tblper.step', '=', 'tblsteps.id')
+            ->join('tblgrades', 'tblper.grade', '=', 'tblgrades.id')
+            ->join('lga', 'tblper.lgaID', '=', 'lga.lgaId')
+            ->join('tblstates', 'tblper.stateID', '=', 'tblstates.StateID')
+            ->join('tbldesignation', 'tblper.designationID', '=', 'tbldesignation.id');
+
+        // ✅ FILTERS (clean version)
+        if ($request->designation) {
+            $q->where('tblper.designationID', $request->designation);
+        }
+
+        if ($request->grade) {
+            $q->where('tblper.grade', $request->grade);
+        }
+
+        if ($request->department) {
+            $q->where('tblper.departmentID', $request->department);
+        }
+
+        $data['QueryStaffReport'] = $q->get();
+
+        // UI DATA
+        $data['error'] = "";
+        $data['warning'] = "";
+        $data['success'] = "";
+        $data['CourtInfo'] = $this->CourtInfo();
+
+        $court = $data['CourtInfo']->courtstatus == 0
+            ? $data['CourtInfo']->courtid
+            : trim($request->court);
+
+        $data['DesignationList'] = DB::table('tbldesignation')
+            ->where('courtID', $court)
+            ->get();
+
+        $data['DepartmentList'] = $this->DepartmentList($court);
+
+        // keep selected values
+        $data['selectedDepartment'] = $request->department;
+        $data['selectedDesignation'] = $request->designation;
+        $data['selectedGrade'] = $request->grade;
+
+        return view('hr.Report.StaffList', $data);
+    }
+
+    public function ajaxStaffFilter(Request $request)
+    {
+        $q = DB::table('tblper')
+            ->where('isAdmin', 1)
+            ->leftJoin('lga', 'tblper.lgaID', '=', 'lga.lgaId')
+            ->leftJoin('tblstates', 'tblper.stateID', '=', 'tblstates.StateID')
+            ->leftJoin('tbldesignation', 'tblper.designationID', '=', 'tbldesignation.id');
+
+        if ($request->department) {
+            $q->where('tblper.departmentID', $request->department);
+        }
+
+        if ($request->designation) {
+            $q->where('tblper.designationID', $request->designation);
+        }
+
+        $data = $q->get();
+
+        return response()->json($data);
     }
 
     public function getStaffByZones()

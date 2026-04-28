@@ -2235,9 +2235,10 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('/report/staff-list', [StaffReportController::class, 'staffList']);
     Route::any('/report/nominal-new', [StaffReportController::class, 'NominalRollNew']);
     Route::get('/report/staff-distribution-by-zone', [StaffReportController::class, 'getStaffByZones']);
-    Route::post('/report/staff-list', [StaffReportController::class, 'getStaffList']);
+    Route::post('/report/staff-list', [StaffReportController::class, 'getStaffList'])->name('staff.list');
     Route::any('/report/nominal-new', [StaffReportController::class, 'NominalRollNew']);
     Route::get('/report/staff-distribution-by-zone', [StaffReportController::class, 'getStaffByZones']);
+    Route::get('/report/staff-filter', [StaffReportController::class, 'ajaxStaffFilter']);
 
 
     // increment
