@@ -44,9 +44,9 @@
             <header class="main-header">
                 <nav class="navbar navbar-static-top" style="background: #0B610B">
                     <div align="center" style="color: #fff; font-size: 26px; padding: 10px;">
-                        <b>Government Resource Planning</b>
+                        <b>Human Resource Management System</b>
                         <div style="font-size: 18px;">
-                            <h2>SCN-GRP</h2>
+                            <h2>HRMS</h2>
                         </div>
                     </div>
                 </nav>

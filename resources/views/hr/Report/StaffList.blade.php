@@ -17,35 +17,37 @@
                 </button>
             </h3>
         </div>
+        <div class="panel-body">
 
-        @if ($warning != '')
-            <div class="alert alert-dismissible alert-danger">
-                <button type="button" class="close" data-dismiss="alert">&times;</button>
-                <strong>{{ $warning }}</strong>
-            </div>
-        @endif
-        @if ($success != '')
-            <div class="alert alert-dismissible alert-success">
-                <button type="button" class="close" data-dismiss="alert">&times;</button>
-                <strong>{{ $success }}</strong>
-            </div>
-        @endif
-        @if (count($errors) > 0)
-            <div class="alert alert-danger alert-dismissible" role="alert">
-                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span
-                        aria-hidden="true">&times;</span>
-                </button>
-                <strong>Error!</strong>
-                @foreach ($errors->all() as $error)
-                    <p>{{ $error }}</p>
-                @endforeach
-            </div>
-        @endif
-        <form method="post" id="thisform1">
-            {{-- <form method="post" action="{{ route('staff.list') }}" id="thisform1"> --}}
-            {{-- <form method="get" action="{{ url('/report/staff-list') }}" id="thisform1"> --}}
-            {{ csrf_field() }}
-            <div class="panel-body">
+
+
+            @if ($warning != '')
+                <div class="alert alert-dismissible alert-danger">
+                    <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    <strong>{{ $warning }}</strong>
+                </div>
+            @endif
+            @if ($success != '')
+                <div class="alert alert-dismissible alert-success">
+                    <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    <strong>{{ $success }}</strong>
+                </div>
+            @endif
+            @if (count($errors) > 0)
+                <div class="alert alert-danger alert-dismissible" role="alert">
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span
+                            aria-hidden="true">&times;</span>
+                    </button>
+                    <strong>Error!</strong>
+                    @foreach ($errors->all() as $error)
+                        <p>{{ $error }}</p>
+                    @endforeach
+                </div>
+            @endif
+            <form method="post" id="thisform1">
+
+                {{ csrf_field() }}
+
 
 
 
@@ -75,9 +77,9 @@
                                                     </option>
 
                                                     {{-- <option value="{{ $b->id }}"
-                                                        {{ $selectedDepartment == $b->id ? 'selected' : '' }}>
-                                                        {{ $b->department }}
-                                                    </option> --}}
+                                                            {{ $selectedDepartment == $b->id ? 'selected' : '' }}>
+                                                            {{ $b->department }}
+                                                        </option> --}}
                                                 @endforeach
                                             </select>
                                         </div>
@@ -95,13 +97,13 @@
                                                         {{ $b->designation }}
                                                     </option>
                                                     {{-- <option value="{{ $b->id }}"
-                                                        {{ $request->designation == $b->id ? 'selected' : '' }}>
-                                                        {{ $b->designation }}
-                                                    </option> --}}
+                                                            {{ $request->designation == $b->id ? 'selected' : '' }}>
+                                                            {{ $b->designation }}
+                                                        </option> --}}
                                                     {{-- <option value="{{ $b->id }}"
-                                                        {{ $selectedDesignation == $b->id ? 'selected' : '' }}>
-                                                        {{ $b->designation }}
-                                                    </option> --}}
+                                                            {{ $selectedDesignation == $b->id ? 'selected' : '' }}>
+                                                            {{ $b->designation }}
+                                                        </option> --}}
                                                 @endforeach
                                             </select>
                                         </div>
@@ -110,12 +112,12 @@
                                     <!-- Buttons -->
                                     <div class="col-md-4">
                                         {{-- <div class="form-group" style="margin-top:25px;">
-                                            <button type="submit" class="btn btn-success">
-                                                <i class="fa fa-search"></i> Search
-                                            </button>
+                                                <button type="submit" class="btn btn-success">
+                                                    <i class="fa fa-search"></i> Search
+                                                </button>
 
 
-                                        </div> --}}
+                                            </div> --}}
                                     </div>
 
                                 </div>
@@ -132,102 +134,103 @@
 
 
 
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="panel panel-success" style="margin-top:20px;">
-
-                            <!-- Header -->
-                            <div class="panel-heading">
-                                <h3 class="panel-title">Staff Records</h3>
-                            </div>
-
-                            <!-- Body -->
-                            <div class="panel-body">
-                                <div class="table-responsive" style="font-size:12px;">
-
-                                    <table class="table table-bordered table-striped table-hover" id="tablr">
 
 
-                                        <thead>
-                                            <tr bgcolor="#c7c7c7">
-                                                <th width="1%">S/N</th>
-                                                <th>FULL NAME</th>
-                                                <th>DATE OF BIRTH</th>
-                                                <th>GENDER</th>
-                                                <th>MARITAL STATUS</th>
-                                                <th>L.G.A</th>
-                                                <th>STATE OF ORIGIN</th>
-                                                <th>DATE OF APPOINTMENT</th>
-                                                <th>DESIGNATION</th>
-                                                {{-- <th>DATE OF PRESENT APPOINTMENT</th> --}}
-                                                <th colspan="2">ACTIONS</th>
-                                            </tr>
-                                        </thead>
-                                        @php $serialNum = 1; @endphp
 
-                                        <tbody id="staffTable">
-                                            @foreach ($QueryStaffReport as $b)
-                                                <tr
-                                                    style="{{ $b->staff_status == 0 ? 'background-color: red; color: white;' : '' }}">
-                                                    <td>{{ $serialNum++ }}</td>
-                                                    <td>{{ $b->title . ' ' . $b->surname . ' ' . $b->othernames . ' ' . $b->first_name }}
-                                                    </td>
-                                                    <td>{{ $b->dob ? date('d-M-Y', strtotime($b->dob)) : 'N/A' }}</td>
-                                                    <td>{{ $b->gender }}</td>
-                                                    <td>{{ $b->maritalstatus }}</td>
-                                                    <td>{{ $b->lga }}</td>
-                                                    <td>{{ $b->State }}</td>
-                                                    <td>{{ $b->doj ? date('d-M-Y', strtotime($b->doj)) : 'N/A' }}</td>
-                                                    <td>{{ $b->designation }}</td>
-                                                    {{-- <td>{{ $b->date_present_appointment ? date('d-M-Y', strtotime($b->date_present_appointment)) : 'N/A' }}
-                                                    </td> --}}
+            </form>
 
-                                                    {{-- <td>
-                                                        <a class="btn btn-success btn-sm" href="javascript: LoadSummary('{{ $b->ID }}')">
-                                                            Record of Service
-                                                        </a>
-                                                    </td> --}}
 
-                                                    @if ($b->progress_regID < 18)
-                                                        <td>
-                                                            <a class="btn btn-primary btn-sm"
-                                                                href="/continue-staff-documentation/{{ $b->ID }}">
-                                                                Documentation
+
+            <div class="panel panel-success" style="margin-top:20px;">
+
+                <!-- Header -->
+                <div class="panel-heading">
+                    <h3 class="panel-title">Staff Records</h3>
+                </div>
+
+                <!-- Body -->
+                <div class="panel-body">
+                    <div class="table-responsive" style="font-size:12px;">
+
+                        <table class="table table-bordered table-striped table-hover" id="tablr">
+
+
+                            <thead>
+                                <tr bgcolor="#c7c7c7">
+                                    <th width="1%">S/N</th>
+                                    <th>FULL NAME</th>
+                                    <th>DATE OF BIRTH</th>
+                                    <th>GENDER</th>
+                                    <th>MARITAL STATUS</th>
+                                    <th>L.G.A</th>
+                                    <th>STATE OF ORIGIN</th>
+                                    <th>DATE OF APPOINTMENT</th>
+                                    <th>DESIGNATION</th>
+                                    {{-- <th>DATE OF PRESENT APPOINTMENT</th> --}}
+                                    <th colspan="2">ACTIONS</th>
+                                </tr>
+                            </thead>
+                            @php $serialNum = 1; @endphp
+
+                            <tbody id="staffTable">
+                                @foreach ($QueryStaffReport as $b)
+                                    <tr style="{{ $b->staff_status == 0 ? 'background-color: red; color: white;' : '' }}">
+                                        <td>{{ $serialNum++ }}</td>
+                                        <td>{{ $b->title . ' ' . $b->surname . ' ' . $b->othernames . ' ' . $b->first_name }}
+                                        </td>
+                                        <td>{{ $b->dob ? date('d-M-Y', strtotime($b->dob)) : 'N/A' }}</td>
+                                        <td>{{ $b->gender }}</td>
+                                        <td>{{ $b->maritalstatus }}</td>
+                                        <td>{{ $b->lga }}</td>
+                                        <td>{{ $b->State }}</td>
+                                        <td>{{ $b->doj ? date('d-M-Y', strtotime($b->doj)) : 'N/A' }}</td>
+                                        <td>{{ $b->designation }}</td>
+                                        {{-- <td>{{ $b->date_present_appointment ? date('d-M-Y', strtotime($b->date_present_appointment)) : 'N/A' }}
+                                                        </td> --}}
+
+                                        {{-- <td>
+                                                            <a class="btn btn-success btn-sm" href="javascript: LoadSummary('{{ $b->ID }}')">
+                                                                Record of Service
                                                             </a>
-                                                        </td>
-                                                    @else
-                                                        <td>
-                                                            <a class="btn btn-success btn-sm"
-                                                                href="javascript: LoadSummary('{{ $b->ID }}')">
-                                                                Staff Record
-                                                            </a>
-                                                        </td>
-                                                    @endif
-                                                </tr>
-                                            @endforeach
-                                        </tbody>
+                                                        </td> --}}
 
-                                    </table>
-                                </div>
-                            </div>
+                                        @if ($b->progress_regID < 18)
+                                            <td>
+                                                <a class="btn btn-primary btn-sm"
+                                                    href="/continue-staff-documentation/{{ $b->ID }}">
+                                                    Documentation
+                                                </a>
+                                            </td>
+                                        @else
+                                            <td>
+                                                <a class="btn btn-success btn-sm"
+                                                    href="javascript: LoadSummary('{{ $b->ID }}')">
+                                                    Staff Record
+                                                </a>
+                                            </td>
+                                        @endif
+                                    </tr>
+                                @endforeach
+                            </tbody>
 
-                        </div>
+                        </table>
                     </div>
                 </div>
+
             </div>
 
-        </form>
+
+            <form method="post" id="displayform" name="displayform" action="{{ url('/profile/details') }}"
+                target="_blank">
+
+                {{ csrf_field() }}
 
 
-        <form method="post" id="displayform" name="displayform" action="{{ url('/profile/details') }}" target="_blank">
-
-            {{ csrf_field() }}
+                <input type="hidden" id="fileno" name="fileNo">
 
 
-            <input type="hidden" id="fileno" name="fileNo">
-
-
-        </form>
+            </form>
+        </div>
     </div>
 @endsection
 
@@ -315,7 +318,7 @@
 
         }
     </script>
-    <script type="text/javascript">
+    {{-- <script type="text/javascript">
         $(document).ready(function() {
 
             $('#fields').multiselect({
@@ -400,25 +403,18 @@
                 dateFormat: 'yy-mm-dd'
             });
         });
-    </script>
+    </script> --}}
+
 
     <script>
-        function myFunc() {
-            var printme = document.getElementById('tablr');
-            var wme = window.open("", "", "width=900,height=700");
-            wme.document.write(printme.outerHTML);
-            wme.document.close();
-            wme.focus();
-            wme.print();
-            wme.close();
-        }
-    </script>
-    {{-- <script>
         $(document).ready(function() {
 
             function loadStaff() {
-                var department = $('#department').val();
-                var designation = $('#designation').val();
+                let department = $('#department').val();
+                let designation = $('#designation').val();
+
+                console.log("Department selected:", department);
+                console.log("Designation selected:", designation);
 
                 $.ajax({
                     url: "{{ url('/report/staff-filter') }}",
@@ -428,89 +424,12 @@
                         designation: designation
                     },
                     success: function(data) {
+                       console.log("AJAX RESPONSE:", data);
                         $('#staffTable').html(data);
                     }
                 });
             }
 
-            $('#department, #designation').on('change', function() {
-                loadStaff();
-            });
-
-        });
-    </script> --}}
-    {{-- <script>
-        $(document).ready(function() {
-
-            function loadStaff() {
-                $.ajax({
-                    url: "{{ url('/report/staff-filter') }}",
-                    type: "GET",
-                    data: {
-                        department: $('#department').val(),
-                        designation: $('#designation').val()
-                    },
-                    success: function(data) {
-                        $('#staffTable').html(data);
-                    }
-                });
-            }
-
-            $('#department, #designation').on('change', function() {
-                loadStaff();
-            });
-
-        });
-    </script> --}}
-    <script>
-        $(document).ready(function() {
-
-            function loadStaff() {
-
-                $.ajax({
-                    url: "{{ url('/report/staff-filter') }}",
-                    type: "GET",
-                    data: {
-                        department: $('#department').val(),
-                        designation: $('#designation').val()
-                    },
-                    success: function(data) {
-
-                        let rows = '';
-                        let sn = 1;
-
-                        if (data.length === 0) {
-                            rows = `<tr><td colspan="10" class="text-center">No record found</td></tr>`;
-                        } else {
-
-                            $.each(data, function(i, b) {
-
-                                rows += `
-                        <tr>
-                            <td>${sn++}</td>
-                            <td>${b.title ?? ''} ${b.surname ?? ''} ${b.othernames ?? ''} ${b.first_name ?? ''}</td>
-                            <td>${b.dob ? formatDate(b.dob) : 'N/A'}</td>
-                            <td>${b.gender ?? ''}</td>
-                            <td>${b.maritalstatus ?? ''}</td>
-                            <td>${b.lga ?? ''}</td>
-                            <td>${b.State ?? ''}</td>
-                            <td>${b.doj ? formatDate(b.doj) : 'N/A'}</td>
-                            <td>${b.designation ?? ''}</td>
-                        </tr>`;
-                            });
-                        }
-
-                        $('#staffTable').html(rows);
-                    }
-                });
-            }
-
-            function formatDate(date) {
-                let d = new Date(date);
-                return d.toLocaleDateString('en-GB');
-            }
-
-            // 🔥 AUTO LOAD ON CHANGE (NO BUTTON NEEDED)
             $('#department, #designation').on('change', function() {
                 loadStaff();
             });

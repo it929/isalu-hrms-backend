@@ -99,7 +99,7 @@
 
                 <div class="col-md-3">
                     <label>From </label>
-                    <input type="date" name="from" class="form-control input-sm" required>
+                    <input type="date" name="from" class="form-control input-sm" max="{{ date('Y-m-d') }}"  required>
                 </div>
 
                 <div class="col-md-3">

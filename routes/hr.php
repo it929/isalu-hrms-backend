@@ -1352,7 +1352,7 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('/increment-sent-to-salary-head', [NewProcessVariationController::class, 'showStaffDueForIncrementSalary']);
     Route::post('/salary-decline-increment', [NewProcessVariationController::class, 'declineStaffIncrementFromSalary']);
 
-    Route::get('/staff/all', [StaffInfoController::class, 'allStaffInfo']);
+    // Route::get('/staff/all', [StaffInfoController::class, 'allStaffInfo']);
     Route::get('/hr/staff/documents/{id}', [StaffInfoController::class, 'getStaffDocuments'])->name('staff.documents');
     Route::get('/hr/staff/filter', [StaffInfoController::class, 'filterStaff'])->name('staff.filter');
 
@@ -2238,7 +2238,8 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::post('/report/staff-list', [StaffReportController::class, 'getStaffList'])->name('staff.list');
     Route::any('/report/nominal-new', [StaffReportController::class, 'NominalRollNew']);
     Route::get('/report/staff-distribution-by-zone', [StaffReportController::class, 'getStaffByZones']);
-    Route::get('/report/staff-filter', [StaffReportController::class, 'ajaxStaffFilter']);
+    // Route::get('/report/staff-filter', [StaffReportController::class, 'ajaxStaffFilter']);
+    Route::get('/report/staff-filter', [StaffReportController::class, 'staffFilter']);
 
 
     // increment

@@ -40,11 +40,11 @@
 
     <div style="margin: 10px 20px;">
         <div align="center" class="hidden-print">
-            <h3><b>{{ strtoupper('SUPREME COURT OF NIGERIA') }}</b></h3>
+            <h3><b>{{ strtoupper('ISALU HOSPITAL') }}</b></h3>
             <h5><strong>STAFF LIST</strong></h5>
             @if(request('filter') && request('filter') != 'all')
                 <p class="text-info hidden-print">
-                    <i class="fa fa-filter"></i> Filter: 
+                    <i class="fa fa-filter"></i> Filter:
                     @switch(request('filter'))
                         @case('with_documents') With Education Documents @break
                         @case('without_documents') Without Education Documents @break
@@ -63,11 +63,11 @@
             <big><b></b></big>
         </div>
         <div align="center" class="visible-print-block">
-            <h3><b>{{ strtoupper('SUPREME COURT OF NIGERIA') }}</b></h3>
+            <h3><b>{{ strtoupper('ISALU HOSPITAL') }}</b></h3>
             <h5><strong>STAFF LIST</strong></h5>
             <big><b></b></big>
         </div>
-        
+
         <!-- STAFF COUNTS SUMMARY CARDS - NEW SECTION -->
         <div class="row hidden-print" style="margin: 20px 0;">
             <div class="col-md-4 col-sm-6">
@@ -81,7 +81,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="col-md-4 col-sm-6">
                 <div class="small-box bg-success" style="border-radius: 5px; padding: 15px; color: white; background-color: #28a745;">
                     <div class="inner">
@@ -93,7 +93,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="col-md-4 col-sm-6">
                 <div class="small-box bg-primary" style="border-radius: 5px; padding: 15px; color: white; background-color: #007bff;">
                     <div class="inner">
@@ -106,17 +106,17 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- SYSTEM-WIDE STAFF TOTALS -->
         @if(isset($totalAllStaffWithDocuments) && isset($totalAllStaffWithAttachments))
         <div class="row hidden-print" style="margin: 10px 0 20px 0;">
             <div class="col-md-12">
                 <div class="alert alert-info" style="background-color: #e7f3ff; border-left: 4px solid #2196F3; padding: 12px;">
-                    <i class="fa fa-database"></i> 
-                    <strong>System-wide totals:</strong> 
+                    <i class="fa fa-database"></i>
+                    <strong>System-wide totals:</strong>
                     <span class="badge" style="background-color: #28a745; color: white; padding: 5px 10px; margin: 0 5px;">
                         <i class="fa fa-graduation-cap"></i> {{ number_format($totalAllStaffWithDocuments) }} Staff with Education Documents
-                    </span> 
+                    </span>
                     <span class="badge" style="background-color: #007bff; color: white; padding: 5px 10px; margin: 0 5px;">
                         <i class="fa fa-paperclip"></i> {{ number_format($totalAllStaffWithAttachments) }} Staff with Attachments
                     </span>
@@ -185,8 +185,8 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @php 
-                                        $key = 1; 
+                                    @php
+                                        $key = 1;
                                         $staffWithDocsCount = 0;
                                         $staffWithAttsCount = 0;
                                     @endphp
@@ -194,7 +194,7 @@
                                         @php
                                             $hasDocs = isset($staff->educations) && $staff->educations->count() > 0;
                                             $hasAtts = isset($staff->attachments) && $staff->attachments->count() > 0;
-                                            
+
                                             if($hasDocs) $staffWithDocsCount++;
                                             if($hasAtts) $staffWithAttsCount++;
                                         @endphp
@@ -213,7 +213,7 @@
                                                 @endif
                                             </td>
                                             <td>{{ strtoupper($staff->surname . ' ' . $staff->first_name . ' ' . ($staff->othernames ?? '')) }}</td>
-                                            
+
                                             <!-- Education Documents Column -->
                                             <td>
                                                 @if($hasDocs)
@@ -226,7 +226,7 @@
                                                             @foreach($staff->educations as $education)
                                                                 <li>
                                                                     <a href="{{ $education->document ?? '#' }}" target="_blank" title="{{ $education->degreequalification }}">
-                                                                        <i class="fa fa-file-pdf-o text-danger"></i> 
+                                                                        <i class="fa fa-file-pdf-o text-danger"></i>
                                                                         {{ $education->degreequalification }}
                                                                     </a>
                                                                 </li>
@@ -241,7 +241,7 @@
                                                     <span class="label label-warning">No Education</span>
                                                 @endif
                                             </td>
-                                            
+
                                             <!-- Attachments Column -->
                                             <td>
                                                 @if($hasAtts)
@@ -254,7 +254,7 @@
                                                             @foreach($staff->attachments as $attachment)
                                                                 <li>
                                                                     <a href="{{ $attachment->filepath }}" target="_blank" title="{{ $attachment->filedesc }}">
-                                                                        <i class="fa fa-file-text-o"></i> 
+                                                                        <i class="fa fa-file-text-o"></i>
                                                                         {{ Str::limit($attachment->filedesc, 20) }}
                                                                     </a>
                                                                 </li>
@@ -285,22 +285,22 @@
                                     <div class="panel-body">
                                         @php
                                             $staffWithBoth = $staffList->filter(function($staff) {
-                                                return isset($staff->educations) && $staff->educations->count() > 0 
+                                                return isset($staff->educations) && $staff->educations->count() > 0
                                                     && isset($staff->attachments) && $staff->attachments->count() > 0;
                                             })->count();
-                                            
+
                                             $staffWithDocsOnly = $staffWithDocsCount - $staffWithBoth;
                                             $staffWithAttsOnly = $staffWithAttsCount - $staffWithBoth;
                                             $staffWithNone = $staffList->count() - ($staffWithDocsCount + $staffWithAttsCount - $staffWithBoth);
                                         @endphp
-                                        
+
                                         <div class="row">
                                             <div class="col-md-3 col-sm-6">
                                                 <div class="well well-sm text-center" style="background-color: #d4edda;">
                                                     <h4>{{ $staffWithBoth }}</h4>
                                                     <small>Staff with Both</small>
                                                     <div class="progress" style="height: 8px; margin-top: 8px;">
-                                                        <div class="progress-bar bg-success" role="progressbar" 
+                                                        <div class="progress-bar bg-success" role="progressbar"
                                                             style="width: {{ $staffList->count() > 0 ? ($staffWithBoth/$staffList->count())*100 : 0 }}%"></div>
                                                     </div>
                                                     <span class="text-muted">{{ $staffList->count() > 0 ? round(($staffWithBoth/$staffList->count())*100, 1) : 0 }}%</span>
@@ -311,7 +311,7 @@
                                                     <h4>{{ $staffWithDocsOnly }}</h4>
                                                     <small>Staff with Documents Only</small>
                                                     <div class="progress" style="height: 8px; margin-top: 8px;">
-                                                        <div class="progress-bar bg-info" role="progressbar" 
+                                                        <div class="progress-bar bg-info" role="progressbar"
                                                             style="width: {{ $staffList->count() > 0 ? ($staffWithDocsOnly/$staffList->count())*100 : 0 }}%"></div>
                                                     </div>
                                                     <span class="text-muted">{{ $staffList->count() > 0 ? round(($staffWithDocsOnly/$staffList->count())*100, 1) : 0 }}%</span>
@@ -322,7 +322,7 @@
                                                     <h4>{{ $staffWithAttsOnly }}</h4>
                                                     <small>Staff with Attachments Only</small>
                                                     <div class="progress" style="height: 8px; margin-top: 8px;">
-                                                        <div class="progress-bar bg-warning" role="progressbar" 
+                                                        <div class="progress-bar bg-warning" role="progressbar"
                                                             style="width: {{ $staffList->count() > 0 ? ($staffWithAttsOnly/$staffList->count())*100 : 0 }}%"></div>
                                                     </div>
                                                     <span class="text-muted">{{ $staffList->count() > 0 ? round(($staffWithAttsOnly/$staffList->count())*100, 1) : 0 }}%</span>
@@ -333,7 +333,7 @@
                                                     <h4>{{ $staffWithNone }}</h4>
                                                     <small>Staff with No Documents/Attachments</small>
                                                     <div class="progress" style="height: 8px; margin-top: 8px;">
-                                                        <div class="progress-bar bg-danger" role="progressbar" 
+                                                        <div class="progress-bar bg-danger" role="progressbar"
                                                             style="width: {{ $staffList->count() > 0 ? ($staffWithNone/$staffList->count())*100 : 0 }}%"></div>
                                                     </div>
                                                     <span class="text-muted">{{ $staffList->count() > 0 ? round(($staffWithNone/$staffList->count())*100, 1) : 0 }}%</span>
@@ -373,7 +373,7 @@
                                                     <h3>{{ $totalAllStaffWithDocuments }}</h3>
                                                     <small>Staff with Education Documents</small>
                                                     <div class="progress" style="height: 5px; margin-top: 5px;">
-                                                        <div class="progress-bar bg-success" role="progressbar" 
+                                                        <div class="progress-bar bg-success" role="progressbar"
                                                             style="width: {{ $totalStaffSystem > 0 ? ($totalAllStaffWithDocuments/$totalStaffSystem)*100 : 0 }}%"></div>
                                                     </div>
                                                     <span>{{ $totalStaffSystem > 0 ? round(($totalAllStaffWithDocuments/$totalStaffSystem)*100, 1) : 0 }}% of total</span>
@@ -384,7 +384,7 @@
                                                     <h3>{{ $totalAllStaffWithAttachments }}</h3>
                                                     <small>Staff with Attachments</small>
                                                     <div class="progress" style="height: 5px; margin-top: 5px;">
-                                                        <div class="progress-bar bg-primary" role="progressbar" 
+                                                        <div class="progress-bar bg-primary" role="progressbar"
                                                             style="width: {{ $totalStaffSystem > 0 ? ($totalAllStaffWithAttachments/$totalStaffSystem)*100 : 0 }}%"></div>
                                                     </div>
                                                     <span>{{ $totalStaffSystem > 0 ? round(($totalAllStaffWithAttachments/$totalStaffSystem)*100, 1) : 0 }}% of total</span>
@@ -450,7 +450,7 @@
             // View all documents button click event
             $('.view-docs-btn').click(function() {
                 var staffId = $(this).data('id');
-                
+
                 $.ajax({
                     url: "{{ url('/hr/staff/documents') }}/" + staffId,
                     type: "GET",
@@ -462,68 +462,68 @@
                             <div class="row">
                                 <div class="col-md-12">
                                     <h4>Education Documents</h4>
-                                    ${response.educations && response.educations.length > 0 ? 
+                                    ${response.educations && response.educations.length > 0 ?
                                         '<div class="table-responsive"><table class="table table-bordered"><thead><tr><th>Qualification</th><th>School</th><th>Period</th><th>Certificate</th><th>Action</th></tr></thead><tbody>' +
-                                        response.educations.map(edu => 
+                                        response.educations.map(edu =>
                                             `<tr>
                                                 <td>${edu.degreequalification || 'N/A'}</td>
                                                 <td>${edu.schoolattended || 'N/A'}</td>
                                                 <td>${edu.schoolfrom || ''} to ${edu.schoolto || ''}</td>
                                                 <td>${edu.certificateheld || 'N/A'}</td>
                                                 <td>
-                                                    ${edu.document ? 
+                                                    ${edu.document ?
                                                         `<a href="${edu.document}" target="_blank" class="btn btn-xs btn-danger">
                                                             <i class="fa fa-file-pdf-o"></i> View
-                                                        </a>` : 
+                                                        </a>` :
                                                         '<span class="label label-default">No Document</span>'
                                                     }
                                                 </td>
                                             </tr>`
                                         ).join('') +
-                                        '</tbody></table></div>' : 
+                                        '</tbody></table></div>' :
                                         '<div class="alert alert-warning">No education records found</div>'
                                     }
-                                    
+
                                     <hr>
-                                    
+
                                     <h4>Staff Attachments</h4>
-                                    ${response.attachments && response.attachments.length > 0 ? 
+                                    ${response.attachments && response.attachments.length > 0 ?
                                         '<div class="table-responsive"><table class="table table-bordered"><thead><tr><th>Description</th><th>File</th><th>Action</th></tr></thead><tbody>' +
-                                        response.attachments.map(attach => 
+                                        response.attachments.map(attach =>
                                             `<tr>
                                                 <td>${attach.filedesc || 'No Description'}</td>
                                                 <td>${attach.filepath ? attach.filepath.split('/').pop() : 'N/A'}</td>
                                                 <td>
-                                                    ${attach.filepath ? 
+                                                    ${attach.filepath ?
                                                         `<a href="${attach.filepath}" target="_blank" class="btn btn-xs btn-primary">
                                                             <i class="fa fa-download"></i> Download
-                                                        </a>` : 
+                                                        </a>` :
                                                         '<span class="label label-default">No File</span>'
                                                     }
                                                 </td>
                                             </tr>`
                                         ).join('') +
-                                        '</tbody></table></div>' : 
+                                        '</tbody></table></div>' :
                                         '<div class="alert alert-warning">No attachments found</div>'
                                     }
-                                    
+
                                     <hr>
-                                    
+
                                     <h4>Profile Images</h4>
                                     <div class="row">
                                         <div class="col-md-6 text-center">
                                             <h5>Passport Photo</h5>
-                                            ${response.passport_url ? 
+                                            ${response.passport_url ?
                                                 `<img src="${response.passport_url}" class="img-thumbnail" style="max-height: 200px;">
-                                                <br><a href="${response.passport_url}" target="_blank" class="btn btn-xs btn-success mt-2">View Full Size</a>` : 
+                                                <br><a href="${response.passport_url}" target="_blank" class="btn btn-xs btn-success mt-2">View Full Size</a>` :
                                                 '<div class="alert alert-info">No passport photo available</div>'
                                             }
                                         </div>
                                         <div class="col-md-6 text-center">
                                             <h5>Signature</h5>
-                                            ${response.signature_url ? 
+                                            ${response.signature_url ?
                                                 `<img src="${response.signature_url}" class="img-thumbnail" style="max-height: 200px;">
-                                                <br><a href="${response.signature_url}" target="_blank" class="btn btn-xs btn-warning mt-2">View Full Size</a>` : 
+                                                <br><a href="${response.signature_url}" target="_blank" class="btn btn-xs btn-warning mt-2">View Full Size</a>` :
                                                 '<div class="alert alert-info">No signature available</div>'
                                             }
                                         </div>
@@ -531,7 +531,7 @@
                                 </div>
                             </div>
                         `;
-                        
+
                         $('#staff-documents').html(html);
                         $('#documentsModal').modal('show');
                     },
@@ -588,7 +588,7 @@
             .hidden-print {
                 display: none !important;
             }
-            
+
             /* Show elements that should only appear in print */
             .visible-print-block {
                 display: block !important;
@@ -596,31 +596,31 @@
             .visible-print-inline {
                 display: inline !important;
             }
-            
+
             /* Remove all background colors */
             body, .panel-title, td, th, span, div {
                 color: #000 !important;
                 background-color: transparent !important;
             }
-            
+
             /* Ensure table prints properly */
             .table {
                 border-collapse: collapse !important;
                 width: 100% !important;
                 font-size: 11px !important;
             }
-            
+
             .table-bordered th,
             .table-bordered td {
                 border: 1px solid #000 !important;
                 padding: 4px !important;
             }
-            
+
             /* Remove table striping for better print */
             .table-striped > tbody > tr:nth-of-type(odd) {
                 background-color: transparent !important;
             }
-            
+
             /* Remove all box shadows and borders */
             .box, .panel, .panel-success {
                 border: none !important;
@@ -628,74 +628,74 @@
                 margin: 0 !important;
                 padding: 0 !important;
             }
-            
+
             /* Hide panel heading in print */
             .panel-heading {
                 display: none !important;
             }
-            
+
             /* Adjust panel body for print */
             .panel-body {
                 padding: 0 !important;
                 margin: 0 !important;
                 border: none !important;
             }
-            
+
             /* Hide filters and search info in print */
             .text-info {
                 display: none !important;
             }
-            
+
             /* Hide the "Showing X to Y of Z entries" text */
             .text-right.hidden-print {
                 display: none !important;
             }
-            
+
             /* Hide pagination */
             .pagination {
                 display: none !important;
             }
-            
+
             /* Make text bold for better readability in print */
             th {
                 font-weight: bold !important;
             }
-            
+
             /* Hide dropdown buttons and show simple text */
             .btn, .dropdown, .dropdown-toggle, .dropdown-menu {
                 display: none !important;
             }
-            
+
             /* Adjust font sizes for print */
             body {
                 font-size: 11px !important;
             }
-            
+
             /* Remove margins and padding from main containers */
             .container, .box-body, .row, .col-md-12 {
                 padding: 0 !important;
                 margin: 0 !important;
                 width: 100% !important;
             }
-            
+
             /* Better page breaks */
-            table { 
+            table {
                 page-break-inside: auto !important;
             }
-            tr { 
-                page-break-inside: avoid !important; 
+            tr {
+                page-break-inside: avoid !important;
                 page-break-after: auto !important;
             }
-            thead { 
+            thead {
                 display: table-header-group !important;
             }
-            
+
             /* Remove link colors */
             a {
                 color: #000 !important;
                 text-decoration: none !important;
             }
-            
+
             /* Remove label backgrounds */
             .label {
                 background-color: transparent !important;
@@ -703,34 +703,34 @@
                 padding: 1px 4px !important;
                 font-size: 10px !important;
             }
-            
+
             /* Adjust check icons for print */
             .fa-check {
                 color: #000 !important;
                 font-size: 10px !important;
             }
-            
+
             /* Remove any remaining background images */
             * {
                 background-image: none !important;
             }
-            
+
             /* Show Supreme Court header in print */
             .visible-print-block {
                 text-align: center;
                 margin-bottom: 15px;
             }
-            
+
             .visible-print-block h3 {
                 font-size: 18px !important;
                 margin: 5px 0 !important;
             }
-            
+
             .visible-print-block h5 {
                 font-size: 14px !important;
                 margin: 5px 0 !important;
             }
-            
+
             /* Hide summary cards and detailed summary in print */
             .small-box, .panel-default, .panel-info, .well, .alert {
                 display: none !important;
@@ -747,7 +747,7 @@
         .visible-print-inline {
             display: none;
         }
-        
+
         .table-striped > tbody > tr:nth-of-type(odd) {
             background-color: #f9f9f9;
         }
@@ -834,19 +834,19 @@
         .table td {
             vertical-align: middle !important;
         }
-        
+
         /* Filter styling */
         #documentFilter {
             height: 30px;
             font-size: 12px;
         }
-        
+
         .text-info {
             color: #17a2b8 !important;
             font-size: 14px;
             margin: 5px 0;
         }
-        
+
         /* Summary Cards Styling */
         .small-box {
             border-radius: 5px;
@@ -856,16 +856,16 @@
             box-shadow: 0 1px 1px rgba(0,0,0,0.1);
             transition: all 0.3s ease;
         }
-        
+
         .small-box:hover {
             transform: translateY(-3px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
-        
+
         .small-box > .inner {
             padding: 10px;
         }
-        
+
         .small-box h3 {
             font-size: 38px;
             font-weight: bold;
@@ -873,12 +873,12 @@
             white-space: nowrap;
             padding: 0;
         }
-        
+
         .small-box p {
             font-size: 15px;
             margin: 0;
         }
-        
+
         .small-box .icon {
             position: absolute;
             top: 15px;
@@ -887,12 +887,12 @@
             font-size: 70px;
             color: rgba(0,0,0,0.15);
         }
-        
+
         .small-box:hover .icon {
             font-size: 75px;
             color: rgba(0,0,0,0.2);
         }
-        
+
         .badge {
             display: inline-block;
             padding: 5px 10px;
@@ -902,7 +902,7 @@
             border-radius: 10px;
             margin: 0 2px;
         }
-        
+
         /* Progress bars for summary */
         .progress {
             height: 8px;
@@ -911,7 +911,7 @@
             border-radius: 4px;
             overflow: hidden;
         }
-        
+
         .progress-bar {
             float: left;
             width: 0%;
@@ -923,23 +923,23 @@
             background-color: #007bff;
             transition: width .6s ease;
         }
-        
+
         .progress-bar.bg-success {
             background-color: #28a745;
         }
-        
+
         .progress-bar.bg-info {
             background-color: #17a2b8;
         }
-        
+
         .progress-bar.bg-warning {
             background-color: #ffc107;
         }
-        
+
         .progress-bar.bg-danger {
             background-color: #dc3545;
         }
-        
+
         .well {
             min-height: 20px;
             padding: 15px;
@@ -949,12 +949,12 @@
             border-radius: 4px;
             box-shadow: inset 0 1px 1px rgba(0,0,0,.05);
         }
-        
+
         .well-sm {
             padding: 9px;
             border-radius: 3px;
         }
-        
+
         .bg-success {
             background-color: #d4edda;
         }
@@ -967,11 +967,11 @@
         .bg-danger {
             background-color: #f8d7da;
         }
-        
+
         .pull-right {
             float: right !important;
         }
-        
+
         .mt-2 {
             margin-top: 10px;
         }

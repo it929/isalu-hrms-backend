@@ -7,9 +7,9 @@
 @section('content')
 
     <div style="padding-bottom: 20px;">
-        <div class="box box-default">
-            <div class="box-header with-border hidden-print">
-                <h3 class="box-title">
+        <div class="panel panel-default">
+            <div class="panel-heading with-border hidden-print">
+                <h3 class="panel-title">
                     <b>@yield('pageTitle')</b>
                     <i class="fa fa-arrow-right"></i>
                     <span id='processing'>
@@ -47,157 +47,184 @@
             @endif
 
             <div class="panel-body">
-                <div class="table-responsive" style="font-size: 12px; margin-top:20px;">
-                    <div class="text-center" style="font-size: 20px; margin-bottom:20px;">New Employees</div>
-                    <table class="table table-bordered table-striped table-highlight">
-                        <thead>
-                            <tr bgcolor="#c7c7c7">
-                                <th width="1%">S/N</th>
-                                <th>STAFF</th>
-                                <th>FILENO</th>
-                                <th>GRADE|STEP</th>
-                                <th>DATE OF ASSUMPTION</th>
-                                <th>MONTH</th>
-                                <th>YEAR</th>
-                                <th>ACTION</th>
-                            </tr>
-                        </thead>
 
-                        @if ($staffForHalfPayList && count($staffForHalfPayList) > 0)
-                            @foreach ($staffForHalfPayList as $key => $b)
-                                <tr>
-                                    <td>{{ $key + 1 }} </td>
-                                    <td>{{ $b->surname }} {{ $b->first_name }} {{ $b->othernames }}</td>
-                                    <td>{{ $b->fileNo }}</td>
-                                    <td>{{ $b->old_grade }}|{{ $b->old_step }}</td>
-                                    <td>{{ $b->due_date }}</td>
-                                    <td>{{ $b->month_payment }}</td>
-                                    <td>{{ $b->year_payment }}</td>
-                                    <td>
-                                        @if ($b->approvedBy == '')
-                                            <button type="button" class="btn btn-info btn-sm" data-toggle="modal"
-                                                data-backdrop="false" data-target="#confirmEnable{{ $b->ID }}"><i
-                                                    class="fa fa-btn fa-plus"></i>
-                                                Approve</button>
-                                        @else
-                                            Approved
-                                        @endif
 
-                                        <!-- Modal to disable -->
-                                        <div class="modal fade text-left d-print-none"
-                                            id="confirmEnable{{ $b->ID }}" tabindex="-1" role="dialog"
-                                            aria-labelledby="confirmToSubmit" aria-hidden="true">
-                                            <div class="modal-dialog" role="document">
-                                                <div class="modal-content">
-                                                    <div class="modal-header bg-info">
-                                                        <h4 class="modal-title text-white"><i class="ti-save"></i>
-                                                            Confirm!</h4>
-                                                        <button type="button" class="close" data-dismiss="modal"
-                                                            aria-label="Close">
-                                                            <span aria-hidden="true">&times;</span>
-                                                        </button>
-                                                    </div>
-                                                    <form method="POST" action="{{ route('approveNewStaffSalary') }}">
-                                                        @csrf
-                                                        <div class="modal-body">
-                                                            <div class="text-success text-center">
-                                                                <h4>Are you sure you want to confirm the new employee
-                                                                    {{ $b->surname }} {{ $b->first_name }}
-                                                                    {{ $b->othernames }} for salary?
-                                                                </h4>
-                                                                <input type="hidden" name="staffId"
-                                                                    value="{{ $b->staffid }}">
-                                                                <div class="panel-body" style="margin-top: 20px;">
+                <div class="panel panel-success" style="margin-top: 20px;">
 
-                                                                    <div class="col-md-6">
-                                                                        <div class="form-group">
-                                                                            <label>Bank Name <span
-                                                                                    class="text-danger"><big>*</big></span></label>
-                                                                            <select required type="text" id="bankName"
-                                                                                name="bankName"
-                                                                                class="form-control input-lg" required>
-                                                                                <option value="">Select Bank</option>
-                                                                                @foreach ($BankList as $bank)
-                                                                                    <option value="{{ $bank->bankID }}"
-                                                                                        {{ $b->bankID == $bank->bankID ? 'selected' : '' }}>
-                                                                                        {{ $bank->bank }} </option>
-                                                                                @endforeach
-                                                                            </select>
+                    <!-- Card Header -->
+                    <div class="panel-heading text-center" style="font-size: 20px; font-weight: bold;">
+                       <h3 class="panel-title">
+                         New Employees
+                       </h3>
+                    </div>
 
-                                                                        </div>
-                                                                    </div>
-                                                                    <div class="col-md-6">
-                                                                        <div class="form-group">
-                                                                            <label>Account Number <span
-                                                                                    class="text-danger"><big>*</big></span></label>
-                                                                            <input type="number" name="accountNumber"
-                                                                                class="form-control input-lg" required
-                                                                                value="{{ $b->AccNo }}">
-                                                                        </div>
-                                                                    </div>
-                                                                    <div class="col-md-6">
-                                                                        <div class="form-group">
-                                                                            <label>Bank Branch <span
-                                                                                    class="text-danger"><big>*</big></span></label>
-                                                                            <input type="text" name="bank_branch"
-                                                                                class="form-control input-lg"
-                                                                                value="{{ $b->bank_branch }}">
-                                                                        </div>
-                                                                    </div>
-                                                                    <div class="col-md-6">
-                                                                        <div class="form-group">
-                                                                            <label>Bank Group <span
-                                                                                    class="text-danger"><big>*</big></span></label>
-                                                                            <input type="number" name="bankGroup"
-                                                                                class="form-control input-lg"
-                                                                                value="{{ $b->bankGroup }}">
-                                                                        </div>
-                                                                    </div>
-                                                                    <div class="col-md-6">
-                                                                        <div class="form-group">
-                                                                            <label>Employment Type <span
-                                                                                    class="text-danger"><big>*</big></span></label>
-                                                                            <select name="employmentType"
-                                                                                id="employmentType"
-                                                                                class="form-control input-lg" required>
-                                                                                <option value="">Select Employment
-                                                                                    Type</option>
+                    <!-- Card Body -->
+                    <div class="panel-body" style="padding: 15px;">
 
-                                                                                @foreach ($employmentType as $type)
-                                                                                    <option value="{{ $type->id }}"
-                                                                                        {{ $b->employee_type == $type->id ? 'selected' : '' }}>
-                                                                                        {{ $type->employmentType }}
-                                                                                    </option>
-                                                                                @endforeach
-                                                                            </select>
-                                                                        </div>
-                                                                    </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-striped table-highlight">
+                                <thead>
+                                    <tr style="background: #c7c7c7;">
+                                        <th width="1%">S/N</th>
+                                        <th>STAFF</th>
+                                        <th>FILENO</th>
+                                        <th>DATE OF ASSUMPTION</th>
+                                        <th>MONTH</th>
+                                        <th>YEAR</th>
+                                        <th>ACTION</th>
+                                    </tr>
+                                </thead>
 
-                                                                </div>
+                                @if ($staffForHalfPayList && count($staffForHalfPayList) > 0)
+                                    @foreach ($staffForHalfPayList as $key => $b)
+                                        <tr>
+                                            <td>{{ $key + 1 }}</td>
+                                            <td>{{ $b->surname }} {{ $b->first_name }} {{ $b->othernames }}</td>
+                                            <td>{{ $b->fileNo }}</td>
+                                            <td>{{ $b->due_date }}</td>
+                                            <td>{{ $b->month_payment }}</td>
+                                            <td>{{ $b->year_payment }}</td>
+                                            <td>
+
+                                                @if ($b->approvedBy == '')
+                                                    <button type="button" class="btn btn-info btn-sm"
+                                                        data-toggle="modal" data-backdrop="false"
+                                                        data-target="#confirmEnable{{ $b->ID }}">
+                                                        <i class="fa fa-btn fa-plus"></i> Approve
+                                                    </button>
+                                                @else
+                                                    <span class="label label-success">Approved</span>
+                                                @endif
+
+                                                <!-- Modal -->
+                                                <div class="modal fade" id="confirmEnable{{ $b->ID }}"
+                                                    tabindex="-1" role="dialog">
+                                                    <div class="modal-dialog">
+                                                        <div class="modal-content">
+
+                                                            <div class="modal-header bg-info">
+                                                                <h4 class="modal-title text-white">Confirm!</h4>
+                                                                <button type="button" class="close"
+                                                                    data-dismiss="modal">
+                                                                    <span>&times;</span>
+                                                                </button>
                                                             </div>
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-outline-info"
-                                                                data-dismiss="modal">
-                                                                Cancel </button>
-                                                            <button type="submit" class="btn btn-primary"> Confirm
-                                                            </button>
-                                                        </div>
-                                                    </form>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <!--end Modal-->
-                                    </td>
-                                </tr>
-                            @endforeach
-                        @else
-                            <tr>
-                                <td colspan="7" class="text-center text-danger"> No Records found...</td>
-                            </tr>
-                        @endif
 
-                    </table>
+                                                            <form method="POST"
+                                                                action="{{ route('approveNewStaffSalary') }}">
+                                                                @csrf
+
+                                                                <div class="modal-body">
+                                                                    <h4 class="text-center text-success">
+                                                                        Are you sure you want to confirm the new employee
+                                                                        {{ $b->surname }} {{ $b->first_name }}
+                                                                        {{ $b->othernames }} for salary?
+                                                                    </h4>
+
+                                                                    <input type="hidden" name="staffId"
+                                                                        value="{{ $b->staffid }}">
+
+                                                                    <div class="row" style="margin-top: 20px;">
+
+                                                                        <div class="col-md-6">
+                                                                            <div class="form-group">
+                                                                                <label>Bank Name <span
+                                                                                        class="text-danger">*</span></label>
+                                                                                <select name="bankName"
+                                                                                    class="form-control" required>
+                                                                                    <option value="">Select Bank
+                                                                                    </option>
+                                                                                    @foreach ($BankList as $bank)
+                                                                                        <option
+                                                                                            value="{{ $bank->bankID }}"
+                                                                                            {{ $b->bankID == $bank->bankID ? 'selected' : '' }}>
+                                                                                            {{ $bank->bank }}
+                                                                                        </option>
+                                                                                    @endforeach
+                                                                                </select>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div class="col-md-6">
+                                                                            <div class="form-group">
+                                                                                <label>Account Number <span
+                                                                                        class="text-danger">*</span></label>
+                                                                                <input type="number" name="accountNumber"
+                                                                                    class="form-control"
+                                                                                    value="{{ $b->AccNo }}" required>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div class="col-md-6">
+                                                                            <div class="form-group">
+                                                                                <label>Bank Branch</label>
+                                                                                <input type="text" name="bank_branch"
+                                                                                    class="form-control"
+                                                                                    value="{{ $b->bank_branch }}">
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {{-- <div class="col-md-6">
+                                                                            <div class="form-group">
+                                                                                <label>Bank Group</label>
+                                                                                <input type="number" name="bankGroup"
+                                                                                    class="form-control"
+                                                                                    value="{{ $b->bankGroup }}">
+                                                                            </div>
+                                                                        </div> --}}
+
+                                                                        <div class="col-md-6">
+                                                                            <div class="form-group">
+                                                                                <label>Employment Type <span
+                                                                                        class="text-danger">*</span></label>
+                                                                                <select name="employmentType"
+                                                                                    class="form-control" required>
+                                                                                    <option value="">Select Type
+                                                                                    </option>
+                                                                                    @foreach ($employmentType as $type)
+                                                                                        <option
+                                                                                            value="{{ $type->id }}"
+                                                                                            {{ $b->employee_type == $type->id ? 'selected' : '' }}>
+                                                                                            {{ $type->name }}
+                                                                                        </option>
+                                                                                    @endforeach
+                                                                                </select>
+                                                                            </div>
+                                                                        </div>
+
+                                                                    </div>
+                                                                </div>
+
+                                                                <div class="modal-footer">
+                                                                    <button type="button" class="btn btn-default"
+                                                                        data-dismiss="modal">
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button type="submit" class="btn btn-primary">
+                                                                        Confirm
+                                                                    </button>
+                                                                </div>
+
+                                                            </form>
+
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <!-- End Modal -->
+
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                @else
+                                    <tr>
+                                        <td colspan="7" class="text-center text-danger">No Records Found...</td>
+                                    </tr>
+                                @endif
+
+                            </table>
+                        </div>
+
+                    </div>
                 </div>
             </div>
         </div>

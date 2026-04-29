@@ -371,6 +371,36 @@ class StaffReportController extends functionController
         return response()->json($data);
     }
 
+    public function staffFilter(Request $request)
+    {
+        $query = DB::table('tblper')
+            ->leftJoin('tbldesignation', 'tbldesignation.id', '=', 'tblper.designationID')
+            ->leftJoin('tbldepartment', 'tbldepartment.id', '=', 'tblper.departmentID')
+            ->leftjoin('lga', 'tblper.lgaID', '=', 'lga.lgaId')
+            ->leftjoin('tblstates', 'tblper.stateID', '=', 'tblstates.StateID')
+            ->select(
+                'tblper.*',
+                'tbldesignation.designation',
+                'tbldepartment.department',
+                'lga.lga as lga',
+                'tblstates.State as State'
+            );
+
+        // Filter by department
+        if ($request->department != '') {
+            $query->where('tblper.departmentID', $request->department);
+        }
+
+        // Filter by designation
+        if ($request->designation != '') {
+            $query->where('tblper.designationID', $request->designation);
+        }
+
+        $staff = $query->get();
+
+        return view('hr.Report.partials.staffRows', compact('staff'))->render();
+    }
+
     public function getStaffByZones()
     {
         $zones = DB::table('tblper')

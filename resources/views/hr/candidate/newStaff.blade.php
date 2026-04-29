@@ -4,14 +4,14 @@
 @endsection
 
 <style>
-        .panel {
+        /* .panel {
             border-radius: 6px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-        }
+        } */
 
-        .panel-heading {
+        /* .panel-heading {
             border-radius: 6px 6px 0 0 !important;
-        }
+        } */
 
         thead tr th{
             font-size: 11px !important;
@@ -210,7 +210,7 @@
 
 
 
-    <div class="panel panel-default" style="margin-top: 20px;">
+    <div class="panel panel-success" style="margin-top: 20px;">
         <div class="panel-heading">
             <h3 class="panel-title">Staff List</h3>
         </div>

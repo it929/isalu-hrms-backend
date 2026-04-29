@@ -80,7 +80,8 @@ class HalfPayStaffController extends ParentController
             }
         }
 
-        $data['employmentType'] = DB::table('tblemployment_type')->where('active', 1)->get();
+        // $data['employmentType'] = DB::table('tblemployment_type')->where('active', 1)->get();
+        $data['employmentType'] = DB::table('hr_employment_type')->get();
 
         $data['BankList'] = DB::Select("SELECT * FROM `tblbanklist`");
         $data['staffForHalfPayList'] = DB::table('half_pay_staff')
@@ -141,7 +142,7 @@ class HalfPayStaffController extends ParentController
                     'bankID' => $request->bankName,
                     'AccNo' => $request->accountNumber,
                     'bank_branch' => $request->bank_branch,
-                    'bankGroup' => $request->bankGroup,
+                    // 'bankGroup' => $request->bankGroup,
                     'incremental_date' => $incrementalDate,
                     'staff_status' => 1,
                     'status_value' => 'active service',
@@ -160,7 +161,7 @@ class HalfPayStaffController extends ParentController
                     'bankID' => $request->bankName,
                     'AccNo' => $request->accountNumber,
                     'bank_branch' => $request->bank_branch,
-                    'bankGroup' => $request->bankGroup,
+                    // 'bankGroup' => $request->bankGroup,
                     'incremental_date' => $incrementalDate,
                     'staff_status' => 1,
                     'status_value' => 'active service',
@@ -201,7 +202,7 @@ class HalfPayStaffController extends ParentController
                     'bankID' => $request->bankName,
                     'AccNo' => $request->accountNumber,
                     'bank_branch' => $request->bank_branch,
-                    'bankGroup' => $request->bankGroup,
+                    // 'bankGroup' => $request->bankGroup,
                     'incremental_date' => $incrementalDate,
                     'staff_status' => 1,
                     'status_value' => 'active service',
@@ -236,7 +237,7 @@ class HalfPayStaffController extends ParentController
                     'bankID' => $request->bankName,
                     'AccNo' => $request->accountNumber,
                     'bank_branch' => $request->bank_branch,
-                    'bankGroup' => $request->bankGroup,
+                    // 'bankGroup' => $request->bankGroup,
                     'incremental_date' => $incrementalDate,
                     'staff_status' => 1,
                     'status_value' => 'active service',
