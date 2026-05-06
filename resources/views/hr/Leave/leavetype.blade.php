@@ -18,13 +18,19 @@ Leave Creation
                     <!--hidden field for updating record-->
                     <div style='padding: 10px 30px;'>
                         <div class='row'>
-                            <div class='col-md-6'>
+                            <div class='col-md-4'>
                         	    <div class="col-md-auto">
                                     <label class="">Leave Type: </label>
                                 </div>
                                 <input type="text" class="form-control" name="leave"/>
                         	</div>
-                            <div class='col-md-3' style='padding-top: 25px;'>
+                            <div class='col-md-4'>
+                        	    <div class="col-md-auto">
+                                    <label class="">Days: </label>
+                                </div>
+                                <input type="text" class="form-control" name="days"/>
+                        	</div>
+                            <div class='col-md-4' style='padding-top: 25px;'>
                                 <input type="submit" class="btn btn-success" name="btnSave" value='Add New Leave'>
                             </div>
                         </div>
@@ -47,7 +53,7 @@ Leave Creation
                                     <tr>
                                         <td class='col-md-auto'>{{ 1 + $i }}</td>
                                         <td class='col-md-4 text-capitalize'>{{$list->leaveType}}</td>
-                                        <td class='col-md-4 text-capitalize'>{{$list->numberOfDays ?? ""}}</td>
+                                        <td class='col-md-4 text-capitalize'>{{$list->days ?? ""}}</td>
                                         <td class='col-md-auto'>
                                             <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#updateModal{{$list->id}}" style="margin-bottom: 3px">Edit</button>
                                             <button type="button" class="btn btn-danger btn-sm" onclick="showDeleteModal('{{$list->id}}', '{{$list->leaveType}}')">Delete</button>
@@ -81,9 +87,24 @@ Leave Creation
                    {{ csrf_field() }}
                    <div class="modal-body">
                        <input type="hidden" value="{{ $list->id }}" name='leaveId' />
-                       <div class="form-group">
+                       {{-- <div class="form-group">
                            <label class="col-form-label">Leave Type:</label>
                            <input type="text" class="form-control" name="leave" id="leave{{$list->id}}" value="{{ $list->leaveType }}" required/>
+                       </div> --}}
+
+                       <div class="row">
+                          <div class='col-md-4'>
+                        	    <div class="col-md-auto">
+                                    <label class="">Leave Type: </label>
+                                </div>
+                                 <input type="text" class="form-control" name="leave" id="leave{{$list->id}}" value="{{ $list->leaveType }}" required/>
+                        	</div>
+                            <div class='col-md-4'>
+                        	    <div class="col-md-auto">
+                                    <label class="">Days: </label>
+                                </div>
+                                <input type="text" class="form-control" name="days" value="{{ $list->days }}"/>
+                        	</div>
                        </div>
                    </div>
                    <div class="modal-footer">
@@ -148,11 +169,11 @@ Leave Creation
     function showDeleteModal(leaveId, leaveName) {
         // Set the leave name in the modal
         document.getElementById('deleteLeaveName').textContent = leaveName;
-        
+
         // Set the delete URL
         var deleteUrl = '{{ url("/leave/delete") }}/' + leaveId;
         document.getElementById('deleteConfirmBtn').href = deleteUrl;
-        
+
         // Show the modal
         $('#deleteModal').modal('show');
     }
@@ -162,11 +183,11 @@ Leave Creation
         $('#deleteConfirmBtn').on('click', function(e) {
             e.preventDefault();
             var deleteUrl = $(this).attr('href');
-            
+
             // Optional: Add loading state
             $(this).html('<i class="fa fa-spinner fa-spin"></i> Deleting...');
             $(this).prop('disabled', true);
-            
+
             // Perform the delete action
             window.location.href = deleteUrl;
         });

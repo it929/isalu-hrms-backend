@@ -19,14 +19,19 @@
         <form action="{{ url('/documentation-basic-infox') }}" method="POST">
             {{ csrf_field() }}
 
+            <input type="hidden" class="form-control" name="fileNox"
+                        value="{{ isset($mainStaffFileNo) ? $mainStaffFileNo : '' }}">
+
             <!-- ROW 1 (4 columns) -->
             <div class="row">
 
-                <div class="col-md-4">
+
+
+                {{-- <div class="col-md-4">
                     <label>File Number</label>
-                    <input type="text" class="form-control" name="fileNox"
+                    <input type="hidden" class="form-control" name="fileNox"
                         value="{{ isset($mainStaffFileNo) ? $mainStaffFileNo : '' }}">
-                </div>
+                </div> --}}
 
                 <div class="col-md-4">
                     <label>Surname</label>
@@ -40,6 +45,12 @@
                         value="{{ $staffInfo->first_name ?? old('firstName') }}">
                 </div>
 
+                 <div class="col-md-4">
+                    <label>Other Names</label>
+                    <input readonly class="form-control" name="otherNames"
+                        value="{{ $staffInfo->othernames ?? old('otherNames') }}">
+                </div>
+
 
 
             </div>
@@ -50,11 +61,11 @@
             <div class="row">
 
 
-                <div class="col-md-4">
+                {{-- <div class="col-md-4">
                     <label>Other Names</label>
                     <input readonly class="form-control" name="otherNames"
                         value="{{ $staffInfo->othernames ?? old('otherNames') }}">
-                </div>
+                </div> --}}
 
                 <div class="col-md-4">
                     <label>Title *</label>
@@ -76,6 +87,12 @@
                     </select>
                 </div>
 
+                <div class="col-md-4">
+                    <label>Date of Birth</label>
+                    <input type="date" class="form-control" name="dateofBirth">
+                </div>
+
+
 
 
             </div>
@@ -85,10 +102,10 @@
             <!-- ROW 3 -->
             <div class="row">
 
-                <div class="col-md-4">
+                {{-- <div class="col-md-4">
                     <label>Date of Birth</label>
                     <input type="date" class="form-control" name="dateofBirth">
-                </div>
+                </div> --}}
 
                 <div class="col-md-4">
                     <label>Place of Birth *</label>
@@ -131,6 +148,17 @@
                         @endfor
                     </select>
                 </div> --}}
+
+                <div class="col-md-4">
+                    <label>Office Shift *</label>
+                    <select name="officeshift" class="form-control" required>
+                        <option value="1">Admin</option>
+                        <option value="2">Shift</option>
+                        {{-- @foreach ($departments as $b)
+                            <option value="{{ $b->id }}">{{ $b->department }}</option>
+                        @endforeach --}}
+                    </select>
+                </div>
 
 
 

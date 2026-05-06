@@ -755,6 +755,13 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('/leave/delete/{id}',                 [LeaveCreateController::class, 'delete']);
 
     //leave management
+
+    Route::get('/apply/leave',                 [LeaveCreateController::class, 'ApplyLeave']);
+    Route::post('/saveapply/leave',                       [LeaveCreateController::class, 'saveApplyLeave']);
+    Route::get('/calculate-end-date', [LeaveCreateController::class, 'calculateEndDate']);
+
+
+    //leave management
     Route::post('/leave/definition',                          [LeaveController::class, 'postDefinition']);
     Route::get('/leave/definition',                           [LeaveController::class, 'getDefinition']);
     Route::post('/leave/application',                          [LeaveController::class, 'Application']);

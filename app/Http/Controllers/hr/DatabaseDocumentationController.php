@@ -20,7 +20,7 @@ class DatabaseDocumentationController extends Controller
     }
 
 
-    public function basicSetUp($fileNox, $fileNo, $title, $gender, $dateofBirth, $placeofBirth, $empType, $hremptype,  $department,  $departmentID, $designation, $designationID, $presentApptmnt, )
+    public function basicSetUp($fileNox, $fileNo, $title, $gender, $dateofBirth, $placeofBirth, $empType, $hremptype,  $department,  $departmentID, $designation, $designationID, $presentApptmnt, $officeshift,)
     {
         DB::table('tblper')->where('ID', '=', $fileNo)->update([
             'fileNo' => $fileNox,
@@ -30,6 +30,7 @@ class DatabaseDocumentationController extends Controller
             'placeofbirth' => $placeofBirth,
             'employee_type' => $empType,
             'hremploymentType' => $hremptype,
+            'office_shift' => $officeshift,
             // 'grade' => $gradeLevel,
             // 'step' => $step,
             'department' => $department,

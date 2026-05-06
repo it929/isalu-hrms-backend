@@ -298,7 +298,7 @@ class DocumentationController extends DatabaseDocumentationController
         // $employmentType =   $request->input('employmentType');
         $employmentType =   1;
         $hremploymentType =   $request->input('hremploymentType');
-        // $state          =   $request->input('state');
+        $officeshift         =   $request->input('officeshift');
         // $grade          =   $request->input('grade');
         // $step           =   $request->input('step');
         $department     =   $request->input('department');
@@ -313,7 +313,7 @@ class DocumentationController extends DatabaseDocumentationController
 
         if (!empty($fileNo)) {
 
-            $this->basicSetUp($fileNox, $fileNo, $title, $gender, date('Y-m-d', strtotime($dateofBirth)), $placeofBirth, $employmentType, $hremploymentType,  $department, $departmentID, $designation, $designationID, date('Y-m-d', strtotime($presentApptmnt)), );
+            $this->basicSetUp($fileNox, $fileNo, $title, $gender, date('Y-m-d', strtotime($dateofBirth)), $placeofBirth, $employmentType, $hremploymentType,  $department, $departmentID, $designation, $designationID, date('Y-m-d', strtotime($presentApptmnt)),$officeshift, );
             $d = Session::get('progress');
             if ($d < 7) {
                 $this->setProgress($fileNo, 7);
