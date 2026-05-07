@@ -25,7 +25,7 @@ class LeaveCreateController extends Controller
         //dd($data);
         return view('hr.Leave/leavetype')->with($data);
     }
-    public function ApplyLeave()
+    public function ApplyLeave_07_05_2026()
     {
 
         $data['getleave'] = $this->allLeave();
@@ -50,6 +50,225 @@ class LeaveCreateController extends Controller
         return view('hr.Leave/applyLeave')->with($data);
     }
 
+    public function ApplyLeaveOLD()
+    {
+        $user = auth()->user(); // Logged-in user
+        $employee = DB::table('tblper')->where('UserID', $user->id)->first();
+
+        // Set your actual HR department ID
+        $HR_DEPT_ID = 80;
+
+        // Get all leave types
+        $data['getleave'] = $this->allLeave();
+
+        // Get all employees
+        $data['getEnployee'] = DB::table('tblper')->get();
+
+        // ==============================
+        // ROLE-BASED LEAVE RECORD ACCESS
+        // ==============================
+
+        // HR – sees ALL leave records
+        if ($employee->departmentID == $HR_DEPT_ID) {
+
+            $getleaveRecord = DB::table('leave_record')
+                ->join('tblper', 'tblper.ID', '=', 'leave_record.staffId')
+                ->join('tblleave_type', 'tblleave_type.id', '=', 'leave_record.leave_type_id')
+                ->join('tbldepartment', 'tbldepartment.id', '=', 'tblper.departmentID')
+                ->select(
+                    'leave_record.*',
+                    'tblper.surname',
+                    'tblper.first_name',
+                    'tblper.othernames',
+                    'tbldepartment.department',
+                    'tblleave_type.leaveType'
+                )
+                ->orderBy('leave_record.id', 'DESC')
+                ->get();
+        }
+
+        // HOD – sees only staff under his department
+        elseif ($employee->is_hod == 1) {
+
+            $getleaveRecord = DB::table('leave_record')
+                ->join('tblper', 'tblper.ID', '=', 'leave_record.staffId')
+                ->join('tblleave_type', 'tblleave_type.id', '=', 'leave_record.leave_type_id')
+                ->join('tbldepartment', 'tbldepartment.id', '=', 'tblper.departmentID')
+                ->where('tblper.departmentID', $employee->departmentID)
+                ->select(
+                    'leave_record.*',
+                    'tblper.surname',
+                    'tblper.first_name',
+                    'tblper.othernames',
+                    'tbldepartment.department',
+                    'tblleave_type.leaveType'
+                )
+                ->orderBy('leave_record.id', 'DESC')
+                ->get();
+        }
+
+        // Normal Staff – sees only his own leave records
+        else {
+
+            $getleaveRecord = DB::table('leave_record')
+                ->join('tblper', 'tblper.ID', '=', 'leave_record.staffId')
+                ->join('tblleave_type', 'tblleave_type.id', '=', 'leave_record.leave_type_id')
+                ->join('tbldepartment', 'tbldepartment.id', '=', 'tblper.departmentID')
+                ->where('leave_record.staffId', $employee->ID)
+                ->select(
+                    'leave_record.*',
+                    'tblper.surname',
+                    'tblper.first_name',
+                    'tblper.othernames',
+                    'tbldepartment.department',
+                    'tblleave_type.leaveType'
+                )
+                ->orderBy('leave_record.id', 'DESC')
+                ->get();
+        }
+
+        // Attach to view
+        $data['getleaveRecord'] = $getleaveRecord;
+
+        return view('hr.Leave/applyLeave')->with($data);
+    }
+
+    //apply leave
+    public function ApplyLeave()
+    {
+        $user = auth()->user(); // Logged-in user
+
+        // Super Admin role name (adjust to your system)
+        // $isSuperAdmin = ($user->id == 6);
+        $isSuperAdmin = DB::table('assign_user_role')
+            ->where('userID', $user->id)
+            ->where('roleID', 1) // 1 = Super Admin
+            ->exists();
+
+        // Check if user exists in tblper
+        $employee = DB::table('tblper')->where('UserID', $user->id)->first();
+
+        // HR DEPARTMENT ID
+        // $HR_DEPT_ID = 80;
+
+        //Admin Staff
+
+        $adminStaff = DB::table('assign_user_role')
+            ->where('userID', $user->id)
+            ->where('roleID', 48)
+            ->exists();
+
+
+        // Leave types
+        $data['getleave'] = $this->allLeave();
+
+        // All employees
+        $data['getEnployee'] = DB::table('tblper')->get();
+
+        // Base leave query
+        $baseQuery = DB::table('leave_record')
+            ->join('tblper', 'tblper.ID', '=', 'leave_record.staffId')
+            ->join('tblleave_type', 'tblleave_type.id', '=', 'leave_record.leave_type_id')
+            ->join('tbldepartment', 'tbldepartment.id', '=', 'tblper.departmentID')
+            ->select(
+                'leave_record.*',
+                'tblper.surname',
+                'tblper.first_name',
+                'tblper.othernames',
+                'tbldepartment.department',
+                'tblleave_type.leaveType'
+            )
+            ->orderBy('leave_record.id', 'DESC');
+
+        // ================================
+        // SUPER ADMIN (see all leave)
+        // ================================
+        if ($isSuperAdmin) {
+            $getleaveRecord = $baseQuery->get();
+        }
+
+        // ==========================================
+        // HR – sees ALL leave (user exists in tblper)
+        // ==========================================
+        // elseif ($employee && $employee->departmentID == $HR_DEPT_ID) {
+        //     $getleaveRecord = $baseQuery->get();
+        // }
+        elseif ($employee && $adminStaff) {
+            $getleaveRecord = $baseQuery->get();
+        }
+
+        // ======================
+        // HOD – sees dept leave
+        // ======================
+        elseif ($employee && $employee->is_hod == 1) {
+            $getleaveRecord = $baseQuery
+                ->where('tblper.departmentID', $employee->departmentID)
+                ->get();
+        }
+
+        // ======================
+        // STAFF – sees own leave
+        // ======================
+        elseif ($employee) {
+            $getleaveRecord = $baseQuery
+                ->where('leave_record.staffId', $employee->ID)
+                ->get();
+        }
+
+        // ================================
+        // User is NOT in tblper (safety)
+        // ================================
+        else {
+            $getleaveRecord = collect(); // empty result
+        }
+
+        $data['isSuperAdmin'] = $isSuperAdmin;
+        $data['isHod'] = $employee && $employee->is_hod == 1;
+        $data['isAdminStaff'] = $adminStaff;
+
+        $data['getleaveRecord'] = $getleaveRecord;
+
+        return view('hr.Leave/applyLeave')->with($data);
+    }
+
+    //HOD Approved
+    public function hodApprove($id)
+    {
+        DB::table('leave_record')->where('id', $id)->update([
+            'status' => 1, // HOD approved
+        ]);
+
+        return back()->with('success', 'Leave approved by HOD');
+    }
+
+    // Admin Approve
+    public function adminApprove($id)
+    {
+        DB::table('leave_record')->where('id', $id)->update([
+            'status' => 2, // Admin approved
+        ]);
+
+        return back()->with('success', 'Leave fully approved by HR');
+    }
+
+    // HOD Reject
+    public function hodReject($id)
+    {
+        DB::table('leave_record')->where('id', $id)->update([
+            'status' => 3, // Hod Rejected
+        ]);
+
+        return back()->with('error', 'Leave rejected by HOD');
+    }
+    // Admin Reject
+    public function adminReject($id)
+    {
+        DB::table('leave_record')->where('id', $id)->update([
+            'status' => 4, // Admin Rejected
+        ]);
+
+        return back()->with('error', 'Leave rejected by Admin');
+    }
 
 
 

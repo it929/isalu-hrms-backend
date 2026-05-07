@@ -4,17 +4,17 @@
 @endsection
 
 @section('content')
-    <div class="panel panel-primary">
+    <div class="panel panel-success">
         <div class="panel-heading with-border hidden-print">
             <h3 class="panel-title">@yield('pageTitle') <span id='processing'></span></h3>
         </div>
 
         <div class="panel-body">
             <div>
-                @include('hr.Share.message')
+                {{-- @include('hr.Share.message') --}}
 
 
-                <div class="panel panel-primary no-print">
+                <div class="panel panel-success no-print">
                     <div class="panel-heading">
                         <h3 class="panel-title">Apply for Leave</h3>
                     </div>
@@ -104,7 +104,7 @@
 
 
                 <div class="col-md-12" style="padding: 5px;">
-                    <div class="panel panel-primary" style="border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div class="panel panel-success" style="border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
 
                         <!-- Card Header -->
                         {{-- <div class="panel-heading"
@@ -122,7 +122,7 @@
                                 Leave Records
                             </h4>
 
-                            <button onclick="printPage()" class="btn btn-primary btn-sm pull-right">
+                            <button onclick="printPage()" class="btn btn-success btn-sm pull-right">
                                 Print / Download PDF
                             </button>
                         </div>
@@ -181,9 +181,13 @@
                                                 <!-- Status -->
                                                 <td>
                                                     @if ($list->status == 1)
-                                                        <span class="label label-success">Approved</span>
+                                                        <span class="label label-success">HOD Approved</span>
                                                     @elseif ($list->status == 2)
-                                                        <span class="label label-danger">Rejected</span>
+                                                        <span class="label label-danger">HR Approved</span>
+                                                    @elseif ($list->status == 3)
+                                                        <span class="label label-danger">HOD Reject</span>
+                                                    @elseif ($list->status == 4)
+                                                        <span class="label label-danger">HR Reject</span>
                                                     @else
                                                         <span class="label label-warning">Pending</span>
                                                     @endif
@@ -199,11 +203,64 @@
                                                         View
                                                     </a>
 
-                                                    <a href="{{ url('leave/approve/' . $list->id) }}"
+                                                    @if ($list->status == 0)
+                                                        @if ($isHod || $isSuperAdmin || $isAdminStaff)
+                                                            {{-- <a href="{{ route('hod.approve', $list->id) }}"
+                                                                class="btn btn-success btn-sm">
+                                                                HOD Approve
+                                                            </a> --}}
+
+                                                            <a href="javascript:void(0)"
+                                                                onclick="confirmAction('{{ route('hod.approve', $list->id) }}', 'approve')"
+                                                                class="btn btn-success btn-sm">
+                                                                HOD Approve
+                                                            </a>
+
+                                                            {{-- <a href="{{ route('hod.reject', $list->id) }}"
+                                                                class="btn btn-danger btn-sm">
+                                                                Reject
+                                                            </a> --}}
+
+                                                            <a href="javascript:void(0)"
+                                                                onclick="confirmAction('{{ route('hod.reject', $list->id) }}', 'reject')"
+                                                                class="btn btn-danger btn-sm">
+                                                                Reject
+                                                            </a>
+                                                        @endif
+                                                    @endif
+                                                    @if ($list->status == 1)
+                                                        @if ($isAdminStaff || $isSuperAdmin)
+                                                            {{-- <a href="{{ route('admin.approve', $list->id) }}"
+                                                                class="btn btn-success btn-sm">
+                                                                HR Approve
+                                                            </a> --}}
+
+                                                            <a href="javascript:void(0)"
+                                                                onclick="confirmAction('{{ route('admin.approve', $list->id) }}', 'approve')"
+                                                                class="btn btn-success btn-sm">
+                                                                HR Approve
+                                                            </a>
+
+                                                            {{-- <a href="{{ route('admin.reject', $list->id) }}"
+                                                                class="btn btn-danger btn-sm">
+                                                                Reject
+                                                            </a> --}}
+
+                                                            <a href="javascript:void(0)"
+                                                                onclick="confirmAction('{{ route('admin.reject', $list->id) }}', 'reject')"
+                                                                class="btn btn-danger btn-sm">
+                                                                Reject
+                                                            </a>
+                                                        @endif
+                                                    @endif
+
+
+
+                                                    {{-- <a href="{{ url('leave/approve/' . $list->id) }}"
                                                         class="btn btn-success btn-sm">Approve</a>
 
                                                     <a href="{{ url('leave/reject/' . $list->id) }}"
-                                                        class="btn btn-danger btn-sm">Reject</a>
+                                                        class="btn btn-danger btn-sm">Reject</a> --}}
                                                 </td>
 
                                                 <!-- Action -->
@@ -273,9 +330,13 @@
                                                             <p>
                                                                 <strong>Status:</strong>
                                                                 @if ($list->status == 1)
-                                                                    <span class="label label-success">Approved</span>
+                                                                    <span class="label label-success">HOD Approved</span>
                                                                 @elseif ($list->status == 2)
-                                                                    <span class="label label-danger">Rejected</span>
+                                                                    <span class="label label-danger">HR Approved</span>
+                                                                @elseif ($list->status == 3)
+                                                                    <span class="label label-danger">HOD Reject</span>
+                                                                @elseif ($list->status == 4)
+                                                                    <span class="label label-danger">HR Reject</span>
                                                                 @else
                                                                     <span class="label label-warning">Pending</span>
                                                                 @endif
@@ -375,10 +436,12 @@
 @endsection
 
 @section('scripts')
-    {{-- <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> --}}
-    script src="{{asset('assets/js/jquery-ui.min.js')}}"></script>
-    <script src="{{ asset('assets/js/jquery.slimscroll.min.js') }}"></script>
+    <script src="{{ asset('assets/js/jquery-ui.min.js') }}"></script>
+    {{-- <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<script src="{{ asset('assets/js/jquery.slimscroll.min.js') }}"></script> --}}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.2/jquery-confirm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 
     <script type="text/javascript">
@@ -437,59 +500,6 @@
     </script>
 
     <script>
-        // $(document).ready(function() {
-
-        //     $("select[name='employee_id'], input[name='start_date']").on("change", function() {
-
-        //         let employee_id = $("select[name='employee_id']").val();
-        //         let start_date = $("input[name='start_date']").val();
-
-        //         if (employee_id !== "" && start_date !== "") {
-        //             $.ajax({
-        //                 url: "{{ url('/calculate-end-date') }}",
-        //                 type: "GET",
-        //                 data: {
-        //                     employee_id: employee_id,
-        //                     start_date: start_date
-        //                 },
-        //                 success: function(response) {
-        //                     $("input[name='end_date']").val(response.end_date);
-        //                 }
-        //             });
-        //         }
-
-        //     });
-
-        // });
-
-        // $(document).ready(function() {
-
-        //     $("select[name='employee_id'], select[name='leave_type'], input[name='start_date']").on("change",
-        //         function() {
-
-        //             let employee_id = $("select[name='employee_id']").val();
-        //             let leave_type = $("select[name='leave_type']").val();
-        //             let start_date = $("input[name='start_date']").val();
-
-        //             if (employee_id !== "" && start_date !== "" && leave_type !== "") {
-        //                 $.ajax({
-        //                     url: "{{ url('/calculate-end-date') }}",
-        //                     type: "GET",
-        //                     data: {
-        //                         employee_id: employee_id,
-        //                         leave_type: leave_type,
-        //                         start_date: start_date
-        //                     },
-        //                     success: function(response) {
-        //                         $("input[name='end_date']").val(response.end_date);
-        //                     }
-        //                 });
-        //             }
-
-        //         });
-
-        // });
-
         $(document).ready(function() {
 
             $("select[name='employee_id'], select[name='leave_type'], input[name='start_date']").on("change",
@@ -524,6 +534,50 @@
 
         });
     </script>
+
+
+    <script>
+        function confirmAction(url, actionType) {
+            Swal.fire({
+                title: "Are you sure?",
+                text: "Do you want to " + actionType + " this leave request?",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "Yes, " + actionType,
+                cancelButtonText: "Cancel"
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = url;
+                }
+            });
+        }
+    </script>
+
+    @if (session('success'))
+        <script>
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'success',
+                title: "{{ session('success') }}",
+                showConfirmButton: false,
+                timer: 3000
+            });
+        </script>
+    @endif
+
+    @if (session('error'))
+        <script>
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'error',
+                title: "{{ session('error') }}",
+                showConfirmButton: false,
+                timer: 3000
+            });
+        </script>
+    @endif
 @endsection
 
 @section('styles')

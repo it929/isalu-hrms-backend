@@ -21,13 +21,13 @@
         <link rel="stylesheet" href="{{ asset('/assets/css/select2.min.css') }}">
         <link rel="stylesheet" href="{{ asset('/assets/css/_all-skins.min.css') }}">
         <link rel="stylesheet" href="{{ asset('/assets/css/admin.css') }}">
-        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+        {{-- <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script> --}}
         <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" />
         <link rel="stylesheet"
             href="https://cdnjs.cloudflare.com/ajax/libs/selectize.js/0.12.6/css/selectize.min.css" />
         <link rel="stylesheet"
             href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.4/css/bootstrap-select.min.css">
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/selectize.js/0.12.6/js/selectize.js"></script>
+
 
         <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
         {{-- <link rel="stylesheet" href="/resources/demos/style.css"> --}}
@@ -183,6 +183,7 @@
     <script src="{{ asset('/assets/js/demo.js') }}"></script>
     <script src="{{ asset('/assets/js/jquery.slimscroll.min.js') }}"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.4/js/bootstrap-select.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/selectize.js/0.12.6/js/selectize.js"></script>
 
 
     <script type="text/javascript">

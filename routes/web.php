@@ -94,6 +94,19 @@ Route::post('/user-assign/assign',                    'MasterRolePermission\Assi
 Route::post('/user/display',                          'MasterRolePermission\AssignUserRoleController@displayUser');
 Route::get('/user/search/{q?}',                       'MasterRolePermission\AssignUserRoleController@autocomplete');
 
+//Assign HOD
+// Route::get('/assign-hod',                     'MasterRolePermission\AssignUserRoleController@createHod')->name('AssignUser');
+Route::get('/user-assign/edit/{id?}',                 'MasterRolePermission\AssignUserRoleController@editUsreAssign')->name('editAssignUser');
+// Route::post('/assign-hod',                    'MasterRolePermission\AssignUserRoleController@assignHod');
+Route::post('/user/display',                          'MasterRolePermission\AssignUserRoleController@displayUser');
+Route::get('/user/search/{q?}',                       'MasterRolePermission\AssignUserRoleController@autocomplete');
+
+
+Route::get('/assign-hod',                     'MasterRolePermission\AssignUserRoleController@createHod');
+Route::post('/assign-hod',                    'MasterRolePermission\AssignUserRoleController@assignHod');
+
+Route::get( '/staff-by-department/{dept}', 'MasterRolePermission\AssignUserRoleController@staffByDepartment')->name('staff.by.department');
+
 
 //User Management
 Route::get('user/register', 'Auth\UserController@registerUser');
