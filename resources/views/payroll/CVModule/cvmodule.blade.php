@@ -86,13 +86,14 @@
     </div>
 
 
-    <div class="box box-default">
-        <div class="box-body box-profile">
-            <div class="box-header with-border hidden-print">
-                <h3 class="box-title">@yield('pageTitle') <span id='processing'></span></h3>
-            </div>
+    <div class="panel panel-success">
+        <div class="panel-heading  hidden-print">
+            <h3 class="panel-title">@yield('pageTitle') <span id='processing'></span></h3>
+        </div>
+        <div class="panel-body box-profile">
 
-            <div class="col-md-12">
+
+            {{-- <div class="col-md-12">
                 @if (count($errors) > 0)
                     <div class="alert alert-danger alert-dismissible" role="alert">
                         <button type="button" class="close" data-dismiss="alert" aria-label="Close">
@@ -132,291 +133,380 @@
                     </div>
                 @endif
 
+            </div> --}}
+            <div class="panel panel-success">
+                <div class="panel-heading  hidden-print">
+                    <h3 class="panel-title">Process Control Variable</h3>
+                </div>
+
+
+                <div class="panel-body">
+                    @include('funds.Share.message')
+
+                    <form class="form-horizontal" id="mainform" name="mainform" role="form" method="post"
+                        action="">
+                        {{ csrf_field() }}
+
+
+                        <div class="row">
+                            <div class="col-md-12">
+
+                                @if ($CourtInfo->courtstatus == 1)
+                                    <div class="col-md-3">
+                                        <label class="control-label">Court</label>
+                                        <select required class="form-control" id="court" onchange="getDivisions()"
+                                            name="court">
+                                            <option value="">-select Court</option>
+                                            @foreach ($courtList as $list)
+                                                <option value="{{ $list->id }}"
+                                                    {{ $court == $list->id ? 'selected' : '' }}>
+                                                    {{ $list->court_name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                @else
+                                    <input type="hidden" id="court" name="court"
+                                        value="{{ $CourtInfo->courtid }}">
+                                @endif
+
+                                @if ($CourtInfo->divisionstatus == 1 && Auth::user()->is_global == 1)
+                                    <div class="col-md-3">
+                                        <label class="control-label">Division</label>
+                                        {{-- <select required class="form-control" id="division" name="division" onchange="getStaff()" > --}}
+                                        <select required class="form-control" id="division" name="division">
+                                            <option value="">-select Division </option>
+                                            @foreach ($courtdivision as $list)
+                                                <option value="{{ $list->divisionID }}"
+                                                    {{ $division == $list->divisionID ? 'selected' : '' }}>
+                                                    {{ $list->division }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                @else
+                                    <div class="col-md-3">
+                                        <label>Division</label>
+                                        <input type="text" class="form-control" id="divisionName" name="divisionName"
+                                            value="{{ $curDivision->division }}" readonly>
+                                    </div>
+                                    <input type="hidden" id="division" name="division"
+                                        value="{{ Auth::user()->divisionID }}">
+                                    <!--<input type="hidden" id="division" name="division" value="{{ $CourtInfo->divisionid }}">-->
+                                @endif
+
+                                <div class="col-md-3">
+                                    <input type="hidden" id="fileNo" name="fileNo" value="{{ $fileNo }}">
+                                    <label class="control-label">Staff Names Search</label>
+                                    <input type="text" id="userSearch" autocomplete="off" list="enrolledUsers"
+                                        class="form-control" onchange="StaffSearchReload()">
+                                    <datalist id="enrolledUsers" name="userSearch">
+
+                                        @foreach ($courtstaff as $b)
+                                            <option value="{{ $b->ID }}">
+                                                {{ $b->fileNo }}:{{ $b->surname }} {{ $b->first_name }}
+                                                {{ $b->othernames }}</option>
+                                        @endforeach
+                                    </datalist>
+
+                                </div>
+
+
+                                <div class="col-md-3">
+                                    <label class="control-label">File Number</label>
+                                    <input required type="text" value="{{ $staff->fileNo }}" name="sname"
+                                        readonly="readonly" class="form-control">
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="control-label">Staff name</label>
+                                    <input required type="text"
+                                        value="{{ $staff->surname }} {{ $staff->first_name }} {{ $staff->othernames }}"
+                                        name="sname" readonly="readonly" class="form-control">
+                                </div>
+
+
+
+
+                                @if ($staff->fileNo != '')
+                                    <div class="col-md-3 mt-3">
+                                        <label for="staffBank">Staff Bank</label>
+                                        <input type="Text" name="staffBank" id="staffBank" class="form-control"
+                                            readonly
+                                            value="@if ($staff != '') {{ $staff->bank }} @endif" />
+                                    </div>
+
+                                    <div class="col-md-3 mt-3">
+                                        <label for="netPay">Last Net Emolument <i
+                                                class="fa fa-exclamation blinking"></i> </label>
+                                        <input type="text" name="netPay" id="netPay" class="form-control"
+                                            style="background-color: red; color: #fff; font-weight: 900" readonly
+                                            value="@if ($staffLastNetEmolument != '') {{ number_format($staffLastNetEmolument->NetPay, 2, '.', ',') }} @endif" />
+                                    </div>
+                                @endif
+                                {{-- </div> --}}
+
+                                <div class="col-md-3 mt-3">
+                                    <label class="control-label">Variable Type</label>
+                                    <select required name="cvtype" class="form-control" id="cvtype"
+                                        onchange="Reload()">
+                                        <option value="">-select Type</option>
+                                        @foreach ($EarningDeductionType as $desc)
+                                            <option value="{{ $desc->ID }}"
+                                                {{ $desc->ID == $cvtype ? 'selected' : '' }}>
+                                                {{ $desc->Particular }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-3 mt-3">
+                                    <label class="control-label">Description</label>
+                                    <select required name="cvdesc" class="form-control" id="cvdesc">
+                                        <option value="">-select Description</option>
+                                        @foreach ($cvdesc as $desc)
+                                            {{-- <option  value="{{$desc->ID}}" {{ ($desc->ID == $cvdesc ) ? "selected" : ""}} >{{ $desc->description }}</option> --}}
+                                            <option value="{{ $desc->ID }}">{{ $desc->description }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="col-md-3 mt-3">
+                                    <label class="control-label">Amount</label>
+                                    <input required type="number" step="0.01" value="{{ $amount }}"
+                                        name="amount" id="amount" class="form-control" placeholder="e.g 11000"
+                                        onkeyup='TargetRevalidate()'>
+                                </div>
+
+                                <div class="col-md-3 mt-3">
+                                    <label class="control-label">Target Amount</label>
+                                    <input required type="number" step="0.01" value="{{ $tamount }}"
+                                        name="tamount" class="form-control" placeholder="e.g 11000" id="tamount">
+                                </div>
+
+                                @php
+                                    $limitcheck = '';
+                                    if ($hiddenlimit == 1) {
+                                        $limitcheck = 'checked';
+                                    }
+                                    $recyclecheck = '';
+                                    if ($hiddenrecycle == 1) {
+                                        $recyclecheck = 'checked';
+                                    }
+                                @endphp
+                                <div class="col-md-2">
+                                    <label for="" class="control-label"></label>
+                                    <div class="checkbox" onclick="ClickLimit()">
+                                        <label><input type="checkbox" {{ $limitcheck }}> No Limit</label>
+                                    </div>
+                                    <input type="hidden" id="hiddenlimit" name="hiddenlimit"
+                                        value="{{ $hiddenlimit }}">
+                                </div>
+                                <div class="col-md-2">
+                                    <label for="" class="control-label"></label>
+                                    <div id="recycle" class="checkbox" onclick="ClickRecycle()">
+                                        <label><input type="checkbox" {{ $recyclecheck }}> One-Time</label>
+                                    </div>
+                                    <input type="hidden" id="hiddenrecycle" name="hiddenrecycle"
+                                        value="{{ $hiddenrecycle }}">
+                                </div>
+
+                                <div class="col-md-2">
+                                    <label for="" class="control-label"></label>
+                                    <button type="submit" class="btn btn-success form-control" name="add">
+                                        <i class="fa fa-btn fa-plus"></i> Add
+                                    </button>
+                                </div>
+
+                            </div>
+                        </div>
+
+
+                    </form>
+
+
+
+                    <hr />
+
+
+                </div>
+
+
+
             </div>
 
 
-            <div class="box-body">
-                @include('funds.Share.message')
+            {{-- <div class="row">
+                <div class=" col-md-12">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-striped table-highlight">
+                            <thead>
+                                <tr bgcolor="#c7c7c7">
+                                    <th>S/N</th>
+                                    <th>CV Description</th>
+                                    <th>Amount</th>
+                                    <th>Target Amount</th>
+                                    <th>Target Balance</th>
+                                    <th>With Limit</th>
+                                    <th>Last processed</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            @php $i = 1; @endphp
+                            <tbody>
 
-                <form class="form-horizontal" id="mainform" name="mainform" role="form" method="post"
-                    action="">
-                    {{ csrf_field() }}
-                    <div class="row">
-                            <div class="col-md-12">
-                                <!-- /.row -->
-                                {{-- <div class="form-group"> --}}
+                                @foreach ($tablecontent as $list)
+                                    <tr>
+                                        <td>{{ $i++ }}</td>
+                                        <td>{{ $list->description }} @if ($list->remarks)
+                                                ({{ $list->remarks }})
+                                            @endif
+                                        </td>
+                                        <td>{{ number_format($list->amount, 2, '.', ',') }}</td>
+                                        <td>
+                                            @if ($list->targetAmount != '' && $list->recycling == 0)
+                                                {{ number_format($list->targetAmount, 2, '.', ',') }}
+                                            @else
+                                                Not Applicable
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if ($list->targetAmount != '' && $list->recycling == 0)
+                                                {{ number_format($list->targetAmount - $list->totaloffset, 2, '.', ',') }}
+                                            @else
+                                                Not Applicable
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if ($list->recycling == 1)
+                                                No
+                                            @else
+                                                yes
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if ($list->lastperiod != '')
+                                                {{ $list->lastperiod }}
+                                            @else
+                                                Not yet processed
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-primary" style="cursor: pointer;"
+                                                onclick="editfunc('{{ $list->ID }}','{{ $list->description }}', '{{ $list->courtID }}', '{{ $list->divisionID }}', '{{ $list->amount }}', '{{ $list->remarks }}')">
+                                                <i class="fa fa-btn fa-pencil"></i> Edit
+                                            </button>
 
-                                    @if ($CourtInfo->courtstatus == 1)
-                                        <div class="col-md-4">
-                                            <label class="control-label">Court</label>
-                                            <select required class="form-control" id="court"
-                                                onchange="getDivisions()" name="court">
-                                                <option value="">-select Court</option>
-                                                @foreach ($courtList as $list)
-                                                    <option value="{{ $list->id }}"
-                                                        {{ $court == $list->id ? 'selected' : '' }}>
-                                                        {{ $list->court_name }}</option>
-                                                @endforeach
-                                            </select>
-                                        </div>
-                                    @else
-                                        <input type="hidden" id="court" name="court"
-                                            value="{{ $CourtInfo->courtid }}">
-                                    @endif
-
-                                    @if ($CourtInfo->divisionstatus == 1 && Auth::user()->is_global == 1)
-                                        <div class="col-md-4">
-                                            <label class="control-label">Division</label>
-                                            {{-- <select required class="form-control" id="division" name="division" onchange="getStaff()" > --}}
-                                            <select required class="form-control" id="division" name="division">
-                                                <option value="">-select Division </option>
-                                                @foreach ($courtdivision as $list)
-                                                    <option value="{{ $list->divisionID }}"
-                                                        {{ $division == $list->divisionID ? 'selected' : '' }}>
-                                                        {{ $list->division }}</option>
-                                                @endforeach
-                                            </select>
-                                        </div>
-                                    @else
-                                        <div class="col-md-4">
-                                                <label>Division</label>
-                                                <input type="text" class="form-control" id="divisionName"
-                                                    name="divisionName" value="{{ $curDivision->division }}" readonly>
-                                        </div>
-                                        <input type="hidden" id="division" name="division"
-                                            value="{{ Auth::user()->divisionID }}">
-                                        <!--<input type="hidden" id="division" name="division" value="{{ $CourtInfo->divisionid }}">-->
-                                    @endif
-
-                                    <div class="col-md-4">
-                                        <input type="hidden" id="fileNo" name="fileNo"
-                                            value="{{ $fileNo }}">
-                                        <label class="control-label">Staff Names Search</label>
-                                        <input type="text" id="userSearch" autocomplete="off" list="enrolledUsers"
-                                            class="form-control" onchange="StaffSearchReload()">
-                                        <datalist id="enrolledUsers" name="userSearch">
-
-                                            @foreach ($courtstaff as $b)
-                                                <option value="{{ $b->ID }}">
-                                                    {{ $b->fileNo }}:{{ $b->surname }} {{ $b->first_name }}
-                                                    {{ $b->othernames }}</option>
-                                            @endforeach
-                                        </datalist>
-
-                                    </div>
-
-
-                                    <div class="col-md-4">
-                                        <label class="control-label">File Number</label>
-                                        <input required type="text" value="{{ $staff->fileNo }}" name="sname"
-                                            readonly="readonly" class="form-control">
-                                    </div>
-
-                                {{-- </div> --}}
-                            </div>
-                            <!-- /.col -->
-                        <!-- /.row -->
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="col-md-12">
-                                <div class="form-group">
-                                    {{-- <div class="col-md-3">
-                                        <label class="control-label">File Number</label>
-                                        <input required type="text" value="{{ $staff->fileNo }}" name="sname"
-                                            readonly="readonly" class="form-control">
-                                    </div> --}}
-
-                                    <div class="col-md-4">
-                                        <label class="control-label">Staff name</label>
-                                        <input required type="text"
-                                            value="{{ $staff->surname }} {{ $staff->first_name }} {{ $staff->othernames }}"
-                                            name="sname" readonly="readonly" class="form-control">
-                                    </div>
-
-                                    @if ($staff->fileNo != '')
-                                        <div class="col-md-4">
-                                            <label for="staffBank">Staff Bank</label>
-                                            <input type="Text" name="staffBank" id="staffBank" class="form-control"
-                                                readonly
-                                                value="@if ($staff != '') {{ $staff->bank }} @endif" />
-                                        </div>
-
-                                        <div class="col-md-4">
-                                            <label for="netPay">Last Net Emolument <i
-                                                    class="fa fa-exclamation blinking"></i> </label>
-                                            <input type="text" name="netPay" id="netPay" class="form-control"
-                                                style="background-color: red; color: #fff; font-weight: 900" readonly
-                                                value="@if ($staffLastNetEmolument != '') {{ number_format($staffLastNetEmolument->NetPay, 2, '.', ',') }} @endif" />
-                                        </div>
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <hr>
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="col-md-12">
-                                <!-- /.row -->
-                                <div class="form-group">
-                                    <div class="col-md-6">
-                                        <label class="control-label">Variable Type</label>
-                                        <select required name="cvtype" class="form-control" id="cvtype"
-                                            onchange="Reload()">
-                                            <option value="">-select Type</option>
-                                            @foreach ($EarningDeductionType as $desc)
-                                                <option value="{{ $desc->ID }}"
-                                                    {{ $desc->ID == $cvtype ? 'selected' : '' }}>{{ $desc->Particular }}
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="control-label">Description</label>
-                                        <select required name="cvdesc" class="form-control" id="cvdesc">
-                                            <option value="">-select Description</option>
-                                            @foreach ($cvdesc as $desc)
-                                                {{-- <option  value="{{$desc->ID}}" {{ ($desc->ID == $cvdesc ) ? "selected" : ""}} >{{ $desc->description }}</option> --}}
-                                                <option value="{{ $desc->ID }}">{{ $desc->description }}</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-
-                                    <div class="col-md-4">
-                                        <label class="control-label">Amount</label>
-                                        <input required type="number" step="0.01" value="{{ $amount }}"
-                                            name="amount" id="amount" class="form-control" placeholder="e.g 11000"
-                                            onkeyup='TargetRevalidate()'>
-                                    </div>
-
-                                    @php
-                                        $limitcheck = '';
-                                        if ($hiddenlimit == 1) {
-                                            $limitcheck = 'checked';
-                                        }
-                                        $recyclecheck = '';
-                                        if ($hiddenrecycle == 1) {
-                                            $recyclecheck = 'checked';
-                                        }
-                                    @endphp
-                                    <div class="col-md-2">
-                                        <label for="" class="control-label"></label>
-                                        <div class="checkbox" onclick="ClickLimit()">
-                                            <label><input type="checkbox" {{ $limitcheck }}> No Limit</label>
-                                        </div>
-                                        <input type="hidden" id="hiddenlimit" name="hiddenlimit"
-                                            value="{{ $hiddenlimit }}">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label for="" class="control-label"></label>
-                                        <div id="recycle" class="checkbox" onclick="ClickRecycle()">
-                                            <label><input type="checkbox" {{ $recyclecheck }}> One-Time</label>
-                                        </div>
-                                        <input type="hidden" id="hiddenrecycle" name="hiddenrecycle"
-                                            value="{{ $hiddenrecycle }}">
-                                    </div>
-
-                                    <div class="col-md-4">
-                                        <label class="control-label">Target Amount</label>
-                                        <input required type="number" step="0.01" value="{{ $tamount }}"
-                                            name="tamount" class="form-control" placeholder="e.g 11000" id="tamount">
-                                    </div>
-
-                                    <div class="col-md-2">
-                                        <label for="" class="control-label"></label>
-                                        <button type="submit" class="btn btn-success form-control" name="add">
-                                            <i class="fa fa-btn fa-plus"></i> Add
-                                        </button>
-                                    </div>
-
-                                </div>
-                            </div>
-                            <!-- /.col -->
-                        </div>
-                        <!-- /.row -->
-                    </div>
-
-                </form>
-
-                <hr />
-                <div class="row">
-                    <div class=" col-md-12">
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-striped table-highlight">
-                                <thead>
-                                    <tr bgcolor="#c7c7c7">
-                                        <th>S/N</th>
-                                        <th>CV Description</th>
-                                        <th>Amount</th>
-                                        <th>Target Amount</th>
-                                        <th>Target Balance</th>
-                                        <th>With Limit</th>
-                                        <th>Last processed</th>
-                                        <th>Action</th>
+                                            <button class="btn btn-sm btn-danger" style="cursor: pointer;"
+                                                onclick="deletefunc('{{ $list->ID }}','{{ $list->description }}', '{{ $list->courtID }}', '{{ $list->divisionID }}')">
+                                                <i class="fa fa-btn fa-trash"></i> Delete
+                                            </button>
+                                        </td>
                                     </tr>
-                                </thead>
-                                @php $i = 1; @endphp
-                                <tbody>
+                                @endforeach
+                            </tbody>
+                        </table>
 
-                                    @foreach ($tablecontent as $list)
-                                        <tr>
-                                            <td>{{ $i++ }}</td>
-                                            <td>{{ $list->description }} @if ($list->remarks)
-                                                    ({{ $list->remarks }})
-                                                @endif
-                                            </td>
-                                            <td>{{ number_format($list->amount, 2, '.', ',') }}</td>
-                                            <td>
-                                                @if ($list->targetAmount != '' && $list->recycling == 0)
-                                                    {{ number_format($list->targetAmount, 2, '.', ',') }}
-                                                @else
-                                                    Not Applicable
-                                                @endif
-                                            </td>
-                                            <td>
-                                                @if ($list->targetAmount != '' && $list->recycling == 0)
-                                                    {{ number_format($list->targetAmount - $list->totaloffset, 2, '.', ',') }}
-                                                @else
-                                                    Not Applicable
-                                                @endif
-                                            </td>
-                                            <td>
-                                                @if ($list->recycling == 1)
-                                                    No
-                                                @else
-                                                    yes
-                                                @endif
-                                            </td>
-                                            <td>
-                                                @if ($list->lastperiod != '')
-                                                    {{ $list->lastperiod }}
-                                                @else
-                                                    Not yet processed
-                                                @endif
-                                            </td>
-                                            <td>
-                                                <button class="btn btn-sm btn-primary" style="cursor: pointer;"
-                                                    onclick="editfunc('{{ $list->ID }}','{{ $list->description }}', '{{ $list->courtID }}', '{{ $list->divisionID }}', '{{ $list->amount }}', '{{ $list->remarks }}')">
-                                                    <i class="fa fa-btn fa-pencil"></i> Edit
-                                                </button>
-
-                                                <button class="btn btn-sm btn-danger" style="cursor: pointer;"
-                                                    onclick="deletefunc('{{ $list->ID }}','{{ $list->description }}', '{{ $list->courtID }}', '{{ $list->divisionID }}')">
-                                                    <i class="fa fa-btn fa-trash"></i> Delete
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-
-                        </div>
                     </div>
                 </div>
+            </div> --}}
+            <div class="row">
+                <div class="col-md-12">
 
+                    <div class="panel panel-success" style="border-radius: 4px;">
+
+                        <!-- Panel Header -->
+                        <div class="panel-heading" style=" border-radius: 4px 4px 0 0;">
+                            <h4 class="panel-title" style="margin: 0; font-weight: bold;">
+                                CV List
+                            </h4>
+                        </div>
+
+                        <!-- Panel Body -->
+                        <div class="panel-body">
+
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-striped table-highlight">
+                                    <thead>
+                                        <tr bgcolor="#c7c7c7">
+                                            <th>S/N</th>
+                                            <th>CV Description</th>
+                                            <th>Amount</th>
+                                            <th>Target Amount</th>
+                                            <th>Target Balance</th>
+                                            <th>With Limit</th>
+                                            <th>Last processed</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+
+                                    @php $i = 1; @endphp
+
+                                    <tbody>
+                                        @foreach ($tablecontent as $list)
+                                            <tr>
+                                                <td>{{ $i++ }}</td>
+
+                                                <td>
+                                                    {{ $list->description }}
+                                                    @if ($list->remarks)
+                                                        ({{ $list->remarks }})
+                                                    @endif
+                                                </td>
+
+                                                <td>{{ number_format($list->amount, 2, '.', ',') }}</td>
+
+                                                <td>
+                                                    @if ($list->targetAmount != '' && $list->recycling == 0)
+                                                        {{ number_format($list->targetAmount, 2, '.', ',') }}
+                                                    @else
+                                                        Not Applicable
+                                                    @endif
+                                                </td>
+
+                                                <td>
+                                                    @if ($list->targetAmount != '' && $list->recycling == 0)
+                                                        {{ number_format($list->targetAmount - $list->totaloffset, 2, '.', ',') }}
+                                                    @else
+                                                        Not Applicable
+                                                    @endif
+                                                </td>
+
+                                                <td>
+                                                    @if ($list->recycling == 1)
+                                                        No
+                                                    @else
+                                                        Yes
+                                                    @endif
+                                                </td>
+
+                                                <td>
+                                                    @if ($list->lastperiod != '')
+                                                        {{ $list->lastperiod }}
+                                                    @else
+                                                        Not yet processed
+                                                    @endif
+                                                </td>
+
+                                                <td>
+                                                    <button class="btn btn-sm btn-primary" style="cursor:pointer;"
+                                                        onclick="editfunc('{{ $list->ID }}','{{ $list->description }}', '{{ $list->courtID }}', '{{ $list->divisionID }}', '{{ $list->amount }}', '{{ $list->remarks }}')">
+                                                        <i class="fa fa-btn fa-pencil"></i> Edit
+                                                    </button>
+
+                                                    <button class="btn btn-sm btn-danger" style="cursor:pointer;"
+                                                        onclick="deletefunc('{{ $list->ID }}','{{ $list->description }}', '{{ $list->courtID }}', '{{ $list->divisionID }}')">
+                                                        <i class="fa fa-btn fa-trash"></i> Delete
+                                                    </button>
+                                                </td>
+
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
             </div>
         </div>
     </div>
