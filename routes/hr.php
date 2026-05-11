@@ -760,6 +760,14 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::post('/saveapply/leave',                       [LeaveCreateController::class, 'saveApplyLeave']);
     Route::get('/calculate-end-date', [LeaveCreateController::class, 'calculateEndDate']);
 
+
+    //loa management
+
+    Route::get('/apply/loa',                 [LeaveCreateController::class, 'ApplyLoa']);
+    Route::post('/saveapply/loa',                       [LeaveCreateController::class, 'saveApplyLoa']);
+    Route::get('/calculate-end-date', [LeaveCreateController::class, 'calculateEndDate']);
+    Route::get('/leave/loa-list', [LeaveCreateController::class, 'loaList'])->name('loa.list');
+
     //hod approve & reject leave
     Route::get('leave/hod/approve/{id}', [LeaveCreateController::class, 'hodApprove'])
      ->name('hod.approve');
