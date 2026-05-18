@@ -1,0 +1,8 @@
+
+Fatal error: Uncaught Error: Using $this when not in object context in Command line code on line 1
+
+Error: Using $this when not in object context in Command line code on line 1
+
+Call Stack:
+    0.0003     489152   1. {main}() Command line code:0
+

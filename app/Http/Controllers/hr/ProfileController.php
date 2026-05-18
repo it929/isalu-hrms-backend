@@ -15,14 +15,19 @@ class ProfileController extends ParentController
 {
 
     public function __construct(Request $request)
-
     {
-        // dd("adams");
+        $this->middleware(function ($request, $next) {
+        $this->middleware(function ($request, $next) {
+            // dd("adams");
         // $this->division = $request->session()->get('division');
         //dd($this->division);
         // $this->divisionID = $request->session()->get('divisionID');
         // Session::put('this_division', $this->division);
         //Session::forget('hideAlert');
+            return $next($request);
+                    return $next($request);
+        });
+    });
     }
 
     public function viewConfiguration()

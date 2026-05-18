@@ -194,17 +194,35 @@ class DatabaseDocumentationController extends Controller
             $pay  = $previousPay[$i];
             $from = $fromPrevEmp[$i];
             $to   = $toPrevEmp[$i];
-            $filePage = $page[$i];
-            $checkBy  = $check[$i];
+            $filePage = $page[$i] ?? null;
+            $checkBy  = $check[$i] ?? null;
 
             if (!empty($employment) && !empty($pay)) {
+                $fromFormatted = null;
+                if (!empty($from)) {
+                    $fromClean = str_replace('/', '-', $from);
+                    $fromTime = strtotime($fromClean);
+                    if ($fromTime !== false) {
+                        $fromFormatted = date('Y-m-d', $fromTime);
+                    }
+                }
+
+                $toFormatted = null;
+                if (!empty($to)) {
+                    $toClean = str_replace('/', '-', $to);
+                    $toTime = strtotime($toClean);
+                    if ($toTime !== false) {
+                        $toFormatted = date('Y-m-d', $toTime);
+                    }
+                }
+
                 DB::table('previous_servicedetails')->insert(array(
                     'staffid'        => $staffid,
                     'fileNo'        => $fileNo,
                     'previousSchudule'        => $employment,
                     'totalPreviousPay'        => str_replace(',', '', $pay),
-                    'fromDate'              => date('Y-m-d', strtotime($from)),
-                    'toDate'                => date('Y-m-d', strtotime($to)),
+                    'fromDate'              => $fromFormatted,
+                    'toDate'                => $toFormatted,
                     'filePageRef'           => $filePage,
                     'checkedby'             => $checkBy,
                 ));
@@ -259,10 +277,8 @@ class DatabaseDocumentationController extends Controller
     ) {
         $fileNo = $this->fileD($staffid);
         $chk = DB::Select("SELECT staffid FROM tblotherinfoforstaffdocumentation WHERE `staffid` = '$staffid'");
-
         if ($chk) {
-
-            DB::UPDATE("UPDATE tblotherinfoforstaffdocumentation SET `qtn1` = '$convicted', `qtn2` = '$convictreason', `qtn3` = '$illness', `qtn4` = '$illness_reason', `qtn5` = '$repay', `qtn6` = '$judgement', `qtn7` = '$judgmentr', `qtn8` = '$detail_in_force', `qtn9` = '$decoration', `qtn10` = '$religion', `qtn11` = '$agree' WHERE `staffid` = '$fileNo'");
+            DB::UPDATE("UPDATE tblotherinfoforstaffdocumentation SET `qtn1` = '$convicted', `qtn2` = '$convictreason', `qtn3` = '$illness', `qtn4` = '$illness_reason', `qtn5` = '$repay', `qtn6` = '$judgement', `qtn7` = '$judgmentr', `qtn8` = '$detail_in_force', `qtn9` = '$decoration', `qtn10` = '$religion', `qtn11` = '$agree' WHERE `staffid` = '$staffid'");
 
             $data['message'] = 'Other information has been saved!';
         } else {

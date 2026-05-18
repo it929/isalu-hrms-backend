@@ -1,0 +1,42 @@
+
+   Symfony\Component\ErrorHandler\Error\FatalError 
+
+  Cannot use Illuminate\Support\Facades\Session as Session because the name is already in use
+
+  at C:\wamp64\www\Isalu HRMS\app\Http\Controllers\funds\ParentController.php:14
+     10▕ use App\Http\Controllers\Controller;
+     11▕ use Carbon\Carbon;
+     12▕ use Illuminate\Support\Facades\Auth;
+     13▕ use Illuminate\Support\Facades\DB;
+  ➜  14▕ use Illuminate\Support\Facades\Session;
+     15▕ 
+     16▕ class ParentController extends Controller
+     17▕ {
+     18▕
+
+  1   C:\wamp64\www\Isalu HRMS\vendor\laravel\framework\src\Illuminate\Foundation\Bootstrap\HandleExceptions.php:222
+      Symfony\Component\ErrorHandler\Error\FatalError::__construct("'Cannot use Illuminate\\Support\\Facades\\Session as Session because the name is already in use'", "0", "['type' => 64, 'message' => 'Cannot use Illuminate\\Support\\Facades\\Session as Session because the name is already in use', 'file' => 'C:\\wamp64\\www\\Isalu HRMS\\app\\Http\\Controllers\\funds\\ParentController.php', 'line' => 14]", "0", "???", "???")
+
+  2   C:\wamp64\www\Isalu HRMS\vendor\laravel\framework\src\Illuminate\Foundation\Bootstrap\HandleExceptions.php:209
+      Illuminate\Foundation\Bootstrap\HandleExceptions::fatalErrorFromPhpError("['type' => 64, 'message' => 'Cannot use Illuminate\\Support\\Facades\\Session as Session because the name is already in use', 'file' => 'C:\\wamp64\\www\\Isalu HRMS\\app\\Http\\Controllers\\funds\\ParentController.php', 'line' => 14]", "0")
+
+   Whoops\Exception\ErrorException 
+
+  Cannot use Illuminate\Support\Facades\Session as Session because the name is already in use
+
+  at C:\wamp64\www\Isalu HRMS\app\Http\Controllers\funds\ParentController.php:14
+     10▕ use App\Http\Controllers\Controller;
+     11▕ use Carbon\Carbon;
+     12▕ use Illuminate\Support\Facades\Auth;
+     13▕ use Illuminate\Support\Facades\DB;
+  ➜  14▕ use Illuminate\Support\Facades\Session;
+     15▕ 
+     16▕ class ParentController extends Controller
+     17▕ {
+     18▕
+
+  1   C:\wamp64\www\Isalu HRMS\vendor\filp\whoops\src\Whoops\Run.php:510
+      Whoops\Run::handleError("Cannot use Illuminate\Support\Facades\Session as Session because the name is already in use", "C:\wamp64\www\Isalu HRMS\app\Http\Controllers\funds\ParentController.php")
+
+  2   [internal]:0
+      Whoops\Run::handleShutdown()

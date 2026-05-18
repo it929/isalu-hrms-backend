@@ -1,6 +1,7 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
+use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
 use App\Library\AnyFileUploadClass;
@@ -15,7 +16,10 @@ class CloseVolumeFileController extends Controller
 {
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         $this->middleware('auth');
+                return $next($request);
+        });
     }
 
     //Load page

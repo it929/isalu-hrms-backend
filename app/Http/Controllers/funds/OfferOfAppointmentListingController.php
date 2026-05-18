@@ -1,6 +1,7 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
+use App\Http\Controllers\Controller;
 use Session;
 use Illuminate\Http\Request;
 use App\Http\Requests;
@@ -12,8 +13,11 @@ class OfferOfAppointmentListingController extends Controller
 {
      public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         $this->division    = $request->session()->get('division');
         $this->divisionID  = $request->session()->get('divisionID');
+                return $next($request);
+        });
     } 
     public function offerlisting()
     {

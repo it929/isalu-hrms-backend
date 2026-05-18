@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use App\Http\Requests;
 use DB;
 use Auth;
-use session;
+use Session;
 class PasswordController extends functionController
 {
 	public function __construct()

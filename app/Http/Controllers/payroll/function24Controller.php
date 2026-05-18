@@ -1,7 +1,7 @@
 <?php
 
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
 use Illuminate\Support\Facades\Log;
 
 use Illuminate\Http\Request;

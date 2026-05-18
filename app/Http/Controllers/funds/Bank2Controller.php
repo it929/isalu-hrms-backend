@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
 
 use Illuminate\Http\Request;
 use App\Http\Requests;
@@ -11,8 +11,11 @@ class BankController extends ParentController
 {
 	public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
     	$this->division = $request->session()->get('division');
 		$this->divisionID = $request->session()->get('divisionID');
+                return $next($request);
+        });
     }
 	
     public function create()

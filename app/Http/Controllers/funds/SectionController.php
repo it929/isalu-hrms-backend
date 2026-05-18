@@ -2,7 +2,7 @@
 //normal staff userid 6 & 237 & 243
 //department head userid 26 & 241
 //Executive Secretary userid 28
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
@@ -20,7 +20,10 @@ class SectionController extends Controller
     //make this page accessible only by authenticated user
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         $this->middleware('auth');
+                return $next($request);
+        });
     }
     
     

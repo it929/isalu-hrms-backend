@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 use App\Http\Controllers\ParentController;
 use Illuminate\Http\Request;
 use Session;

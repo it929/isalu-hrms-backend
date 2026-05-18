@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 use Session;
 use Illuminate\Http\Request;
 use App\Http\Requests;

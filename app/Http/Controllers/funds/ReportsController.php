@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\funds;
 
+
+
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -11,9 +13,12 @@ class ReportsController extends functionController
 {
 	public function __construct()
 	{
-		$this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $this->middleware('auth');
 		// $this->username = Session::get('userName');
-	} //
+            return $next($request);
+        });
+    } //
 
 	public function TotalMonthlyAllocation(Request $request)
 	{

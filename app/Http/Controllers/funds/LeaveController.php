@@ -1,19 +1,22 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
 
 use Illuminate\Http\Request;
 //use Auth;
 use App\Http\Requests;
 use DB;
 use Auth;
-use session;
+use Session;
 class LeaveController extends functionController
 {
 	public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $this->middleware('auth');
         $this->username = Session::get('userName');
+            return $next($request);
+        });
     }//
     
     public function getNotification(Request $request)

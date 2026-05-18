@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\funds;
 
+
+
 use Illuminate\Http\Request;
 use App\Http\Controllers\funds\function24Controller;
 use Illuminate\Support\Facades\Auth;

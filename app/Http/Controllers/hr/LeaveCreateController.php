@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Requests;
 use DB;
 use Auth;
-use session;
+use Session;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 

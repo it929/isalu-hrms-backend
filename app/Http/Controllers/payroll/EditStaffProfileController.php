@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
 
 use Illuminate\Http\Request;
 use File;
@@ -12,8 +12,11 @@ class EditStaffProfileController extends ParentController
 
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         $this->division = $request->session()->get('division');
         $this->divisionID = $request->session()->get('divisionID');
+                return $next($request);
+        });
     }
 
     //start loading Edit pages

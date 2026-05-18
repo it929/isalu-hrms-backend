@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
 
 use App\Http\Requests;
 use App\Role;

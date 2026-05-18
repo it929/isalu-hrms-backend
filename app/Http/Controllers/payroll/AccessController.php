@@ -1,6 +1,7 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
+use App\Http\Controllers\Controller;
 
 use App\Http\Requests;
 use App\Role;

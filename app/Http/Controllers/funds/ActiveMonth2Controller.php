@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
 
 use App\Http\Requests;
 use App\Role;
@@ -21,9 +21,12 @@ class ActiveMonthController extends ParentController
 
 	public $division; 
 	public function __construct(Request $request)
-	{
+    {
+        $this->middleware(function ($request, $next) {
 		$this->division = $request->session()->get('division');
-	}
+	            return $next($request);
+        });
+    }
 
 /**
 * Show the application dashboard.

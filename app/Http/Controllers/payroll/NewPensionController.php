@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests;
 use DB;
 use Auth;
-use session;
+use Session;
 
 class NewPensionController extends Controller
 {

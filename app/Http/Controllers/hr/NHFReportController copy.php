@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 
 use App\Http\Requests;
 use Carbon\Carbon;
-use session;
+use Session;
 use DateTime;
 use Auth;
 use Illuminate\Support\Facades\DB;

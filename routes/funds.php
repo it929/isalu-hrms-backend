@@ -62,14 +62,14 @@ Route::group(['middleware' => ['auth', 'force.password.change']], function () {
     // 		Route::post('/division/changeDivisionStore',		 'DivisionController@changeDivisionStore');
     //   	});
 
-    Route::get('user/register', 'Auth\UserController@registerUser');
-    Route::post('user/store', 'Auth\UserController@storeUser');
+    Route::get('user/register', '\App\Http\Controllers\Auth\UserController@registerUser');
+    Route::post('user/store', '\App\Http\Controllers\Auth\UserController@storeUser');
 
-    Route::get('logout', 'Auth\AuthController@logout');
+    Route::get('logout', '\App\Http\Controllers\Auth\AuthController@logout');
 
     //edit user account
-    Route::get('/user/editAccount', 'Auth\UserController@editAccount');
-    Route::post('user/editAccount', 'Auth\UserController@editAccountStore');
+    Route::get('/user/editAccount', '\App\Http\Controllers\Auth\UserController@editAccount');
+    Route::post('user/editAccount', '\App\Http\Controllers\Auth\UserController@editAccountStore');
     //CREATE NEW STAFF / BIO-DATA
     Route::get('/staff/create', 'CreateStaffController@create');
     Route::post('/staff/store', 'CreateStaffController@store');
@@ -297,40 +297,40 @@ Route::group(['middleware' => ['auth', 'force.password.change']], function () {
     Route::post('/self-promotion/update', 'PromotionSelfController@PostPromotion');
 
     //user roles
-    Route::get('/user-role/create', 'role_setup\UserRoleController@create');
-    Route::post('/user-role/add', 'role_setup\UserRoleController@addRole');
-    Route::get('/user-role/viewroles', 'role_setup\UserRoleController@displayRoles');
-    Route::get('/user-role/edit/{roleID}', 'role_setup\UserRoleController@editRole');
-    Route::post('/user-role/update/', 'role_setup\UserRoleController@updateRole');
+    Route::get('/user-role/create', '\\App\\Http\\Controllers\\role_setup\UserRoleController@create');
+    Route::post('/user-role/add', '\\App\\Http\\Controllers\\role_setup\UserRoleController@addRole');
+    Route::get('/user-role/viewroles', '\\App\\Http\\Controllers\\role_setup\UserRoleController@displayRoles');
+    Route::get('/user-role/edit/{roleID}', '\\App\\Http\\Controllers\\role_setup\UserRoleController@editRole');
+    Route::post('/user-role/update/', '\\App\\Http\\Controllers\\role_setup\UserRoleController@updateRole');
     //user modules
-    Route::get('/module/create', 'role_setup\ModuleController@create');
-    Route::post('/module/add', 'role_setup\ModuleController@addModule');
-    Route::get('/module/viewmodules', 'role_setup\ModuleController@displayModules');
-    Route::get('/module/edit/{moduleID}', 'role_setup\ModuleController@editModule');
-    Route::post('/module/update', 'role_setup\ModuleController@updateModule');
+    Route::get('/module/create', '\\App\\Http\\Controllers\\role_setup\ModuleController@create');
+    Route::post('/module/add', '\\App\\Http\\Controllers\\role_setup\ModuleController@addModule');
+    Route::get('/module/viewmodules', '\\App\\Http\\Controllers\\role_setup\ModuleController@displayModules');
+    Route::get('/module/edit/{moduleID}', '\\App\\Http\\Controllers\\role_setup\ModuleController@editModule');
+    Route::post('/module/update', '\\App\\Http\\Controllers\\role_setup\ModuleController@updateModule');
     //sub modules
-    Route::get('/sub-module/create', 'role_setup\SubModuleController@create');
-    Route::post('/sub-module/add', 'role_setup\SubModuleController@addSubModule');
-    Route::get('/sub-module/view-sub-modules', 'role_setup\SubModuleController@displaySubModules');
-    Route::get('/sub-module/edit/{submoduleID}', 'role_setup\SubModuleController@editSubModule');
-    Route::post('/sub-module/update', 'role_setup\SubModuleController@updateSubModule');
+    Route::get('/sub-module/create', '\\App\\Http\\Controllers\\role_setup\SubModuleController@create');
+    Route::post('/sub-module/add', '\\App\\Http\\Controllers\\role_setup\SubModuleController@addSubModule');
+    Route::get('/sub-module/view-sub-modules', '\\App\\Http\\Controllers\\role_setup\SubModuleController@displaySubModules');
+    Route::get('/sub-module/edit/{submoduleID}', '\\App\\Http\\Controllers\\role_setup\SubModuleController@editSubModule');
+    Route::post('/sub-module/update', '\\App\\Http\\Controllers\\role_setup\SubModuleController@updateSubModule');
 
     Route::post('/module/setsession', 'SubModuleController@sessionset');
     Route::post('/submodule/modify/', 'SubModuleController@edit');
 
     //Assign modules
-    Route::get('/assign-module/create', 'role_setup\AssignModuleRoleController@create');
-    Route::post('/role/setsession', 'role_setup\AssignModuleRoleController@sessionset');
-    Route::post('/assign-module/assign', 'role_setup\AssignModuleRoleController@assignSubModule');
-    Route::get('/assign-module/view-sub-modules', 'role_setup\AssignModuleRoleController@displaySubModules');
-    Route::get('/assign-module/edit/{submoduleID}', 'role_setup\AssignModuleRoleController@editSubModule');
-    Route::post('/assign-module/update', 'role_setup\AssignModuleRoleController@updateSubModule');
+    Route::get('/assign-module/create', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@create');
+    Route::post('/role/setsession', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@sessionset');
+    Route::post('/assign-module/assign', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@assignSubModule');
+    Route::get('/assign-module/view-sub-modules', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@displaySubModules');
+    Route::get('/assign-module/edit/{submoduleID}', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@editSubModule');
+    Route::post('/assign-module/update', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@updateSubModule');
     //Assign Users
-    Route::get('/user-assign/create', 'role_setup\AssignUserRoleController@create');
-    //Route::post('/role/setsession',                     'role_setup\AssignUserRoleController@sessionset');
-    Route::post('/user-assign/assign', 'role_setup\AssignUserRoleController@assignUser');
-    Route::post('/user/display', 'role_setup\AssignUserRoleController@displayUser');
-    Route::get('/user/search/{q?}', 'role_setup\AssignUserRoleController@autocomplete');
+    Route::get('/user-assign/create', '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@create');
+    //Route::post('/role/setsession',                     '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@sessionset');
+    Route::post('/user-assign/assign', '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@assignUser');
+    Route::post('/user/display', '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@displayUser');
+    Route::get('/user/search/{q?}', '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@autocomplete');
 
     //Basic parameter
     Route::post('/basic/section', 'BasicParameterController@postDepartment');
@@ -350,30 +350,30 @@ Route::group(['middleware' => ['auth', 'force.password.change']], function () {
     Route::get('/staff/dependant', 'DependantController@getDependant');
 
     //user function
-    Route::get('/function/create', 'function_setup\FunctionController@create');
-    Route::post('/function/add', 'function_setup\FunctionController@addFunction');
-    Route::get('/function/viewmodules', 'function_setup\FunctionController@displayFunction');
-    Route::get('/function/edit/{functionID}', 'function_setup\FunctionController@editFunction');
-    Route::post('/function/update', 'function_setup\FunctionController@updateFunction');
-    Route::post('/function/modify', 'function_setup\FunctionController@edit');
+    Route::get('/function/create', '\\App\\Http\\Controllers\\function_setup\FunctionController@create');
+    Route::post('/function/add', '\\App\\Http\\Controllers\\function_setup\FunctionController@addFunction');
+    Route::get('/function/viewmodules', '\\App\\Http\\Controllers\\function_setup\FunctionController@displayFunction');
+    Route::get('/function/edit/{functionID}', '\\App\\Http\\Controllers\\function_setup\FunctionController@editFunction');
+    Route::post('/function/update', '\\App\\Http\\Controllers\\function_setup\FunctionController@updateFunction');
+    Route::post('/function/modify', '\\App\\Http\\Controllers\\function_setup\FunctionController@edit');
 
     //sub functions
-    Route::get('/sub-function/create', 'function_setup\SubFunctionController@create');
-    Route::post('/sub-function/add', 'function_setup\SubFunctionController@addSubFunction');
-    Route::get('/sub-function/view-sub-modules', 'function_setup\SubFunctionController@displaySubFunction');
-    Route::get('/sub-function/edit/{subfunctionID}', 'function_setup\SubFunctionController@editSubFunction');
-    Route::post('/sub-function/update', 'function_setup\SubFunctionController@updateSubFunction');
+    Route::get('/sub-function/create', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@create');
+    Route::post('/sub-function/add', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@addSubFunction');
+    Route::get('/sub-function/view-sub-modules', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@displaySubFunction');
+    Route::get('/sub-function/edit/{subfunctionID}', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@editSubFunction');
+    Route::post('/sub-function/update', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@updateSubFunction');
 
-    Route::post('/sub-function/modify', 'function_setup\SubFunctionController@edit');
-    Route::post('/sub-function/setsession', 'function_setup\SubFunctionController@sessionset');
+    Route::post('/sub-function/modify', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@edit');
+    Route::post('/sub-function/setsession', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@sessionset');
 
     //Assign functions
-    Route::get('/assign-function/create', 'function_setup\AssignFunctionRoleController@create');
-    // Route::post('/role/setsession',                         'function_setup\AssignFunctionRoleController@sessionset');
-    Route::post('/assign-function/assign', 'function_setup\AssignFunctionRoleController@assignSubFunction');
-    Route::get('/assign-function/view-sub-modules', 'function_setup\AssignFunctionRoleController@displaySubFunction');
-    Route::get('/assign-function/edit/{submoduleID}', 'function_setup\AssignFunctionRoleController@editSubModule');
-    Route::post('/assign-function/update', 'function_setup\AssignFunctionRoleController@updateSubFunction');
+    Route::get('/assign-function/create', '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@create');
+    // Route::post('/role/setsession',                         '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@sessionset');
+    Route::post('/assign-function/assign', '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@assignSubFunction');
+    Route::get('/assign-function/view-sub-modules', '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@displaySubFunction');
+    Route::get('/assign-function/edit/{submoduleID}', '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@editSubModule');
+    Route::post('/assign-function/update', '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@updateSubFunction');
 
     //company information
     Route::get('/company/info', 'BasicParameterController@companyInfo');

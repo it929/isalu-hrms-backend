@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\hr;
 
+
+
 use Illuminate\Http\Request;
 use App\Http\Requests;
 use Illuminate\Support\Facades\Auth;

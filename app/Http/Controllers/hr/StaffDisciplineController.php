@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 
 use Session;
 use Illuminate\Http\Request;
@@ -17,10 +17,16 @@ class StaffDisciplineController extends ParentController
 
     public function __construct(Request $request)
     {
-        $this->division = $request->session()->get('division');
+        $this->middleware(function ($request, $next) {
+        $this->middleware(function ($request, $next) {
+            $this->division = $request->session()->get('division');
         $this->divisionID = $request->session()->get('divisionID');
         Session::put('this_division', $this->division);
         //Session::forget('hideAlert');
+            return $next($request);
+                    return $next($request);
+        });
+    });
     }
     /**
      * Display a listing of the resource.

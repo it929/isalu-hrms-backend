@@ -5,11 +5,22 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 
-// Import routes from other files
-require __DIR__ . '/funds.php';
-require __DIR__ . '/hr.php';
-require __DIR__ . '/payroll.php';
-require __DIR__ . '/procurement.php';
+// Import routes from other files with their respective namespaces
+Route::namespace('hr')->group(function() {
+    require __DIR__ . '/hr.php';
+});
+
+Route::namespace('payroll')->group(function() {
+    require __DIR__ . '/payroll.php';
+});
+
+Route::namespace('funds')->group(function() {
+    require __DIR__ . '/funds.php';
+});
+
+Route::namespace('procurement')->group(function() {
+    require __DIR__ . '/procurement.php';
+});
 
 
 /*

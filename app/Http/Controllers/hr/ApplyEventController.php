@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 
 use Illuminate\Http\Request;
 use App\Http\Requests;
@@ -8,7 +8,7 @@ use Carbon\carbon;
 use DateTime;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use session;
+use Session;
 
 
 //use Illuminate\Support\Str;

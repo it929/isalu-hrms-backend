@@ -74,8 +74,8 @@ Route::get('/get-widgets/{roleId}', 'MainController@getWidgetsByRole');
 Route::get('/confirmation/alert', 'AlertController@confirmationList')->name('confirmAlert');
 Route::post('/confirmation/alerts', 'AlertController@confirmationAlertList')->name('confirmAlerts');
 Route::group(['middleware' => ['guest']], function () {
-    Route::get('login', 'Auth\LoginController@showLoginForm')->name('login');
-    Route::post('login', 'Auth\LoginController@login');
+    Route::get('login', '\App\Http\Controllers\Auth\LoginController@showLoginForm')->name('login');
+    Route::post('login', '\App\Http\Controllers\Auth\LoginController@login');
     //forget Password
     Route::get('forget-password', 'PasswordController@userForgetPassword');
     // Route::get('forget-password', [PasswordController::class, 'userForgetPassword']);
@@ -156,13 +156,13 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('/division/changeDivision', 'DivisionController@changeDivisionCreate');
     Route::post('/division/changeDivisionStore', 'DivisionController@changeDivisionStore');
 
-    Route::get('user/register', 'Auth\RegisterController@registerUser');
-    Route::post('user/store', 'Auth\RegisterController@storeUser');
+    Route::get('user/register', '\App\Http\Controllers\Auth\RegisterController@registerUser');
+    Route::post('user/store', '\App\Http\Controllers\Auth\RegisterController@storeUser');
 
     //edit user account
-    Route::get('/user/editAccount', 'Auth\RegisterController@editAccount');
-    Route::post('user/editAccount', 'Auth\RegisterController@editAccountStore');
-    Route::get('logout', 'Auth\LoginController@logout');
+    Route::get('/user/editAccount', '\App\Http\Controllers\Auth\RegisterController@editAccount');
+    Route::post('user/editAccount', '\App\Http\Controllers\Auth\RegisterController@editAccountStore');
+    Route::get('logout', '\App\Http\Controllers\Auth\LoginController@logout');
     //CREATE NEW STAFF / BIO-DATA
     Route::get('/staff/create', 'CreateStaffController@create');
     Route::post('/staff/store', 'CreateStaffController@store');
@@ -553,10 +553,10 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('/role/create', 'RoleController@create');
     Route::post('/role/create', 'RoleController@store');
     //Account lock
-    Route::get('/account/lock-all', 'AccountLockController@lockAll');
-    Route::post('/account/lock-all', 'AccountLockController@lockAllStore');
-    Route::get('/account/unlock', 'AccountLockController@unlockOne');
-    Route::post('/account/unlock', 'AccountLockController@unlockOneStore');
+    // Route::get('/account/lock-all', 'AccountLockController@lockAll');
+    // Route::post('/account/lock-all', 'AccountLockController@lockAllStore');
+    // Route::get('/account/unlock', 'AccountLockController@unlockOne');
+    // Route::post('/account/unlock', 'AccountLockController@unlockOneStore');
     //});
 
     //handling super admin priveledges
@@ -703,41 +703,41 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::post('/self-promotion/update', 'PromotionSelfController@PostPromotion');
 
     //user roles
-    Route::get('/user-role/create', 'role_setup\UserRoleController@create');
-    Route::post('/user-role/add', 'role_setup\UserRoleController@addRole');
-    Route::get('/user-role/viewroles', 'role_setup\UserRoleController@displayRoles');
-    Route::get('/user-role/edit/{roleID}', 'role_setup\UserRoleController@editRole');
-    Route::post('/user-role/update/', 'role_setup\UserRoleController@updateRole');
+    Route::get('/user-role/create', '\\App\\Http\\Controllers\\role_setup\UserRoleController@create');
+    Route::post('/user-role/add', '\\App\\Http\\Controllers\\role_setup\UserRoleController@addRole');
+    Route::get('/user-role/viewroles', '\\App\\Http\\Controllers\\role_setup\UserRoleController@displayRoles');
+    Route::get('/user-role/edit/{roleID}', '\\App\\Http\\Controllers\\role_setup\UserRoleController@editRole');
+    Route::post('/user-role/update/', '\\App\\Http\\Controllers\\role_setup\UserRoleController@updateRole');
     //user modules
-    Route::get('/module/create', 'role_setup\ModuleController@create');
-    Route::post('/module/add', 'role_setup\ModuleController@addModule');
-    Route::get('/module/viewmodules', 'role_setup\ModuleController@displayModules');
-    Route::get('/module/edit/{moduleID}', 'role_setup\ModuleController@editModule');
-    Route::post('/module/update', 'role_setup\ModuleController@updateModule');
+    Route::get('/module/create', '\\App\\Http\\Controllers\\role_setup\ModuleController@create');
+    Route::post('/module/add', '\\App\\Http\\Controllers\\role_setup\ModuleController@addModule');
+    Route::get('/module/viewmodules', '\\App\\Http\\Controllers\\role_setup\ModuleController@displayModules');
+    Route::get('/module/edit/{moduleID}', '\\App\\Http\\Controllers\\role_setup\ModuleController@editModule');
+    Route::post('/module/update', '\\App\\Http\\Controllers\\role_setup\ModuleController@updateModule');
     //sub modules
-    Route::get('/sub-module/create', 'role_setup\SubModuleController@create');
-    Route::post('/sub-module/add', 'role_setup\SubModuleController@addSubModule');
-    Route::get('/sub-module/view-sub-modules', 'role_setup\SubModuleController@displaySubModules');
-    Route::get('/sub-module/edit/{submoduleID}', 'role_setup\SubModuleController@editSubModule');
-    Route::post('/sub-module/update', 'role_setup\SubModuleController@updateSubModule');
-    Route::post('/sub-module/update', 'role_setup\SubModuleController@updateSubModule');
+    Route::get('/sub-module/create', '\\App\\Http\\Controllers\\role_setup\SubModuleController@create');
+    Route::post('/sub-module/add', '\\App\\Http\\Controllers\\role_setup\SubModuleController@addSubModule');
+    Route::get('/sub-module/view-sub-modules', '\\App\\Http\\Controllers\\role_setup\SubModuleController@displaySubModules');
+    Route::get('/sub-module/edit/{submoduleID}', '\\App\\Http\\Controllers\\role_setup\SubModuleController@editSubModule');
+    Route::post('/sub-module/update', '\\App\\Http\\Controllers\\role_setup\SubModuleController@updateSubModule');
+    Route::post('/sub-module/update', '\\App\\Http\\Controllers\\role_setup\SubModuleController@updateSubModule');
 
     Route::post('/module/setsession', 'SubModuleController@sessionset');
     Route::post('/submodule/modify/', 'SubModuleController@edit');
 
     //Assign modules
-    Route::get('/assign-module/create', 'role_setup\AssignModuleRoleController@create');
-    Route::post('/role/setsession', 'role_setup\AssignModuleRoleController@sessionset');
-    Route::post('/assign-module/assign', 'role_setup\AssignModuleRoleController@assignSubModule');
-    Route::get('/assign-module/view-sub-modules', 'role_setup\AssignModuleRoleController@displaySubModules');
-    Route::get('/assign-module/edit/{submoduleID}', 'role_setup\AssignModuleRoleController@editSubModule');
-    Route::post('/assign-module/update', 'role_setup\AssignModuleRoleController@updateSubModule');
+    Route::get('/assign-module/create', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@create');
+    Route::post('/role/setsession', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@sessionset');
+    Route::post('/assign-module/assign', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@assignSubModule');
+    Route::get('/assign-module/view-sub-modules', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@displaySubModules');
+    Route::get('/assign-module/edit/{submoduleID}', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@editSubModule');
+    Route::post('/assign-module/update', '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@updateSubModule');
 
     //Assign Users
 
-    Route::post('/user-assign/assign', 'role_setup\AssignUserRoleController@assignUser');
-    Route::post('/user/display', 'role_setup\AssignUserRoleController@displayUser');
-    Route::get('/user/search/{q?}', 'role_setup\AssignUserRoleController@autocomplete');
+    Route::post('/user-assign/assign', '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@assignUser');
+    Route::post('/user/display', '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@displayUser');
+    Route::get('/user/search/{q?}', '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@autocomplete');
 
 
 
@@ -761,6 +761,22 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('/calculate-end-date', [LeaveCreateController::class, 'calculateEndDate']);
 
 
+
+
+    //hod approve & reject leave
+    Route::get('leave/hod/approve/{id}', [LeaveCreateController::class, 'hodApprove'])
+        ->name('hod.approve');
+    Route::get('leave/hod/reject/{id}', [LeaveCreateController::class, 'hodReject'])
+        ->name('hod.reject');
+
+    //admin approve & reject leave
+    Route::get('leave/admin/approve/{id}', [LeaveCreateController::class, 'adminApprove'])
+        ->name('admin.approve');
+    Route::get('leave/admin/reject/{id}', [LeaveCreateController::class, 'adminReject'])
+        ->name('admin.reject');
+
+    /////// Start Leave Of Absence /////////
+
     //loa management
 
     Route::get('/apply/loa',                 [LeaveCreateController::class, 'ApplyLoa']);
@@ -768,17 +784,56 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('/calculate-end-date', [LeaveCreateController::class, 'calculateEndDate']);
     Route::get('/leave/loa-list', [LeaveCreateController::class, 'loaList'])->name('loa.list');
 
-    //hod approve & reject leave
-    Route::get('leave/hod/approve/{id}', [LeaveCreateController::class, 'hodApprove'])
-     ->name('hod.approve');
-    Route::get('leave/hod/reject/{id}', [LeaveCreateController::class, 'hodReject'])
-     ->name('hod.reject');
+    //hod approve & reject leave of absence
+    Route::get('leave/hod/approve-loa/{id}', [LeaveCreateController::class, 'hodApproveLoa'])
+        ->name('hod.approve-loa');
+    Route::get('leave/hod/reject-loa/{id}', [LeaveCreateController::class, 'hodRejectLoa'])
+        ->name('hod.reject-loa');
 
-     //admin approve & reject leave
-    Route::get('leave/admin/approve/{id}', [LeaveCreateController::class, 'adminApprove'])
-     ->name('admin.approve');
-    Route::get('leave/admin/reject/{id}', [LeaveCreateController::class, 'adminReject'])
-     ->name('admin.reject');
+    //admin approve & reject leave
+    Route::get('leave/admin/approve-loa/{id}', [LeaveCreateController::class, 'adminApproveLoa'])
+        ->name('admin.approve-loa');
+    Route::get('leave/admin/reject-loa/{id}', [LeaveCreateController::class, 'adminRejectLoa'])
+        ->name('admin.reject-loa');
+
+    // Show edit form (or modal data)
+    Route::get('/loa/edit/{id}', [LeaveCreateController::class, 'editLoa'])->name('loa.edit');
+
+    // Submit update
+    Route::post('/loa/update/{id}', [LeaveCreateController::class, 'updateLoa'])->name('loa.update');
+
+    //// End of leave of absence
+
+
+     /////// Start IOU /////////
+
+
+    //IOU management
+
+    Route::get('/apply/iou',                 [LeaveCreateController::class, 'ApplyIOU']);
+    Route::post('/saveapply/loa',                       [LeaveCreateController::class, 'saveApplyLoa']);
+    Route::get('/calculate-end-date', [LeaveCreateController::class, 'calculateEndDate']);
+    Route::get('/leave/loa-list', [LeaveCreateController::class, 'loaList'])->name('loa.list');
+
+    //hod approve & reject leave of absence
+    Route::get('leave/hod/approve-loa/{id}', [LeaveCreateController::class, 'hodApproveLoa'])
+        ->name('hod.approve-loa');
+    Route::get('leave/hod/reject-loa/{id}', [LeaveCreateController::class, 'hodRejectLoa'])
+        ->name('hod.reject-loa');
+
+    //admin approve & reject leave
+    Route::get('leave/admin/approve-loa/{id}', [LeaveCreateController::class, 'adminApproveLoa'])
+        ->name('admin.approve-loa');
+    Route::get('leave/admin/reject-loa/{id}', [LeaveCreateController::class, 'adminRejectLoa'])
+        ->name('admin.reject-loa');
+
+    // Show edit form (or modal data)
+    Route::get('/loa/edit/{id}', [LeaveCreateController::class, 'editLoa'])->name('loa.edit');
+
+    // Submit update
+    Route::post('/loa/update/{id}', [LeaveCreateController::class, 'updateLoa'])->name('loa.update');
+
+    //// End of leave of absence
 
 
     //leave management
@@ -851,30 +906,30 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::post('/export/nhf', 'ReportController@exportNHF');
 
     //user function
-    Route::get('/function/create', 'function_setup\FunctionController@create');
-    Route::post('/function/add', 'function_setup\FunctionController@addFunction');
-    Route::get('/function/viewmodules', 'function_setup\FunctionController@displayFunction');
-    Route::get('/function/edit/{functionID}', 'function_setup\FunctionController@editFunction');
-    Route::post('/function/update', 'function_setup\FunctionController@updateFunction');
-    Route::post('/function/modify', 'function_setup\FunctionController@edit');
+    Route::get('/function/create', '\\App\\Http\\Controllers\\function_setup\FunctionController@create');
+    Route::post('/function/add', '\\App\\Http\\Controllers\\function_setup\FunctionController@addFunction');
+    Route::get('/function/viewmodules', '\\App\\Http\\Controllers\\function_setup\FunctionController@displayFunction');
+    Route::get('/function/edit/{functionID}', '\\App\\Http\\Controllers\\function_setup\FunctionController@editFunction');
+    Route::post('/function/update', '\\App\\Http\\Controllers\\function_setup\FunctionController@updateFunction');
+    Route::post('/function/modify', '\\App\\Http\\Controllers\\function_setup\FunctionController@edit');
 
     //sub functions
-    Route::get('/sub-function/create', 'function_setup\SubFunctionController@create');
-    Route::post('/sub-function/add', 'function_setup\SubFunctionController@addSubFunction');
-    Route::get('/sub-function/view-sub-modules', 'function_setup\SubFunctionController@displaySubFunction');
-    Route::get('/sub-function/edit/{subfunctionID}', 'function_setup\SubFunctionController@editSubFunction');
-    Route::post('/sub-function/update', 'function_setup\SubFunctionController@updateSubFunction');
+    Route::get('/sub-function/create', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@create');
+    Route::post('/sub-function/add', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@addSubFunction');
+    Route::get('/sub-function/view-sub-modules', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@displaySubFunction');
+    Route::get('/sub-function/edit/{subfunctionID}', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@editSubFunction');
+    Route::post('/sub-function/update', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@updateSubFunction');
 
-    Route::post('/sub-function/modify', 'function_setup\SubFunctionController@edit');
-    Route::post('/sub-function/setsession', 'function_setup\SubFunctionController@sessionset');
+    Route::post('/sub-function/modify', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@edit');
+    Route::post('/sub-function/setsession', '\\App\\Http\\Controllers\\function_setup\SubFunctionController@sessionset');
 
     //Assign functions
-    Route::get('/assign-function/create', 'function_setup\AssignFunctionRoleController@create');
-    // Route::post('/role/setsession',                         'function_setup\AssignFunctionRoleController@sessionset');
-    Route::post('/assign-function/assign', 'function_setup\AssignFunctionRoleController@assignSubFunction');
-    Route::get('/assign-function/view-sub-modules', 'function_setup\AssignFunctionRoleController@displaySubFunction');
-    Route::get('/assign-function/edit/{submoduleID}', 'function_setup\AssignFunctionRoleController@editSubModule');
-    Route::post('/assign-function/update', 'function_setup\AssignFunctionRoleController@updateSubFunction');
+    Route::get('/assign-function/create', '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@create');
+    // Route::post('/role/setsession',                         '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@sessionset');
+    Route::post('/assign-function/assign', '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@assignSubFunction');
+    Route::get('/assign-function/view-sub-modules', '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@displaySubFunction');
+    Route::get('/assign-function/edit/{submoduleID}', '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@editSubModule');
+    Route::post('/assign-function/update', '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@updateSubFunction');
 
     //company information
     Route::get('/company/info', 'BasicParameterController@companyInfo');

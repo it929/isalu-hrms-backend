@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\hr;
 
+use Session;
+
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;

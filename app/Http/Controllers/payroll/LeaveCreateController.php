@@ -1,12 +1,13 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
+use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
 use App\Http\Requests;
 use DB;
 use Auth;
-use session;
+use Session;
 
 
 class LeaveCreateController extends Controller

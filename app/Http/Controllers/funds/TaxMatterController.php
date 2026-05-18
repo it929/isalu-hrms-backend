@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\funds;
 
+
+
 use Illuminate\Http\Request;
 use App\Http\Requests;
 use App\Http\Controllers;
@@ -17,7 +19,10 @@ class TaxMatterController extends functionController
 
 	public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         $this->middleware('auth');
+                return $next($request);
+        });
     }
     
     public function getTaxDescription()

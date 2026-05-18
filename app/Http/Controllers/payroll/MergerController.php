@@ -1,5 +1,5 @@
 <?php
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
 use App\Http\Requests;
 use App\Role;
 use App\User;
@@ -25,9 +25,12 @@ class MergerController extends ParentController
  */
 //public $division; 
 public function __construct(Request $request)
-{
+    {
+        $this->middleware(function ($request, $next) {
   $this->middleware('auth');
-}
+            return $next($request);
+        });
+    }
 
 public function index()
 {

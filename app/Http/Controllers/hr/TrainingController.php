@@ -1,13 +1,14 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
+use App\Http\Controllers\Controller;
 
 use File;
 
 use Session;
 use DateTime;
 use Carbon\Carbon;
-// use DB;
+// 
 use App\Models\User;
 use App\Http\Requests;
 use Illuminate\Http\Request;

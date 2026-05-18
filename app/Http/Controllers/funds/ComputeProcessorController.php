@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
 
 use Illuminate\Http\Request;
 use DB;
@@ -20,12 +20,15 @@ class ComputeProcessorController extends ParentController
 	
 	public function __construct()
 	{
-		$this->month = date("n", strtotime(Session::get('activeMonth')));
+        $this->middleware(function ($request, $next) {
+            $this->month = date("n", strtotime(Session::get('activeMonth')));
 		$this->year = Session::get('activeYear');
 		$this->divisionID = Session::get('divisionID');
 		$this->division = Session::get('division');
 		$this->details = Auth::user()->name.", ".$this->division;
-	}
+            return $next($request);
+        });
+    }
 
 	public function computeAll(Request $request)
 	{

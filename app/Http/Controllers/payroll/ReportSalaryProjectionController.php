@@ -17,7 +17,10 @@ class ReportSalaryProjectionController extends ParentController
   
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         
+                return $next($request);
+        });
     }
 
 

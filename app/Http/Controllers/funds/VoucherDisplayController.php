@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\funds;
 
+
+
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -12,8 +14,11 @@ class VoucherDisplayController extends BasefunctionController
 
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         // $this->activeMonth = $request->session()->get('activeMonth');
         // $this->activeYear = $request->session()->get('activeYear');
+                return $next($request);
+        });
     }
 
     public function createContractVoucher()

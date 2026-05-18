@@ -1,6 +1,7 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Http\Requests;
 use Illuminate\Support\Facades\Auth;
@@ -9,10 +10,13 @@ use Illuminate\Support\Facades\DB;
 class ArchiveFileMovementController extends Controller
 {
     public function __construct(Request $request)
-    {   
+    {
+        $this->middleware(function ($request, $next) {   
         $this->middleware('auth');
         $this->division    = $request->session()->get('division');
         $this->divisionID  = $request->session()->get('divisionID');
+                return $next($request);
+        });
     }
 
     public function create()

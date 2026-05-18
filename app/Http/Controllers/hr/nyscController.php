@@ -1,12 +1,12 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 
 use DB;
 //use Auth;
 use Auth;
 use Carbon;
-use session;
+use Session;
 use App\Http\Requests;
 use Illuminate\Http\Request;
 use App\Notifications\SentFile;
@@ -18,8 +18,11 @@ class nyscController extends functionController
     private   $category = ['Nysc', 'IT'];
     public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $this->middleware('auth');
         $this->username = Session::get('userName');
+            return $next($request);
+        });
     }
 
 

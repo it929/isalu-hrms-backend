@@ -1,17 +1,21 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
+use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
 use DB;
 use Auth;
-use session;
+use Session;
 class TimeVariablesController extends Controller
 {
     	public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $this->middleware('auth');
         $this->username = Session::get('userName');
+            return $next($request);
+        });
     }//
  
     public function index(Request $request){

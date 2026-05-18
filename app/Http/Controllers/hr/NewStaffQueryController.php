@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 
 use Redirect;
 use Illuminate\Support\Facades\Request;

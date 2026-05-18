@@ -1,6 +1,7 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
+use App\Http\Controllers\Controller;
 
 use Illuminate\Support\Facades\Request;
 use Carbon\Carbon;

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\payroll;
 
+
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -11,8 +13,11 @@ class BasicParameterController extends functionController
 {
     public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $this->middleware('auth');
         $this->username = Session::get('userName');
+            return $next($request);
+        });
     } //
 
     public function Usermanagement(Request $request)

@@ -1,0 +1,21 @@
+
+   RuntimeException 
+
+  Session store not set on request.
+
+  at C:\wamp64\www\Isalu HRMS\vendor\laravel\framework\src\Illuminate\Http\Request.php:515
+    511▕      */
+    512▕     public function session()
+    513▕     {
+    514▕         if (! $this->hasSession()) {
+  ➜ 515▕             throw new RuntimeException('Session store not set on request.');
+    516▕         }
+    517▕ 
+    518▕         return $this->session;
+    519▕     }
+
+  1   C:\wamp64\www\Isalu HRMS\app\Http\Controllers\function_setup\AssignFunctionRoleController.php:14
+      Illuminate\Http\Request::session()
+
+  2   [internal]:0
+      App\Http\Controllers\function_setup\AssignFunctionRoleController::__construct(Object(Illuminate\Http\Request))

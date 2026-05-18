@@ -16,9 +16,12 @@ class StaffStatusController extends ParentController
 
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
 
         $this->division    = session('division'); //$request->session()->get('division');
         $this->divisionID  = session('divisionID'); //$request->session()->get('divisionID');
+                return $next($request);
+        });
     }
 
     public function curDivision($userId)

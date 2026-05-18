@@ -9,9 +9,12 @@ use session;
 
 class AssignFunctionRoleController extends Controller
 {
-     public function __construct(Request $request)
+     public function __construct()
     {   
-        $this->roleid = $request->session()->get('current_role');
+        $this->middleware(function ($request, $next) {
+            $this->roleid = $request->session()->get('current_role');
+            return $next($request);
+        });
     }
 
     public function create()

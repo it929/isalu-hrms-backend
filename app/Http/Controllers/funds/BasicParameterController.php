@@ -4,7 +4,7 @@ namespace App\Http\Controllers\funds;
 
 use Illuminate\Http\Request;
 use App\Http\Requests;
-use session;
+use Session;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session as FacadesSession;
@@ -13,8 +13,11 @@ class BasicParameterController extends functionController
 {
     public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $this->middleware('auth');
         $this->username = FacadesSession::get('userName');
+            return $next($request);
+        });
     } //
 
     public function Usermanagement(Request $request)

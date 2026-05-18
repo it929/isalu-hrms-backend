@@ -1,5 +1,5 @@
 <?php
-// namespace App\Http\Controllers;
+// namespace App\Http\Controllers\payroll;
 namespace App\Http\Controllers\payroll;
 
 use App\Http\Requests;
@@ -14,7 +14,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use session;
+use Session;
 
 class SalaryScaleController extends Controller
 {

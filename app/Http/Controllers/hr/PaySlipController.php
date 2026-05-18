@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 
 use App\Http\Requests;
 use App\Role;
@@ -21,10 +21,13 @@ class PaySlipController extends ParentController
    
 public $division; 
  public function __construct(Request $request)
-{
+    {
+        $this->middleware(function ($request, $next) {
 $this->division = $request->session()->get('division');
 $this->divisionID = $request->session()->get('divisionID');
-}
+            return $next($request);
+        });
+    }
   public function create()
   {
      $data['CourtInfo']=$this->CourtInfo();

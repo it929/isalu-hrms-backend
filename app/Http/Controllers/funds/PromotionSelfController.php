@@ -1,19 +1,22 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
 
 use Illuminate\Http\Request;
 //use Auth;
 use App\Http\Requests;
 use DB;
 use Auth;
-use session;
+use Session;
 class PromotionSelfController extends functionController
 {
 	public function __construct()
     {
-		$this->username = Session::get('userName');
+        $this->middleware(function ($request, $next) {
+            $this->username = Session::get('userName');
         $this->middleware('auth');
+            return $next($request);
+        });
     }//
 	
 	

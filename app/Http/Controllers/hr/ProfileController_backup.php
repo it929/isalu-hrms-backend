@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 
 use Illuminate\Http\Request;
 use File;
@@ -15,10 +15,16 @@ class ProfileController extends ParentController
 
     public function __construct(Request $request)
     {
-        $this->division = $request->session()->get('division');
+        $this->middleware(function ($request, $next) {
+        $this->middleware(function ($request, $next) {
+            $this->division = $request->session()->get('division');
         $this->divisionID = session('divisionID');
         Session::put('this_division', $this->division);
         //Session::forget('hideAlert');
+            return $next($request);
+                    return $next($request);
+        });
+    });
     }
     
     public function viewConfiguration()

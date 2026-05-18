@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\funds;
 
+use Session;
+
 //use App\Http\Requests;
 use Illuminate\Support\Facades\Request;
 use App\Models\Contractor;

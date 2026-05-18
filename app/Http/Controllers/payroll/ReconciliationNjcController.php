@@ -1,5 +1,7 @@
 <?php
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
+
+
 use App\Http\Requests;
 use App\Permission;
 use Illuminate\Http\Request;

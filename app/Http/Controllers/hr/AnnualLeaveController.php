@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Input;
@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Input;
 use App\Http\Requests;
 use DB;
 use Auth;
-use session;
+use Session;
 use Carbon\carbon;
 
 
@@ -16,8 +16,11 @@ class AnnualLeaveController extends functionController
 {
 	public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $this->middleware('auth');
         $this->username = Session::get('userName');
+            return $next($request);
+        });
     }//
 
     

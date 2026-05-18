@@ -1,13 +1,14 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
+use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
 //use Auth;
 use App\Http\Requests;
 use DB;
 use Auth;
-use session;
+use Session;
 class StaffDesignationController extends Controller
 {
 

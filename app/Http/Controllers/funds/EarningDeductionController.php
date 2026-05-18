@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
 use Illuminate\Support\Facades\Log;
 
 use Illuminate\Http\Request;

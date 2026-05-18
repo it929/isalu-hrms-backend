@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
 
 use Illuminate\Http\Request;
 //use Auth;
 use App\Http\Requests;
 use DB;
 use Auth;
-use session;
+use Session;
 use Carbon\carbon;
 use Illuminate\Support\Facades\Input;
 
@@ -15,8 +15,11 @@ class AnnualLeaveController extends functionController
 {
 	public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $this->middleware('auth');
         $this->username = Session::get('userName');
+            return $next($request);
+        });
     }//
     
     public function getNotification(Request $request)

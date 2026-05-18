@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\funds;
 
+
+
 use App\Helpers\FileUploadHelper;
 use Illuminate\Http\Request;
 use App\Http\Requests;
@@ -22,8 +24,11 @@ class CommentDisplayController extends BasefunctionController
 
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         // $this->activeMonth = $request->session()->get('activeMonth');
         // $this->activeYear = $request->session()->get('activeYear');
+                return $next($request);
+        });
     }
 
 

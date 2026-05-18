@@ -6,7 +6,7 @@ namespace App\Http\Controllers\hr;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-//use Auth;
+//
 use App\Http\Requests;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\hr;
 
+
+
 use Illuminate\Http\Request;
 use App\Helpers\FileUploadHelper;
 use Symfony\Component\HttpFoundation\File\UploadedFile as SymfonyUploadedFile;
@@ -94,6 +96,8 @@ class DocumentationController extends DatabaseDocumentationController
             $data['StaffNames'] = DB::table('tblcandidate')->where('candidate_status', 1)->where('candidateID', $id)->first();
             $data['progress'] = '';
             $data['prog'] = '';
+            
+            return redirect('http://localhost:3000/dashboard/hr/employees/documentation/' . $perID->ID);
         } else {
 
             $perID = DB::table('tblper')->insertGetId([
@@ -115,9 +119,9 @@ class DocumentationController extends DatabaseDocumentationController
             $data['StaffNames'] = DB::table('tblcandidate')->where('candidate_status', 1)->where('candidateID', $id)->first();
             $data['progress'] = '';
             $data['prog'] = '';
+            
+            return redirect('http://localhost:3000/dashboard/hr/employees/documentation/' . $perID);
         }
-        return redirect('/documentation-basic-info');
-        // return view('hr.documentation.startDoc', $data);
     }
 
     public function constinueStaffDocumentation($id)
@@ -133,7 +137,8 @@ class DocumentationController extends DatabaseDocumentationController
         $data['staffID'] = '';
         $data['progress'] = '';
         $data['prog'] = '';
-        return redirect('/documentation-basic-info');
+        
+        return redirect('http://localhost:3000/dashboard/hr/employees/documentation/' . $perID->ID);
     }
 
     public function index()
@@ -289,18 +294,27 @@ class DocumentationController extends DatabaseDocumentationController
     public function submitBasicInfo(Request $request)
     {
         // dd($request->all());
-        $fileNox        =   $request->input('fileNox');
         $fileNo         =   Session::get('fileNo');
+        $fileNox        =   $request->input('fileNox');
+        
+        if (empty($fileNox) && !empty($fileNo)) {
+            $existing = DB::table('tblper')->where('ID', $fileNo)->value('fileNo');
+            if (!empty($existing)) {
+                $fileNox = $existing;
+            } else {
+                $fileNox = $this->generateNextStaffFileNo();
+            }
+        }
+        
         $title          =   $request->input('title');
         $gender         =   $request->input('gender');
         $dateofBirth    =   $request->input('dateofBirth');
         $placeofBirth   =   $request->input('placeofBirth');
-        // $employmentType =   $request->input('employmentType');
+        
         $employmentType =   1;
         $hremploymentType =   $request->input('hremploymentType');
         $officeshift         =   $request->input('officeshift');
-        // $grade          =   $request->input('grade');
-        // $step           =   $request->input('step');
+        
         $department     =   $request->input('department');
         $departmentID     =   $request->input('department');
         $designation    =   $request->input('designation');
@@ -1024,9 +1038,7 @@ class DocumentationController extends DatabaseDocumentationController
         if (!empty($fileNo)) {
             $this->accountSetUp($fileNo, $bankID, $accountNumber);
 
-            //add only new staff in candidate table to half payment if they do not already exist
-            //check is staff is in halfpayment
-            $existingCandidate = DB::table('half_pay_staff')->where('staffid', $fileNo)->where('interviewCandidateId', $myPer->interviewCandidateId)->first();
+            $existingCandidate = DB::table('half_pay_staff')->where('staffid', $fileNo)->first();
             if (!$existingCandidate) {
                 $data['PayrollActivePeriod'] = $this->PayrollActivePeriod(9);
                 $insert = DB::table('half_pay_staff')->insert(array(
@@ -1034,8 +1046,6 @@ class DocumentationController extends DatabaseDocumentationController
                     'interviewCandidateId' => $myPer->interviewCandidateId,
                     'fileNo'      => $myPer->fileNo,
                     'courtID'                => 9,
-                    // 'old_grade'              => $myPer->grade,
-                    // 'old_step'               => $myPer->step,
                     'due_date'               => $myPer->doj,
                     'month_payment'          => $data['PayrollActivePeriod']->month,
                     'year_payment'           => $data['PayrollActivePeriod']->year,

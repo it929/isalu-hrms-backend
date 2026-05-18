@@ -1,5 +1,8 @@
 <?php
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
+use App\Http\Controllers\Controller;
+
+
 use Illuminate\Http\Request;
 use App\Http\Requests;
 use App\Http\Controllers;
@@ -13,6 +16,7 @@ class ReportController extends Controller
 {
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         // $this->court    = $request->session()->get('current_court');
 
         //get search criteria sessions
@@ -22,6 +26,8 @@ class ReportController extends Controller
         //    $this->sess_fileNo     = $request->session()->get('search_fileNo');
          
         
+                return $next($request);
+        });
     }
     
     public function curDivision($userId){

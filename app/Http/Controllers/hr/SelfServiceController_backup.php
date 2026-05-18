@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 
 use Illuminate\Http\Request;
 use File;
@@ -16,10 +16,16 @@ class SelfServiceController extends ParentController
 
     public function __construct(Request $request)
     {
-        $this->division = $request->session()->get('division');
+        $this->middleware(function ($request, $next) {
+        $this->middleware(function ($request, $next) {
+            $this->division = $request->session()->get('division');
         $this->divisionID = $request->session()->get('divisionID');
         Session::put('this_division', $this->division);
         //Session::forget('hideAlert');
+            return $next($request);
+                    return $next($request);
+        });
+    });
     }
 
     public function view()

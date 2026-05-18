@@ -1,0 +1,42 @@
+
+   Symfony\Component\ErrorHandler\Error\FatalError 
+
+  Cannot use Illuminate\Support\Facades\Session as Session because the name is already in use
+
+  at C:\wamp64\www\Isalu HRMS\app\Http\Controllers\payroll\ReportController.php:12
+      8▕ use App\Http\Controllers;
+      9▕ use Illuminate\Support\Str;
+     10▕ use Illuminate\Support\Facades\Auth;
+     11▕ use Illuminate\Support\Facades\DB;
+  ➜  12▕ use Illuminate\Support\Facades\Session;
+     13▕ use Fpdf;
+     14▕ 
+     15▕ class ReportController extends Controller
+     16▕ {
+
+  1   C:\wamp64\www\Isalu HRMS\vendor\laravel\framework\src\Illuminate\Foundation\Bootstrap\HandleExceptions.php:222
+      Symfony\Component\ErrorHandler\Error\FatalError::__construct("'Cannot use Illuminate\\Support\\Facades\\Session as Session because the name is already in use'", "0", "['type' => 64, 'message' => 'Cannot use Illuminate\\Support\\Facades\\Session as Session because the name is already in use', 'file' => 'C:\\wamp64\\www\\Isalu HRMS\\app\\Http\\Controllers\\payroll\\ReportController.php', 'line' => 12]", "0", "???", "???")
+
+  2   C:\wamp64\www\Isalu HRMS\vendor\laravel\framework\src\Illuminate\Foundation\Bootstrap\HandleExceptions.php:209
+      Illuminate\Foundation\Bootstrap\HandleExceptions::fatalErrorFromPhpError("['type' => 64, 'message' => 'Cannot use Illuminate\\Support\\Facades\\Session as Session because the name is already in use', 'file' => 'C:\\wamp64\\www\\Isalu HRMS\\app\\Http\\Controllers\\payroll\\ReportController.php', 'line' => 12]", "0")
+
+   Whoops\Exception\ErrorException 
+
+  Cannot use Illuminate\Support\Facades\Session as Session because the name is already in use
+
+  at C:\wamp64\www\Isalu HRMS\app\Http\Controllers\payroll\ReportController.php:12
+      8▕ use App\Http\Controllers;
+      9▕ use Illuminate\Support\Str;
+     10▕ use Illuminate\Support\Facades\Auth;
+     11▕ use Illuminate\Support\Facades\DB;
+  ➜  12▕ use Illuminate\Support\Facades\Session;
+     13▕ use Fpdf;
+     14▕ 
+     15▕ class ReportController extends Controller
+     16▕ {
+
+  1   C:\wamp64\www\Isalu HRMS\vendor\filp\whoops\src\Whoops\Run.php:510
+      Whoops\Run::handleError("Cannot use Illuminate\Support\Facades\Session as Session because the name is already in use", "C:\wamp64\www\Isalu HRMS\app\Http\Controllers\payroll\ReportController.php")
+
+  2   [internal]:0
+      Whoops\Run::handleShutdown()

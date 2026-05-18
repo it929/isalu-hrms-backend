@@ -1,6 +1,6 @@
 <?php
 //
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 use Session;
 use Illuminate\Http\Request;
 use App\Http\Requests;
@@ -12,7 +12,10 @@ class InactiveStaffController extends ParentController
 {
 	public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
     	$this->divisionID = $request->session()->get('divisionID');
+                return $next($request);
+        });
     }
     public function loadView()
    {

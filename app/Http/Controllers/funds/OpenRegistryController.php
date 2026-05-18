@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\funds;
 
 use Session;
 use Illuminate\Http\Request;
@@ -16,8 +16,11 @@ class OpenRegistryController extends NewStaffQueryController
 {
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         $this->division    = $request->session()->get('division');
         $this->divisionID  = $request->session()->get('divisionID');
+                return $next($request);
+        });
     }  
 
 

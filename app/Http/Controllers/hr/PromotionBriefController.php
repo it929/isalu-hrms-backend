@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\hr;
 
+
+
 use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
@@ -13,8 +15,11 @@ class PromotionBriefController extends Controller
 {
     public function __construct()
     {
-        // $this->username = Session::get('userName');
+        $this->middleware(function ($request, $next) {
+            // $this->username = Session::get('userName');
         $this->middleware('auth');
+            return $next($request);
+        });
     }
 
     public function promotionBrief($id)

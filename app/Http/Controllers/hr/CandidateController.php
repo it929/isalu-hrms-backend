@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\hr;
 
+
+
 use Illuminate\Http\Request;
 use App\Http\Requests;
 use Illuminate\Support\Facades\Auth;
@@ -19,8 +21,11 @@ class CandidateController extends functionController
 {
     public function __construct()
     {
-        $this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $this->middleware('auth');
         $this->username = Session::get('userName');
+            return $next($request);
+        });
     }
 
     public function candidate()

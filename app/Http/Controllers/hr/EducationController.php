@@ -14,9 +14,15 @@ class EducationController extends ParentController
 {
     public function __construct(Request $request)
     {
-        // $this->division    = $request->session()->get('division');
+        $this->middleware(function ($request, $next) {
+        $this->middleware(function ($request, $next) {
+            // $this->division    = $request->session()->get('division');
         // $this->divisionID  = $request->session()->get('divisionID');
         $this->division = Session::get('division');
+            return $next($request);
+                    return $next($request);
+        });
+    });
     }
 
     public function index($staffid = Null)

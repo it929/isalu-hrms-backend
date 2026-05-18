@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
 
 use App\Http\Requests;
 use App\Role;
@@ -30,11 +30,14 @@ class ConPayrollReportControllerRevamp extends ParentController
 
   public $division;
   public function __construct(Request $request)
-  {
+    {
+        $this->middleware(function ($request, $next) {
     set_time_limit ( 0 );
     $this->division = $request->session()->get('division');
     $this->divisionID = $request->session()->get('divisionID');
-  }
+              return $next($request);
+        });
+    }
 
 //   public function create()
 //   {

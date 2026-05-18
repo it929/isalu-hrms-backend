@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
 use Illuminate\Http\Request;
 use App\Http\Requests;
 use App\Http\Controllers;
@@ -19,8 +19,11 @@ class VoucherDisplayController extends BasefunctionController
 
 	public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         // $this->activeMonth = $request->session()->get('activeMonth');
         // $this->activeYear = $request->session()->get('activeYear');
+                return $next($request);
+        });
     }
 
 

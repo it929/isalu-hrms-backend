@@ -1,14 +1,14 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\hr;
 
 use Illuminate\Http\Request;
 use File;
 use App\Http\Requests;
 use Carbon\Carbon;
-use session;
+use Session;
 use DB;
 
 class functionezeController extends ParentController

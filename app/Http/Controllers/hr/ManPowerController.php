@@ -7,7 +7,7 @@ use File;
 use App\Http\Requests;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Session;
-// use Session;
+// 
 use DB;
 
 class ManPowerController extends ParentController
@@ -15,8 +15,11 @@ class ManPowerController extends ParentController
 
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         // $this->division = $request->session()->get('division');
         // $this->divisionID = $request->session()->get('divisionID');
+                return $next($request);
+        });
     }
 
     public function view_CENTRAL_LIST()

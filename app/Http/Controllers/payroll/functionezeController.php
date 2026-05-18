@@ -1,14 +1,14 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\payroll;
 
 use Illuminate\Http\Request;
 use File;
 use App\Http\Requests;
 use Carbon\Carbon;
-use session;
+use Session;
 use DB;
 
 class functionezeController extends ParentController

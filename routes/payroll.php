@@ -87,7 +87,7 @@ Route::group(['middleware' => ['auth']], function () {
     //edit user account
     Route::get('/user/editAccount', [UserController::class, 'editAccount']);
     Route::post('user/editAccount', [UserController::class, 'editAccountStore']);
-    Route::get('logout',                                     'Auth\AuthController@logout');
+    Route::get('logout',                                     '\App\Http\Controllers\Auth\AuthController@logout');
     //CREATE NEW STAFF / BIO-DATA
     Route::get('/staff/create',                             'CreateStaffController@create');
     Route::post('/staff/store',                             'CreateStaffController@store');
@@ -542,10 +542,10 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('/role/create', 'RoleController@create');
     Route::post('/role/create', 'RoleController@store');
     //Account lock
-    Route::get('/account/lock-all',           'AccountLockController@lockAll');
-    Route::post('/account/lock-all',           'AccountLockController@lockAllStore');
-    Route::get('/account/unlock',             'AccountLockController@unlockOne');
-    Route::post('/account/unlock',             'AccountLockController@unlockOneStore');
+    // Route::get('/account/lock-all',           'AccountLockController@lockAll');
+    // Route::post('/account/lock-all',           'AccountLockController@lockAllStore');
+    // Route::get('/account/unlock',             'AccountLockController@unlockOne');
+    // Route::post('/account/unlock',             'AccountLockController@unlockOneStore');
     //});
 
     //handling super admin priveledges
@@ -606,28 +606,28 @@ Route::group(['middleware' => ['auth']], function () {
 
 
     // Open Registry 2 Routes
-    Route::get('/open-file-registry/create',                'OpenRegistry2Controller@closingFileIndex');
-    Route::post('/open-file-registry/save',                 'OpenRegistry2Controller@saveClosingFile');
-    Route::get('/open-file-registry/incoming-letter',       'OpenRegistry2Controller@incomingLetterIndex');
-    Route::post('/open-file-registry/saveletter',           'OpenRegistry2Controller@saveIncomingLetter');
-    Route::get('/open-file-registry/outgoing-letter',       'OpenRegistry2Controller@outgoingLetterIndex');
-    Route::post('/open-file-registry/saveoutgoing',         'OpenRegistry2Controller@saveOutgoingLetter');
-    Route::get('/open-file-registry/mail',                  'OpenRegistry2Controller@mailIndex');
-    Route::post('/open-file-registry/savemail',             'OpenRegistry2Controller@saveMail');
-    Route::get('/open-file-registry/view-mails',            'OpenRegistry2Controller@viewMails');
-    Route::get('/open-file-registry/search',                'OpenRegistry2Controller@autocomplete');
-    Route::post('/open-file-registry/filter',               'OpenRegistry2Controller@filter_mails');
-    Route::get('/open-file-registry/view-closed-files',     'OpenRegistry2Controller@viewClosedFiles');
-    Route::get('/open-file-registry/searchclosed',          'OpenRegistry2Controller@auto');
-    Route::post('/open-file-registry/filterclosed',         'OpenRegistry2Controller@filterClosedFiles');
+    Route::get('/open-file-registry/create',                '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@closingFileIndex');
+    Route::post('/open-file-registry/save',                 '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@saveClosingFile');
+    Route::get('/open-file-registry/incoming-letter',       '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@incomingLetterIndex');
+    Route::post('/open-file-registry/saveletter',           '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@saveIncomingLetter');
+    Route::get('/open-file-registry/outgoing-letter',       '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@outgoingLetterIndex');
+    Route::post('/open-file-registry/saveoutgoing',         '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@saveOutgoingLetter');
+    Route::get('/open-file-registry/mail',                  '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@mailIndex');
+    Route::post('/open-file-registry/savemail',             '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@saveMail');
+    Route::get('/open-file-registry/view-mails',            '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@viewMails');
+    Route::get('/open-file-registry/search',                '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@autocomplete');
+    Route::post('/open-file-registry/filter',               '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@filter_mails');
+    Route::get('/open-file-registry/view-closed-files',     '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@viewClosedFiles');
+    Route::get('/open-file-registry/searchclosed',          '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@auto');
+    Route::post('/open-file-registry/filterclosed',         '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@filterClosedFiles');
 
-    Route::get('/open-file-registry/view-outgoing',         'OpenRegistry2Controller@viewOutgoing');
-    Route::get('/open-file-registry/searchoutgoing',        'OpenRegistry2Controller@autocompleteOutgoing');
-    Route::post('/open-file-registry/filter-outgoing',      'OpenRegistry2Controller@filterOutgoing');
+    Route::get('/open-file-registry/view-outgoing',         '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@viewOutgoing');
+    Route::get('/open-file-registry/searchoutgoing',        '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@autocompleteOutgoing');
+    Route::post('/open-file-registry/filter-outgoing',      '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@filterOutgoing');
 
-    Route::get('/open-file-registry/view-incoming',         'OpenRegistry2Controller@viewIncoming');
-    Route::get('/open-file-registry/searchincoming',        'OpenRegistry2Controller@autocompleteIncoming');
-    Route::post('/open-file-registry/filter-incoming',      'OpenRegistry2Controller@filterIncoming');
+    Route::get('/open-file-registry/view-incoming',         '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@viewIncoming');
+    Route::get('/open-file-registry/searchincoming',        '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@autocompleteIncoming');
+    Route::post('/open-file-registry/filter-incoming',      '\\App\\Http\\Controllers\\hr\\OpenRegistry2Controller@filterIncoming');
 
     //File upload routes
 
@@ -666,40 +666,40 @@ Route::group(['middleware' => ['auth']], function () {
 
 
     //user roles
-    Route::get('/user-role/create',                       'role_setup\UserRoleController@create');
-    Route::post('/user-role/add',                         'role_setup\UserRoleController@addRole');
-    Route::get('/user-role/viewroles',                    'role_setup\UserRoleController@displayRoles');
-    Route::get('/user-role/edit/{roleID}',                'role_setup\UserRoleController@editRole');
-    Route::post('/user-role/update/',                     'role_setup\UserRoleController@updateRole');
+    Route::get('/user-role/create',                       '\\App\\Http\\Controllers\\role_setup\UserRoleController@create');
+    Route::post('/user-role/add',                         '\\App\\Http\\Controllers\\role_setup\UserRoleController@addRole');
+    Route::get('/user-role/viewroles',                    '\\App\\Http\\Controllers\\role_setup\UserRoleController@displayRoles');
+    Route::get('/user-role/edit/{roleID}',                '\\App\\Http\\Controllers\\role_setup\UserRoleController@editRole');
+    Route::post('/user-role/update/',                     '\\App\\Http\\Controllers\\role_setup\UserRoleController@updateRole');
     //user modules
-    Route::get('/module/create',                          'role_setup\ModuleController@create');
-    Route::post('/module/add',                            'role_setup\ModuleController@addModule');
-    Route::get('/module/viewmodules',                     'role_setup\ModuleController@displayModules');
-    Route::get('/module/edit/{moduleID}',                 'role_setup\ModuleController@editModule');
-    Route::post('/module/update',                         'role_setup\ModuleController@updateModule');
+    Route::get('/module/create',                          '\\App\\Http\\Controllers\\role_setup\ModuleController@create');
+    Route::post('/module/add',                            '\\App\\Http\\Controllers\\role_setup\ModuleController@addModule');
+    Route::get('/module/viewmodules',                     '\\App\\Http\\Controllers\\role_setup\ModuleController@displayModules');
+    Route::get('/module/edit/{moduleID}',                 '\\App\\Http\\Controllers\\role_setup\ModuleController@editModule');
+    Route::post('/module/update',                         '\\App\\Http\\Controllers\\role_setup\ModuleController@updateModule');
     //sub modules
-    Route::get('/sub-module/create',                      'role_setup\SubModuleController@create');
-    Route::post('/sub-module/add',                        'role_setup\SubModuleController@addSubModule');
-    Route::get('/sub-module/view-sub-modules',            'role_setup\SubModuleController@displaySubModules');
-    Route::get('/sub-module/edit/{submoduleID}',          'role_setup\SubModuleController@editSubModule');
-    Route::post('/sub-module/update',                     'role_setup\SubModuleController@updateSubModule');
+    Route::get('/sub-module/create',                      '\\App\\Http\\Controllers\\role_setup\SubModuleController@create');
+    Route::post('/sub-module/add',                        '\\App\\Http\\Controllers\\role_setup\SubModuleController@addSubModule');
+    Route::get('/sub-module/view-sub-modules',            '\\App\\Http\\Controllers\\role_setup\SubModuleController@displaySubModules');
+    Route::get('/sub-module/edit/{submoduleID}',          '\\App\\Http\\Controllers\\role_setup\SubModuleController@editSubModule');
+    Route::post('/sub-module/update',                     '\\App\\Http\\Controllers\\role_setup\SubModuleController@updateSubModule');
 
     Route::post('/module/setsession', 'SubModuleController@sessionset');
     Route::post('/submodule/modify/', 'SubModuleController@edit');
 
 
     //Assign modules
-    Route::get('/assign-module/create',                   'role_setup\AssignModuleRoleController@create');
-    Route::post('/role/setsession',                       'role_setup\AssignModuleRoleController@sessionset');
-    Route::post('/assign-module/assign',                  'role_setup\AssignModuleRoleController@assignSubModule');
-    Route::get('/assign-module/view-sub-modules',         'role_setup\AssignModuleRoleController@displaySubModules');
-    Route::get('/assign-module/edit/{submoduleID}',       'role_setup\AssignModuleRoleController@editSubModule');
-    Route::post('/assign-module/update',                  'role_setup\AssignModuleRoleController@updateSubModule');
+    Route::get('/assign-module/create',                   '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@create');
+    Route::post('/role/setsession',                       '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@sessionset');
+    Route::post('/assign-module/assign',                  '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@assignSubModule');
+    Route::get('/assign-module/view-sub-modules',         '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@displaySubModules');
+    Route::get('/assign-module/edit/{submoduleID}',       '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@editSubModule');
+    Route::post('/assign-module/update',                  '\\App\\Http\\Controllers\\role_setup\AssignModuleRoleController@updateSubModule');
     //Assign Users
 
-    Route::post('/user-assign/assign',                    'role_setup\AssignUserRoleController@assignUser');
-    Route::post('/user/display',                          'role_setup\AssignUserRoleController@displayUser');
-    Route::get('/user/search/{q?}',                       'role_setup\AssignUserRoleController@autocomplete');
+    Route::post('/user-assign/assign',                    '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@assignUser');
+    Route::post('/user/display',                          '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@displayUser');
+    Route::get('/user/search/{q?}',                       '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@autocomplete');
 
     //dependant parameter
     Route::post('/staff/dependant',                          'DependantController@postDependant');
@@ -792,31 +792,31 @@ Route::group(['middleware' => ['auth']], function () {
 
 
     //user function
-    Route::get('/function/create',                          'function_setup\FunctionController@create');
-    Route::post('/function/add',                            'function_setup\FunctionController@addFunction');
-    Route::get('/function/viewmodules',                     'function_setup\FunctionController@displayFunction');
-    Route::get('/function/edit/{functionID}',                'function_setup\FunctionController@editFunction');
-    Route::post('/function/update',                         'function_setup\FunctionController@updateFunction');
-    Route::post('/function/modify',                         'function_setup\FunctionController@edit');
+    Route::get('/function/create',                          '\\App\\Http\\Controllers\\function_setup\FunctionController@create');
+    Route::post('/function/add',                            '\\App\\Http\\Controllers\\function_setup\FunctionController@addFunction');
+    Route::get('/function/viewmodules',                     '\\App\\Http\\Controllers\\function_setup\FunctionController@displayFunction');
+    Route::get('/function/edit/{functionID}',                '\\App\\Http\\Controllers\\function_setup\FunctionController@editFunction');
+    Route::post('/function/update',                         '\\App\\Http\\Controllers\\function_setup\FunctionController@updateFunction');
+    Route::post('/function/modify',                         '\\App\\Http\\Controllers\\function_setup\FunctionController@edit');
 
 
     //sub functions
-    Route::get('/sub-function/create',                      'function_setup\SubFunctionController@create');
-    Route::post('/sub-function/add',                        'function_setup\SubFunctionController@addSubFunction');
-    Route::get('/sub-function/view-sub-modules',            'function_setup\SubFunctionController@displaySubFunction');
-    Route::get('/sub-function/edit/{subfunctionID}',        'function_setup\SubFunctionController@editSubFunction');
-    Route::post('/sub-function/update',                     'function_setup\SubFunctionController@updateSubFunction');
+    Route::get('/sub-function/create',                      '\\App\\Http\\Controllers\\function_setup\SubFunctionController@create');
+    Route::post('/sub-function/add',                        '\\App\\Http\\Controllers\\function_setup\SubFunctionController@addSubFunction');
+    Route::get('/sub-function/view-sub-modules',            '\\App\\Http\\Controllers\\function_setup\SubFunctionController@displaySubFunction');
+    Route::get('/sub-function/edit/{subfunctionID}',        '\\App\\Http\\Controllers\\function_setup\SubFunctionController@editSubFunction');
+    Route::post('/sub-function/update',                     '\\App\\Http\\Controllers\\function_setup\SubFunctionController@updateSubFunction');
 
-    Route::post('/sub-function/modify',                     'function_setup\SubFunctionController@edit');
-    Route::post('/sub-function/setsession',                 'function_setup\SubFunctionController@sessionset');
+    Route::post('/sub-function/modify',                     '\\App\\Http\\Controllers\\function_setup\SubFunctionController@edit');
+    Route::post('/sub-function/setsession',                 '\\App\\Http\\Controllers\\function_setup\SubFunctionController@sessionset');
 
     //Assign functions
-    Route::get('/assign-function/create',                   'function_setup\AssignFunctionRoleController@create');
-    // Route::post('/role/setsession',                         'function_setup\AssignFunctionRoleController@sessionset');
-    Route::post('/assign-function/assign',                  'function_setup\AssignFunctionRoleController@assignSubFunction');
-    Route::get('/assign-function/view-sub-modules',         'function_setup\AssignFunctionRoleController@displaySubFunction');
-    Route::get('/assign-function/edit/{submoduleID}',       'function_setup\AssignFunctionRoleController@editSubModule');
-    Route::post('/assign-function/update',                  'function_setup\AssignFunctionRoleController@updateSubFunction');
+    Route::get('/assign-function/create',                   '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@create');
+    // Route::post('/role/setsession',                         '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@sessionset');
+    Route::post('/assign-function/assign',                  '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@assignSubFunction');
+    Route::get('/assign-function/view-sub-modules',         '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@displaySubFunction');
+    Route::get('/assign-function/edit/{submoduleID}',       '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@editSubModule');
+    Route::post('/assign-function/update',                  '\\App\\Http\\Controllers\\function_setup\AssignFunctionRoleController@updateSubFunction');
 
     //Add Court
     Route::get('court/add-court', 'AddCourtController@index');

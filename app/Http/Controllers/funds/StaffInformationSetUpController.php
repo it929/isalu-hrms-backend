@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\funds;
 
+
+
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Http\Requests;
@@ -19,7 +21,10 @@ class StaffInformationSetUpController extends Controller
     //make this page accessible only by authenticated user
     public function __construct(Request $request)
     {
+        $this->middleware(function ($request, $next) {
         $this->middleware('auth');
+                return $next($request);
+        });
     }
 
     //load create page
