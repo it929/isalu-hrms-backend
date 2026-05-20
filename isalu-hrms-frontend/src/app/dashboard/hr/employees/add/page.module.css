@@ -86,39 +86,44 @@
 .fieldGroup {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.5rem;
 }
 
 .label {
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: var(--foreground);
+  color: var(--secondary, #64748b);
 }
 
 .input {
-  padding: 0.6rem 0.875rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--background);
+  padding: 0.95rem 1rem;
+  border-radius: 0.75rem;
+  border: 2px solid var(--border);
+  background: var(--surface-hover);
   color: var(--foreground);
   font-size: 0.9rem;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  font-weight: 500;
+  transition: all 0.2s ease;
   outline: none;
   width: 100%;
+  min-height: 54px;
+  box-sizing: border-box;
 }
 
 .input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  background: var(--background);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
 }
 
 .inputError {
-  border-color: #ef4444;
+  border-color: #ef4444 !important;
 }
 
 .textarea {
   resize: vertical;
-  min-height: 80px;
+  min-height: 54px;
+  padding: 0.95rem 1rem;
 }
 
 .errorMsg {

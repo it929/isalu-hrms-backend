@@ -336,7 +336,7 @@ class PensionController extends ParentController
         $counter ++;
         }  // end foreach
         $this->addLog($auditLogMsg);
-        return redirect()->route('create')->with('msg', $feedBack .' '.  $counter . ' Staff were affected');
+        return redirect()->route('pension.create')->with('msg', $feedBack .' '.  $counter . ' Staff were affected');
 
     }
 

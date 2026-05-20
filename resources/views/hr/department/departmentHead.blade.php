@@ -78,7 +78,7 @@ Assign Head of Department
  
                                                     <!-- Modal -->
                                                     	
-						        <form class="form-horizontal" action="{{route('update')}}" method="post" role="form">
+						        <form class="form-horizontal" action="{{route('departmentHead.update')}}" method="post" role="form">
 						        	 {{ csrf_field() }}
 								<div class="modal fade" id="exampleModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
 								  <div class="modal-dialog" role="document">

@@ -44,6 +44,19 @@ export default function StaffDocumentation() {
     fetchData();
   }, [id]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const stepParam = params.get('step');
+      if (stepParam) {
+        const stepNum = parseInt(stepParam, 10);
+        if (stepNum >= 1 && stepNum <= 13) {
+          setCurrentStep(stepNum);
+        }
+      }
+    }
+  }, []);
+
   const fetchData = async () => {
     try {
       const res = await axios.get(`${API_BASE}/hr/documentation/${id}`);
@@ -1793,7 +1806,7 @@ function StepPreview({ data, designations = [], lgas = [], onEditStep }) {
                       <td style={tdValStyle}>
                         {edu.degreequalification || ''} &nbsp;&nbsp;
                         {edu.document && <><b>CERTIFICATE:</b> &nbsp;
-                          <a href={edu.document} target="_blank" rel="noreferrer" style={{ color: '#337ab7' }}>
+                          <a href={getMediaUrl(edu.document)} target="_blank" rel="noreferrer" style={{ color: '#337ab7' }}>
                             {edu.certificateheld || 'View'}
                           </a>
                         </>}

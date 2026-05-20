@@ -760,4 +760,256 @@ class HrStaffApiController extends Controller
         }
         return implode($pass);
     }
+
+    public function getProfileDetails($id)
+    {
+        try {
+            $staff = DB::table('tblper')->where('ID', $id)->first();
+            if (!$staff) {
+                return response()->json(['status' => 'error', 'message' => 'Staff record not found'], 404);
+            }
+
+             // Bid-Data
+            $staffFullDetails = DB::table('tblper')
+                ->leftjoin('tblstatus', 'tblstatus.id', '=', 'tblper.staff_status')
+                ->leftjoin('tblstates', 'tblstates.id', '=', 'tblper.stateID')
+                ->leftjoin('tblstates as pob_states', 'pob_states.id', '=', 'tblper.placeofbirth')
+                ->leftjoin('tbldesignation', 'tblper.Designation', '=', 'tbldesignation.id')
+                ->leftjoin('tblsections', 'tblsections.id', '=', 'tblper.section')
+                ->leftjoin('tbltitle', 'tbltitle.id', '=', 'tblper.title')
+                ->leftjoin('tblgender', 'tblgender.ID', '=', 'tblper.gender')
+                ->leftjoin('tblemployment_type', 'tblemployment_type.id', '=', 'tblper.employee_type')
+                ->leftjoin('tbldepartment', 'tbldepartment.id', '=', 'tblper.department')
+                ->leftjoin('tblmaritalStatus', 'tblmaritalStatus.ID', '=', 'tblper.maritalstatus')
+                ->leftjoin('tbldivision', 'tbldivision.divisionID', '=', 'tblper.divisionID')
+                ->leftjoin('tblbanklist', 'tblbanklist.bankID', '=', 'tblper.bankID')
+                ->select(
+                    'tblper.*',
+                    'tblper.grade as staffGrade',
+                    'tblper.ID as staffID',
+                    'tbltitle.ID as titleID',
+                    'tblper.title as title',
+                    'tblper.gender as gender',
+                    'tblgender.ID as genderID',
+                    'tblstates.ID as stateID',
+                    'tbldivision.divisionID as divID',
+                    'tblmaritalStatus.ID as msID',
+                    'tblemployment_type.id as empID',
+                    'tbldepartment.id as deptID',
+                    'tblbanklist.bankID as bankID',
+                    'tblstates.State as State',
+                    'pob_states.State as place_of_birth_name',
+                    'tbldepartment.department as department',
+                    'tbldesignation.designation as designation',
+                    'tblbanklist.bank as bank'
+                )
+                ->where('tblper.ID', '=', $id)
+                ->first();
+
+            // Check for profile image
+            $fileNoImage = "default.png";
+            if ($staffFullDetails && $staffFullDetails->fileNo) {
+                if (\Illuminate\Support\Facades\File::exists(public_path('passport/' . $staffFullDetails->fileNo . '.jpg'))) {
+                    $fileNoImage = $staffFullDetails->fileNo . ".jpg";
+                }
+            }
+
+            // Education
+            $education = DB::table('tbleducations')->where('staffid', $id)->get();
+
+            // Languages
+            $languages = DB::table('languages')
+                ->select(
+                    'languages.*',
+                    'languages.language as language_name',
+                    'languages.spoken as spoken_title',
+                    'languages.written as written_title'
+                )
+                ->where('staffid', $id)
+                ->get();
+
+            // Particulars of Children
+            $children = DB::table('tblchildren_particulars')
+                ->where('staffid', $id)
+                ->leftJoin('tblgender', 'tblchildren_particulars.gender', '=', 'tblgender.ID')
+                ->select(
+                    'tblchildren_particulars.*',
+                    'tblgender.gender as gender_name',
+                    'tblgender.ID as gID'
+                )
+                ->get();
+
+            // Details of previous service
+            $previousService = DB::table('previous_servicedetails')->where('staffid', $id)->get();
+
+            // Details of service in the forces
+            $detailsService = DB::table('detailsofservice')->where('staffid', $id)->get();
+
+            // Record of censures and recommendations
+            $censure = DB::table('tblcensures_commendations')->where('staffid', $id)->get();
+
+            // Gratuity Payment
+            $gratuityPayment = DB::table('tblgratuity_payment')->where('staffid', $id)->get();
+
+            // Particular of termination of service
+            $terminationService = DB::table('service_termination')->where('staffid', $id)->get();
+
+            // Particular of tour and leave
+            $tourLeaveRecord = DB::table('tourleave_record')->where('staffid', $id)->get();
+
+            // Record of service
+            $recordService = DB::table('recordof_service')->where('staffid', $id)->get();
+
+            // Record of emolument
+            $recordEmolument = DB::table('recordof_emolument')->where('staffid', $id)->get();
+
+            // Next of Kin
+            $nextOfKin = DB::table('tblnextofkin')->where('staffid', $id)->get();
+
+            // Wife/Spouse details
+            $wifeDetails = DB::table('tbldateofbirth_wife')->where('staffid', $id)->get();
+
+            // Attachments
+            $attachments = DB::table('tblstaffattachment')->where('staffID', $id)->get();
+
+            return response()->json([
+                'status' => 'success',
+                'staffFullDetails' => $staffFullDetails,
+                'fileNoImage' => $fileNoImage,
+                'education' => $education,
+                'languages' => $languages,
+                'children' => $children,
+                'previousService' => $previousService,
+                'detailsService' => $detailsService,
+                'censure' => $censure,
+                'gratuityPayment' => $gratuityPayment,
+                'terminationService' => $terminationService,
+                'tourLeaveRecord' => $tourLeaveRecord,
+                'recordService' => $recordService,
+                'recordEmolument' => $recordEmolument,
+                'nextOfKin' => $nextOfKin,
+                'wifeDetails' => $wifeDetails,
+                'attachments' => $attachments
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Get all leave types.
+     */
+    public function getLeaveTypes()
+    {
+        try {
+            $leaveTypes = DB::table('tblleave_type')
+                ->orderBy('id', 'desc')
+                ->get();
+            return response()->json([
+                'status' => 'success',
+                'data' => $leaveTypes
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Store a new leave type.
+     */
+    public function storeLeaveType(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'leave' => 'required|string',
+            'days'  => 'required|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $id = DB::table('tblleave_type')->insertGetId([
+                'leaveType' => $request->leave,
+                'days' => $request->days,
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'New leave type was added successfully.',
+                'data' => [
+                    'id' => $id,
+                    'leaveType' => $request->leave,
+                    'days' => $request->days
+                ]
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update a leave type.
+     */
+    public function updateLeaveType(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'leave' => 'required|string',
+            'days'  => 'required|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            DB::table('tblleave_type')->where('id', $id)->update([
+                'leaveType' => $request->leave,
+                'days' => $request->days,
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Leave type was successfully updated.'
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete a leave type.
+     */
+    public function deleteLeaveType($id)
+    {
+        try {
+            DB::table('tblleave_type')->where('id', $id)->delete();
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Deleted successfully'
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

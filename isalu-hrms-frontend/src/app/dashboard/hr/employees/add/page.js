@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
-import { UserPlus, Search, ChevronDown, X, Eye } from 'lucide-react';
+import { UserPlus, Search, X, Eye } from 'lucide-react';
+import CustomSelect from '@/components/ui/CustomSelect';
 import styles from './page.module.css';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/nextjs';
@@ -40,20 +41,16 @@ const Field = ({ label, name, type = 'text', placeholder = '', value, onChange, 
 const Select = ({ label, name, options, placeholder = 'Select…', value, onChange, error }) => (
   <div className={styles.fieldGroup}>
     <label className={styles.label}>{label}</label>
-    <div className={styles.selectWrap}>
-      <select
-        name={name}
-        value={value}
-        onChange={onChange}
-        className={`${styles.input} ${error ? styles.inputError : ''}`}
-      >
-        <option value="">{placeholder}</option>
-        {(Array.isArray(options) ? options : []).map(o => (
-          <option key={o.id ?? o} value={o.id ?? o}>{o.name ?? o}</option>
-        ))}
-      </select>
-      <ChevronDown size={16} className={styles.selectIcon} />
-    </div>
+    <CustomSelect
+      name={name}
+      options={(Array.isArray(options) ? options : []).map(o => ({
+        id: o.id ?? o,
+        name: o.name ?? o
+      }))}
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+    />
     {error && <span className={styles.errorMsg}>{error[0]}</span>}
   </div>
 );
@@ -188,7 +185,7 @@ export default function AddNewStaff() {
                 rows={1}
                 placeholder="Enter full residential address"
                 className={`${styles.input} ${styles.textarea} ${errors.address ? styles.inputError : ''}`}
-                style={{ overflow: 'hidden', minHeight: '42px' }}
+                style={{ overflow: 'hidden', minHeight: '54px' }}
               />
               {errors.address && <span className={styles.errorMsg}>{errors.address[0]}</span>}
             </div>

@@ -109,11 +109,11 @@ class LeaveResumptionController extends Controller
                 $isSave = DB::table('tblleave_resumption_form')->where('id', $getID)->update(['is_submitted' => 1]);
                 if($isSave)
                 {
-                    return redirect()->route('create')->with('success', 'Your application was submitted successfully.');
+                    return redirect()->route('leave-resumption.create')->with('success', 'Your application was submitted successfully.');
                 }
             }
         }catch(\Throwable $e){}
-        return redirect()->route('create')->with('error', 'Sorry, we cannot update this record or record not found!');
+        return redirect()->route('leave-resumption.create')->with('error', 'Sorry, we cannot update this record or record not found!');
     }
 
 

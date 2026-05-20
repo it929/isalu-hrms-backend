@@ -275,7 +275,7 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
 
     ///////////////////////////-self service controller-///////////////////////////////////////////////
     //R. Variation : mater staff list
-    Route::get('/record-variation/view/cadre-s', 'SelfServiceController@view_ALL_CADRE_LIST')->name('recordVariationLoadCadre');
+    Route::get('/record-variation/view/cadre-s', 'SelfServiceController@view_ALL_CADRE_LIST')->name('recordVariationLoadCadreSelf');
     Route::get('/record-variation/refresh/cadre-list-s', 'SelfServiceController@view_ALL_CADRE_LIST_REFRESH');
     Route::post('/record-variation/view/cadre-s', 'SelfServiceController@view_ALL_CADRE_LIST_FILTER');
     Route::get('/record-variation/view/increment-s', 'SelfServiceController@view_ALL_INCREMENT_SO_FAR');
@@ -438,7 +438,7 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     ////ENDS HERE///
 
     // Pension
-    Route::get('/pension/create', 'PensionController@index')->name('create');
+    Route::get('/pension/create', 'PensionController@index')->name('pension.create');
     Route::post('/pension/displaynames', 'PensionController@showAll');
     Route::post('/pension/compute', 'PensionController@computePension');
     Route::post('/pension/compute/batch', 'PensionController@computePensionBatch');
@@ -852,7 +852,7 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     //Head of Department
     Route::get('/department/departmentHead', 'DepartmentController@index');
     Route::post('/department/departmentHeaD', 'DepartmentController@store');
-    Route::post('/UpdateHeadOfdepartmentHead', 'DepartmentController@update')->name('update');
+    Route::post('/UpdateHeadOfdepartmentHead', 'DepartmentController@update')->name('departmentHead.update');
 
     //annual leave application
     Route::get('/annual/leave/application', 'AnnualLeaveController@ApplicationForm');
@@ -1670,9 +1670,9 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('leave-certificate/{id?}', 'LeaveFormCertificateController@generateLeaveCertificate')->name('leaveCertificate');
 
     //Staff - Resumption Application
-    Route::get('leave-resumption-application', 'LeaveResumptionController@create')->name('create');
-    Route::post('leave-resumption-application', 'LeaveResumptionController@store')->name('store');
-    Route::post('update-resumption-application', 'LeaveResumptionController@update')->name('update');
+    Route::get('leave-resumption-application', 'LeaveResumptionController@create')->name('leave-resumption.create');
+    Route::post('leave-resumption-application', 'LeaveResumptionController@store')->name('leave-resumption.store');
+    Route::post('update-resumption-application', 'LeaveResumptionController@update')->name('leave-resumption.update');
     Route::get('submit-leave-resumption/{id?}', 'LeaveResumptionController@submitLeaveResumptionForm')->name('submiteResumption');
     Route::get('resumption-report/{id?}', 'LeaveResumptionController@viewReport')->name('resumptionReport');
     Route::get('delete-resumption-application/{roastID}', 'LeaveResumptionController@delete')->name('deleteResumption');

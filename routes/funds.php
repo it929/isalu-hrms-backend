@@ -333,16 +333,15 @@ Route::group(['middleware' => ['auth', 'force.password.change']], function () {
     Route::get('/user/search/{q?}', '\\App\\Http\\Controllers\\role_setup\AssignUserRoleController@autocomplete');
 
     //Basic parameter
-    Route::post('/basic/section', 'BasicParameterController@postDepartment');
-    Route::get('/basic/section', 'BasicParameterController@getDepartment');
-    Route::post('/basic/division', 'BasicParameterController@Divisionsetup');
-    Route::get('/basic/division', 'BasicParameterController@Divisionsetup');
-    Route::post('/basic/designation', 'BasicParameterController@ControlVariable');
-    Route::get('/basic/designation', 'BasicParameterController@ControlVariable');
-    Route::post('basic/designation/edit', 'BasicParameterController@updateDesignation');
-    Route::post('basic/designation/delete', 'BasicParameterController@deletePost');
-    Route::post('basic/rank-designation', [BasicParameterController::class, 'UpdateRankDesignation']);
-    Route::get('basic/rank-designation', [BasicParameterController::class, 'UpdateRankDesignation']);
+    
+    // Route::post('/basic/division', 'BasicParameterController@Divisionsetup');
+    // Route::get('/basic/division', 'BasicParameterController@Divisionsetup');
+    // Route::post('/basic/designation', 'BasicParameterController@ControlVariable');
+    // Route::get('/basic/designation', 'BasicParameterController@ControlVariable');
+    // Route::post('basic/designation/edit', 'BasicParameterController@updateDesignation');
+    // Route::post('basic/designation/delete', 'BasicParameterController@deletePost');
+    // Route::post('basic/rank-designation', [BasicParameterController::class, 'UpdateRankDesignation']);
+    // Route::get('basic/rank-designation', [BasicParameterController::class, 'UpdateRankDesignation']);
 
     Route::any('setting-adjustment', 'BasicParameterController@Setting');
     //dependant parameter
@@ -388,13 +387,7 @@ Route::group(['middleware' => ['auth', 'force.password.change']], function () {
     //bank set up
     Route::post('/session/court', 'BankController@sessionset');
 
-    //LGA covered
-    Route::get('/lga/covered', 'LgaCoveredController@index');
-    Route::post('/lga/covered', 'LgaCoveredController@getLgaState');
-    Route::get('/clear-all', 'LgaCoveredController@clear');
-    Route::post('lga/covered/add', 'LgaCoveredController@store');
-    Route::get('lga/covered/remove/{lgaId}', 'LgaCoveredController@destroy');
-    Route::post('lga/covered/edit', 'LgaCoveredController@update');
+   
 
     //compute All
     Route::post('/court/getActiveMonth', 'ComputeController@getActiveMonth');

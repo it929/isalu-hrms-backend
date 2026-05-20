@@ -17,17 +17,14 @@ class ProfileController extends ParentController
     public function __construct(Request $request)
     {
         $this->middleware(function ($request, $next) {
-        $this->middleware(function ($request, $next) {
             // dd("adams");
-        // $this->division = $request->session()->get('division');
-        //dd($this->division);
-        // $this->divisionID = $request->session()->get('divisionID');
-        // Session::put('this_division', $this->division);
-        //Session::forget('hideAlert');
+            // $this->division = $request->session()->get('division');
+            //dd($this->division);
+            // $this->divisionID = $request->session()->get('divisionID');
+            // Session::put('this_division', $this->division);
+            //Session::forget('hideAlert');
             return $next($request);
-                    return $next($request);
         });
-    });
     }
 
     public function viewConfiguration()
@@ -1319,6 +1316,69 @@ class ProfileController extends ParentController
         //count Record of Emoluments
         $data['totalRecordEmolument']       = DB::table('recordof_emolument')->where('staffid', $fileNo)->count();
 
+        return view('hr.profile.details', $data);
+    }
+
+    public function details_19_15_2026(Request $request)
+    {
+        $data['getTitles'] = DB::table('tbltitle')->get();
+        $data['getDivision'] = DB::table('tbldivision')->get();
+        $data['getGender'] = DB::table('tblgender')->get();
+        $data['getState'] = DB::table('tblstates')->get();
+        $data['getLga'] = DB::table('lga')->get();
+        $data['getMS'] = DB::table('tblmaritalStatus')->get();
+        $data['getEmpType'] = DB::table('tblemployment_type')->get();
+        $data['getDesignation'] = DB::table('tbldesignation')->get();
+        $data['getDepartment'] = DB::table('tbldepartment')->get();
+        $data['getGrade'] = DB::table('tblgrades')->get();
+        $data['getStep'] = DB::table('tblsteps')->get();
+        $data['getBank'] = DB::table('tblbanklist')->get();
+
+        $this->validate($request, [
+            'fileNo' => 'required|regex:/^[A-Za-z0-9\-! ,\'\"\/@\.:\(\)]+$/',
+        ]);
+
+        $fileNo = trim($request->fileNo);
+
+        // Fetch staff
+        if (DB::table('tblper')->where('ID', $fileNo)->exists()) {
+
+            $data['staffFullDetails'] = DB::table('tblper')
+                ->leftjoin('tblstatus', 'tblstatus.id', '=', 'tblper.staff_status')
+                ->leftjoin('tblstates', 'tblstates.id', '=', 'tblper.stateID')
+                ->leftjoin('tbldesignation', 'tblper.Designation', '=', 'tbldesignation.id')
+                ->leftjoin('tblsections', 'tblsections.id', '=', 'tblper.section')
+                ->leftjoin('tbltitle', 'tbltitle.id', '=', 'tblper.title')
+                ->leftjoin('tblgender', 'tblgender.ID', '=', 'tblper.gender')
+                ->leftjoin('tblemployment_type', 'tblemployment_type.id', '=', 'tblper.employee_type')
+                ->leftjoin('tbldepartment', 'tbldepartment.id', '=', 'tblper.department')
+                ->leftjoin('tblmaritalStatus', 'tblmaritalStatus.ID', '=', 'tblper.maritalstatus')
+                ->leftjoin('tbldivision', 'tbldivision.divisionID', '=', 'tblper.divisionID')
+                ->leftjoin('tblbanklist', 'tblbanklist.bankID', '=', 'tblper.bankID')
+                ->select('*', 'tblper.grade as staffGrade', 'tblper.ID as staffID')
+                ->where('tblper.ID', $fileNo)
+                ->first();
+        } else {
+            return back()->with('error', 'Staff not found.');
+        }
+
+        // Determine passport
+        if (File::exists(public_path('passport/' . $data['staffFullDetails']->fileNo . '.jpg'))) {
+            $data['fileNoImage'] = $data['staffFullDetails']->fileNo . ".jpg";
+        } else {
+            $data['fileNoImage'] = "default.png";
+        }
+
+        // Education
+        if (DB::table('tbleducations')->where('staffid', $fileNo)->exists()) {
+            $data['staffFullDetailsEducation'] = DB::table('tbleducations')
+                ->where('staffid', $fileNo)
+                ->get();
+        } else {
+            $data['staffFullDetailsEducation'] = [];
+        }
+
+        // ✅ MUST RETURN A VIEW (THIS WAS MISSING)
         return view('hr.profile.details', $data);
     }
 

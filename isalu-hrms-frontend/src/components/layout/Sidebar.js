@@ -27,8 +27,14 @@ import {
 import styles from './Sidebar.module.css';
 
 const hrSubModules = [
-  { name: 'Employee Records', path: '/dashboard/hr/employees', icon: <UserCircle size={16} /> },
-  { name: 'Leave Management', path: '/dashboard/hr/leave', icon: <CalendarDays size={16} /> },
+  { name: 'Employee Records',  path: '/dashboard/hr/employees',   icon: <UserCircle size={16} /> },
+  { name: 'Department Setup',  path: '/dashboard/hr/department',  icon: <Building2 size={16} /> },
+  { name: 'Designation Setup', path: '/dashboard/hr/designation', icon: <Briefcase size={16} /> },
+  { name: 'Apply for Leave',   path: '/dashboard/hr/apply-leave', icon: <CalendarDays size={16} /> },
+  { name: 'Apply for LOA',     path: '/dashboard/hr/apply-loa',   icon: <CalendarDays size={16} /> },
+  { name: 'Update Staff Status', path: '/dashboard/hr/staff-status', icon: <UserCircle size={16} /> },
+  { name: 'Leave Management',  path: '/dashboard/hr/leave',       icon: <CalendarDays size={16} /> },
+  { name: 'Create Leave Type', path: '/dashboard/hr/leave-types', icon: <CalendarDays size={16} /> },
   { name: 'Performance & Promotions', path: '/dashboard/hr/performance', icon: <TrendingUp size={16} /> },
   { name: 'Pension & Gratuity', path: '/dashboard/hr/pension', icon: <Landmark size={16} /> },
   { name: 'Training', path: '/dashboard/hr/training', icon: <GraduationCap size={16} /> },

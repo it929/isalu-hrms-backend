@@ -52,5 +52,57 @@ Route::prefix('nextjs')->group(function () {
         Route::post('/{id}/attachment-complete', [\App\Http\Controllers\Api\HrStaffApiController::class, 'completeAttachment']);
         Route::delete('/{id}/attachment/{attachmentId}', [\App\Http\Controllers\Api\HrStaffApiController::class, 'deleteAttachment']);
         Route::post('/{id}/submit', [\App\Http\Controllers\Api\HrStaffApiController::class, 'submitDocumentation']);
+        Route::get('/{id}/profile', [\App\Http\Controllers\Api\HrStaffApiController::class, 'getProfileDetails']);
     });
+
+    // HR - Leave Types
+    Route::prefix('hr/leave-types')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\HrStaffApiController::class, 'getLeaveTypes']);
+        Route::post('/', [\App\Http\Controllers\Api\HrStaffApiController::class, 'storeLeaveType']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\HrStaffApiController::class, 'updateLeaveType']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\HrStaffApiController::class, 'deleteLeaveType']);
+    });
+
+    // HR - Apply Leave (mirrors Blade LeaveCreateController)
+    Route::prefix('hr/apply-leave')->group(function () {
+        Route::get('/',                     [\App\Http\Controllers\Api\HrLeaveApiController::class, 'getApplyLeaveData']);
+        Route::get('/records',              [\App\Http\Controllers\Api\HrLeaveApiController::class, 'getLeaveRecords']);
+        Route::post('/',                    [\App\Http\Controllers\Api\HrLeaveApiController::class, 'saveApplyLeave']);
+        Route::put('/{id}',                 [\App\Http\Controllers\Api\HrLeaveApiController::class, 'updateApplyLeave']);
+        Route::get('/calculate-end-date',   [\App\Http\Controllers\Api\HrLeaveApiController::class, 'calculateEndDate']);
+        Route::get('/hod-approve/{id}',     [\App\Http\Controllers\Api\HrLeaveApiController::class, 'hodApprove']);
+        Route::get('/hod-reject/{id}',      [\App\Http\Controllers\Api\HrLeaveApiController::class, 'hodReject']);
+        Route::get('/admin-approve/{id}',   [\App\Http\Controllers\Api\HrLeaveApiController::class, 'adminApprove']);
+        Route::get('/admin-reject/{id}',    [\App\Http\Controllers\Api\HrLeaveApiController::class, 'adminReject']);
+    });
+
+    // HR - Apply Leave of Absence (LOA)
+    Route::prefix('hr/apply-loa')->group(function () {
+        Route::get('/',                     [\App\Http\Controllers\Api\HrLeaveApiController::class, 'getApplyLoaData']);
+        Route::get('/records',              [\App\Http\Controllers\Api\HrLeaveApiController::class, 'getLoaRecords']);
+        Route::post('/',                    [\App\Http\Controllers\Api\HrLeaveApiController::class, 'saveApplyLoa']);
+        Route::put('/{id}',                 [\App\Http\Controllers\Api\HrLeaveApiController::class, 'updateApplyLoa']);
+        Route::get('/hod-approve/{id}',     [\App\Http\Controllers\Api\HrLeaveApiController::class, 'hodApproveLoa']);
+        Route::get('/hod-reject/{id}',      [\App\Http\Controllers\Api\HrLeaveApiController::class, 'hodRejectLoa']);
+        Route::get('/admin-approve/{id}',   [\App\Http\Controllers\Api\HrLeaveApiController::class, 'adminApproveLoa']);
+        Route::get('/admin-reject/{id}',    [\App\Http\Controllers\Api\HrLeaveApiController::class, 'adminRejectLoa']);
+    });
+
+    // HR - Update Staff Status & Transfers
+    Route::prefix('hr/staff-status')->group(function () {
+        Route::get('/',                     [\App\Http\Controllers\Api\HrStaffStatusApiController::class, 'getStaffStatusData']);
+        Route::post('/find-staff',          [\App\Http\Controllers\Api\HrStaffStatusApiController::class, 'findStaff']);
+        Route::post('/get-staff-by-division', [\App\Http\Controllers\Api\HrStaffStatusApiController::class, 'getStaffByDivision']);
+        Route::post('/update',              [\App\Http\Controllers\Api\HrStaffStatusApiController::class, 'updateStatusOrTransfer']);
+        Route::get('/pending-transfers',    [\App\Http\Controllers\Api\HrStaffStatusApiController::class, 'getPendingTransfers']);
+        Route::post('/approve-transfers',   [\App\Http\Controllers\Api\HrStaffStatusApiController::class, 'approveOrRejectTransfers']);
+    });
+
+    // HR - Department & Designation submodules
+    Route::get('/hr/basic/section', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'getDepartments']);
+    Route::post('/hr/basic/section', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'handleDepartment']);
+    Route::get('/hr/basic/designation', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'getDesignations']);
+    Route::post('/hr/basic/designation', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'handleDesignation']);
+    Route::post('/hr/basic/designation/edit', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'updateDesignation']);
+    Route::post('/hr/basic/designation/delete', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'deleteDesignation']);
 });

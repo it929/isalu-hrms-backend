@@ -56,8 +56,14 @@ class LeaveCreateController extends Controller
         // Leave types
         $data['getleave'] = $this->allLeave();
 
-        // All employees
-        $data['getEnployee'] = DB::table('tblper')->get();
+        // All employees - only load list if user is admin/superadmin to avoid page lag
+        if ($isSuperAdmin || $adminStaff) {
+            $data['getEnployee'] = DB::table('tblper')
+                ->select('ID', 'surname', 'first_name', 'othernames')
+                ->get();
+        } else {
+            $data['getEnployee'] = collect();
+        }
 
         // Base leave query
         $baseQuery = DB::table('leave_record')
@@ -119,6 +125,7 @@ class LeaveCreateController extends Controller
         $data['isSuperAdmin'] = $isSuperAdmin;
         $data['isHod'] = $employee && $employee->is_hod == 1;
         $data['isAdminStaff'] = $adminStaff;
+        $data['employee'] = $employee;
 
         $data['getleaveRecord'] = $getleaveRecord;
 
@@ -194,13 +201,19 @@ class LeaveCreateController extends Controller
             return back()->with('error', 'Employee not found.');
         }
 
-        // Gender restriction - if leave type 3 = maternity leave
-        if ($employee->gender == 'Male' && $leaveType->id == 3) {
+        // Gender restriction: maternity leave (id == 3) strictly for female staff
+        if ($leaveType->id == 3 && strtolower($employee->gender) !== 'female') {
             return back()->with('error', 'You are not eligible for maternity leave.');
         }
 
         // Total leave allowed
         $totalAllowed = $leaveType->days;
+
+        if ($leaveType->id == 3) {
+            $year = Carbon::parse($request->start_date)->year;
+            $annualDaysUsed = $this->getUsedAnnualLeaveDays($request->employee_id, $year);
+            $totalAllowed = max(0, $totalAllowed - $annualDaysUsed);
+        }
 
         // Calculate requested days
         $start = Carbon::parse($request->start_date);
@@ -259,6 +272,12 @@ class LeaveCreateController extends Controller
         }
 
         $totalAllowed = $leaveType->days;
+
+        if ($leaveType->id == 3) {
+            $year = Carbon::parse($request->start_date)->year;
+            $annualDaysUsed = $this->getUsedAnnualLeaveDays($request->employee_id, $year);
+            $totalAllowed = max(0, $totalAllowed - $annualDaysUsed);
+        }
 
         $usedDays = DB::table('leave_record')
             ->where('staffId', $request->employee_id)
@@ -335,8 +354,14 @@ class LeaveCreateController extends Controller
         // Leave types
         $data['getleave'] = $this->allLeave();
 
-        // All employees
-        $data['getEnployee'] = DB::table('tblper')->get();
+        // All employees - only load list if user is admin/superadmin to avoid page lag
+        if ($isSuperAdmin || $adminStaff) {
+            $data['getEnployee'] = DB::table('tblper')
+                ->select('ID', 'surname', 'first_name', 'othernames')
+                ->get();
+        } else {
+            $data['getEnployee'] = collect();
+        }
 
         // Base leave query
         $baseQuery = DB::table('leave_of_absent')
@@ -345,6 +370,8 @@ class LeaveCreateController extends Controller
             ->join('tbldepartment', 'tbldepartment.id', '=', 'tblper.departmentID')
             ->select(
                 'leave_of_absent.*',
+                'leave_of_absent.id as loa_id',
+                'leave_of_absent.id as id',
                 'tblper.surname',
                 'tblper.first_name',
                 'tblper.othernames',
@@ -504,6 +531,8 @@ class LeaveCreateController extends Controller
             ->join('tbldepartment', 'tbldepartment.id', '=', 'tblper.departmentID')
             ->select(
                 'leave_of_absent.*',
+                'leave_of_absent.id as loa_id',
+                'leave_of_absent.id as id',
                 'tblper.surname',
                 'tblper.first_name',
                 'tblper.othernames',
@@ -613,6 +642,40 @@ class LeaveCreateController extends Controller
         } else {
             return redirect('Leave/leavetype')->with('error', 'Sorry, we cannot delete this record. Try again');
         }
-        return redirect('Leave/leavetype')->with('error', 'Record not found!');
+    }
+
+    /**
+     * Get the number of annual leave days an employee has used in a given calendar year.
+     */
+    private function getUsedAnnualLeaveDays($employeeId, $year): int
+    {
+        $employee = DB::table('tblper')->where('ID', $employeeId)->first();
+        if (!$employee) {
+            return 0;
+        }
+
+        // Sum from Next.js leave_record (where leave_type is Annual and status is approved = 2)
+        $annualDaysNext = 0;
+        $annualType = DB::table('tblleave_type')->where('leaveType', 'Annual')->first();
+        if ($annualType) {
+            $annualDaysNext = DB::table('leave_record')
+                ->where('staffId', $employeeId)
+                ->where('leave_type_id', $annualType->id)
+                ->where('status', 2)
+                ->whereYear('start_date', $year)
+                ->sum(DB::raw("DATEDIFF(end_date, start_date) + 1"));
+        }
+
+        // Sum from legacy annual_leave (where finalapprstatus is 2)
+        $annualDaysLegacy = 0;
+        if ($employee->UserID) {
+            $annualDaysLegacy = DB::table('annual_leave')
+                ->where('staffid', $employee->UserID)
+                ->where('year', $year)
+                ->where('finalapprstatus', 2)
+                ->sum('nod');
+        }
+
+        return (int) ($annualDaysNext + $annualDaysLegacy);
     }
 }

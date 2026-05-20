@@ -10,7 +10,8 @@ export default function CustomSelect({
   name,
   label,
   required = false,
-  searchable = true
+  searchable = true,
+  disabled = false
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,8 +44,8 @@ export default function CustomSelect({
       {label && <label className={styles.label}>{label} {required && '*'}</label>}
       
       <div 
-        className={`${styles.selectBox} ${isOpen ? styles.open : ''}`}
-        onClick={() => setIsOpen(!isOpen)}
+        className={`${styles.selectBox} ${isOpen ? styles.open : ''} ${disabled ? styles.disabled : ''}`}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
       >
         <span className={selectedOption ? styles.value : styles.placeholder}>
           {selectedOption ? selectedOption.name : placeholder}

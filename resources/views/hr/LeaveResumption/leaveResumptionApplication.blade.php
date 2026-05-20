@@ -29,7 +29,7 @@
 				@includeIf('Share.message')
 
     			<div class="col-md-12">
-    			<form method="post" action="{{route('store')}}">
+    			<form method="post" action="{{route('leave-resumption.store')}}">
 				 @csrf
 				 	<div class="col-md-4">
 						<div class="form-group">
@@ -182,7 +182,7 @@
                                                             <span aria-hidden="true">&times;</span>
                                                         </button>
                                                         </div>
-														<form method="post" action="{{route('update')}}">
+														<form method="post" action="{{route('leave-resumption.update')}}">
 															@csrf
                                                         <div align="left" class="modal-body">
 

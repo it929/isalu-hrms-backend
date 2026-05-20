@@ -416,7 +416,7 @@ Route::group(['middleware' => ['auth']], function () {
 
 
     // Pension
-    Route::get('/pension/create',                                'PensionController@index')->name('create');
+    Route::get('/pension/create',                                'PensionController@index')->name('pension.create');
     Route::post('/pension/displaynames',                        'PensionController@showAll');
     Route::post('/pension/compute',                              'PensionController@computePension');
     Route::post('/pension/compute/batch',                       'PensionController@computePensionBatch');
@@ -731,7 +731,7 @@ Route::group(['middleware' => ['auth']], function () {
     //Head of Department
     Route::get('/department/departmentHead',                          'DepartmentController@index');
     Route::post('/department/departmentHeaD',                          'DepartmentController@store');
-    Route::post('/UpdateHeadOfdepartmentHead',     'DepartmentController@update')->name('update');
+    Route::post('/UpdateHeadOfdepartmentHead',     'DepartmentController@update')->name('departmentHead.update');
 
 
 

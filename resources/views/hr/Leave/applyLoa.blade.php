@@ -244,22 +244,26 @@
                                 <div class="form-group">
                                     <label>Employee</label>
 
-                                    @if ($employee)
-                                        <!-- STAFF / HOD -->
-                                        <input type="hidden" name="employee_id" id="employee_id"
-                                            value="{{ $employee->ID }}">
-                                        <input type="text" class="form-control" readonly
-                                            value="{{ $employee->surname }} {{ $employee->first_name }} {{ $employee->othernames }}">
-                                    @else
-                                        <!-- SUPER ADMIN MODE -->
+                                    @if ($isSuperAdmin || $isAdminStaff)
+                                        <!-- SUPER ADMIN / ADMIN STAFF MODE -->
                                         <select class="form-control" name="employee_id" id="employee_id" required>
                                             <option value="">-- Select Employee --</option>
                                             @foreach ($getEnployee as $emp)
-                                                <option value="{{ $emp->ID }}">
+                                                <option value="{{ $emp->ID }}" {{ ($employee && $employee->ID == $emp->ID) ? 'selected' : '' }}>
                                                     {{ $emp->surname }} {{ $emp->first_name }} {{ $emp->othernames }}
                                                 </option>
                                             @endforeach
                                         </select>
+                                    @else
+                                        <!-- STAFF / HOD -->
+                                        @if ($employee)
+                                            <input type="hidden" name="employee_id" id="employee_id"
+                                                value="{{ $employee->ID }}">
+                                            <input type="text" class="form-control" readonly
+                                                value="{{ $employee->surname }} {{ $employee->first_name }} {{ $employee->othernames }}">
+                                        @else
+                                            <input type="text" class="form-control" readonly value="No employee profile found">
+                                        @endif
                                     @endif
                                 </div>
 
@@ -846,6 +850,36 @@
 
         .modal-header.bg-danger .close:hover {
             opacity: 0.8;
+        }
+
+        /* Modern unified input and select styles matching premium aesthetics */
+        .form-control {
+            height: 48px;
+            padding: 10px 16px;
+            font-size: 14px;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+            background-color: #f8fafc;
+            color: #0f172a;
+            transition: all 0.2s ease-in-out;
+            box-sizing: border-box;
+            box-shadow: none;
+        }
+        .form-control:focus {
+            border-color: #3b82f6;
+            background-color: #ffffff;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
+            outline: none;
+        }
+        textarea.form-control {
+            height: auto;
+            min-height: 90px;
+            resize: vertical;
+        }
+        .form-control[readonly] {
+            background-color: #f1f5f9;
+            opacity: 0.7;
+            cursor: not-allowed;
         }
     </style>
 @endsection
