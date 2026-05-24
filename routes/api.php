@@ -105,4 +105,80 @@ Route::prefix('nextjs')->group(function () {
     Route::post('/hr/basic/designation', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'handleDesignation']);
     Route::post('/hr/basic/designation/edit', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'updateDesignation']);
     Route::post('/hr/basic/designation/delete', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'deleteDesignation']);
+
+    // HR - Unit submodules
+    Route::get('/hr/basic/unit', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'getUnits']);
+    Route::post('/hr/basic/unit', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'handleUnit']);
+    Route::post('/hr/basic/unit/edit', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'updateUnit']);
+    Route::post('/hr/basic/unit/delete', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'deleteUnit']);
+
+    // HR - LGA Covered submodules
+    Route::get('/hr/lga/covered', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'getLgaCovered']);
+    Route::post('/hr/lga/covered/add', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'storeLga']);
+    Route::post('/hr/lga/covered/edit', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'updateLga']);
+    Route::post('/hr/lga/covered/remove/{lgaId}', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'deleteLga']);
+
+    // Payroll
+    Route::prefix('payroll')->group(function () {
+        Route::get('/metadata', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getMetadata']);
+        Route::get('/',         [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getPayrollList']);
+        Route::get('/export',   [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'exportPayroll']);
+
+        // Salary Structures
+        Route::prefix('salary-structures')->group(function () {
+            Route::get('/staff',   [\App\Http\Controllers\Api\SalaryStructureApiController::class, 'getStaffList']);
+            Route::get('/',        [\App\Http\Controllers\Api\SalaryStructureApiController::class, 'index']);
+            Route::post('/',       [\App\Http\Controllers\Api\SalaryStructureApiController::class, 'store']);
+            Route::post('/upload', [\App\Http\Controllers\Api\SalaryStructureApiController::class, 'upload']);
+        });
+
+        // Employee Loans
+        Route::prefix('loans')->group(function () {
+            Route::get('/staff',   [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'getStaffList']);
+            Route::get('/types',   [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'getLoanTypes']);
+            Route::post('/types',  [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'storeLoanType']);
+            Route::delete('/types/{id}', [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'destroyLoanType']);
+            Route::get('/',        [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'index']);
+            Route::post('/',       [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'store']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'destroy']);
+            Route::get('/hod-approve/{id}', [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'hodApprove']);
+            Route::get('/hod-reject/{id}',  [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'hodReject']);
+            Route::get('/audit-approve/{id}', [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'auditApprove']);
+            Route::get('/audit-reject/{id}',  [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'auditReject']);
+            Route::get('/admin-approve/{id}', [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'adminApprove']);
+            Route::get('/admin-reject/{id}',  [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'adminReject']);
+        });
+        
+        // Staff Control Variables
+        Route::prefix('staff-control-variables')->group(function () {
+            Route::get('/staff', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'getStaffList']);
+            Route::get('/variable-types', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'getVariableTypes']);
+            Route::get('/descriptions/{particularId}', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'getDescriptions']);
+            Route::get('/', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'store']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'destroy']);
+        });
+
+        // CV Setups
+        Route::prefix('cv-setups')->group(function () {
+            Route::get('/banks', [\App\Http\Controllers\Api\CvSetupApiController::class, 'getBanks']);
+            Route::get('/', [\App\Http\Controllers\Api\CvSetupApiController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\CvSetupApiController::class, 'store']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\CvSetupApiController::class, 'destroy']);
+        });
+
+        // Employee IOUs
+        Route::prefix('ious')->group(function () {
+            Route::get('/staff', [\App\Http\Controllers\Api\IouApiController::class, 'getStaffList']);
+            Route::get('/', [\App\Http\Controllers\Api\IouApiController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\IouApiController::class, 'store']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'destroy']);
+            Route::get('/hod-approve/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'hodApprove']);
+            Route::get('/hod-reject/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'hodReject']);
+            Route::get('/finance-approve/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'financeApprove']);
+            Route::get('/finance-reject/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'financeReject']);
+            Route::get('/hr-approve/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'hrApprove']);
+            Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'hrReject']);
+        });
+    });
 });

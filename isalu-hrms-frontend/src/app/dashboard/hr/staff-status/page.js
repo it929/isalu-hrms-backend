@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
+import { getCache, setCache } from '../../../../utils/dataCache';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import {
@@ -38,15 +39,16 @@ function buildHeaders() {
 }
 
 export default function StaffStatusPage() {
+  const cachedData = getCache('staff-status');
   const [activeTab, setActiveTab] = useState('update'); // 'update' or 'pending'
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedData);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
 
   // Metadata
-  const [staffList, setStaffList] = useState([]);
-  const [divisions, setDivisions] = useState([]);
-  const [curDivision, setCurDivision] = useState('');
+  const [staffList, setStaffList] = useState(cachedData?.staffList || []);
+  const [divisions, setDivisions] = useState(cachedData?.divisions || []);
+  const [curDivision, setCurDivision] = useState(cachedData?.curDivision || '');
   
   // Update State
   const [selectedStaffId, setSelectedStaffId] = useState('');
@@ -58,8 +60,8 @@ export default function StaffStatusPage() {
     setTimeout(() => setToast(null), 4500);
   }, []);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/hr/staff-status`, { headers: buildHeaders() });
       if (res.data.status === 'success') {
@@ -67,12 +69,17 @@ export default function StaffStatusPage() {
           id: s.ID,
           name: `${s.surname} ${s.first_name} ${s.othernames || ''}`.trim()
         }));
-        setStaffList(staffOpts);
-        
         const divOpts = res.data.divisions.map(d => ({
           id: d.divisionID,
           name: d.division
         }));
+        const cachePayload = {
+          staffList: staffOpts,
+          divisions: divOpts,
+          curDivision: res.data.curDivision
+        };
+        setCache('staff-status', cachePayload);
+        setStaffList(staffOpts);
         setDivisions(divOpts);
         setCurDivision(res.data.curDivision);
       } else {
@@ -81,13 +88,13 @@ export default function StaffStatusPage() {
     } catch (err) {
       showToast('Failed to connect to server.', 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [showToast]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchData(!!cachedData);
+  }, [fetchData, cachedData]);
 
   // When a staff is selected from the dropdown, fetch details
   useEffect(() => {
@@ -153,7 +160,7 @@ export default function StaffStatusPage() {
     { id: 'termination', name: 'Termination' }
   ];
 
-  if (loading) {
+  if (loading && !cachedData) {
     return (
       <div className={styles.loadingState}>
         <Loader2 className={styles.spinner} size={40} />

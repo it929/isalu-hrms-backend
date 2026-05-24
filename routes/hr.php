@@ -781,7 +781,7 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
 
     Route::get('/apply/loa',                 [LeaveCreateController::class, 'ApplyLoa']);
     Route::post('/saveapply/loa',                       [LeaveCreateController::class, 'saveApplyLoa']);
-    Route::get('/calculate-end-date', [LeaveCreateController::class, 'calculateEndDate']);
+   
     Route::get('/leave/loa-list', [LeaveCreateController::class, 'loaList'])->name('loa.list');
 
     //hod approve & reject leave of absence

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { getCache, setCache, hasCache } from '../../../../utils/dataCache';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { 
@@ -17,12 +18,10 @@ import styles from './page.module.css';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/nextjs';
 
-// ── In-Memory Client Cache ───────────────────────────────────────────────────
-let cachedLeaveTypes = null;
-
 export default function LeaveTypesPage() {
-  const [leaveTypes, setLeaveTypes] = useState(cachedLeaveTypes || []);
-  const [loading, setLoading] = useState(!cachedLeaveTypes);
+  const cachedData = getCache('leave-types');
+  const [leaveTypes, setLeaveTypes] = useState(cachedData || []);
+  const [loading, setLoading] = useState(!cachedData);
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ open: false, id: null, name: '' });
@@ -34,25 +33,21 @@ export default function LeaveTypesPage() {
 
   const [toast, setToast] = useState(null);
 
-  useEffect(() => {
-    const hasCache = !!cachedLeaveTypes;
-    fetchLeaveTypes(hasCache);
-  }, []);
-
-  const showToast = (message, type = 'success') => {
+  const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => {
       setToast(null);
     }, 4000);
-  };
+  }, []);
 
-  const fetchLeaveTypes = async (silent = false) => {
+  const fetchLeaveTypes = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/hr/leave-types`);
       if (res.data.status === 'success') {
-        setLeaveTypes(res.data.data);
-        cachedLeaveTypes = res.data.data;
+        const data = res.data.data || [];
+        setLeaveTypes(data);
+        setCache('leave-types', data);
       } else {
         showToast(res.data.message || 'Failed to fetch leave types.', 'error');
       }
@@ -62,7 +57,11 @@ export default function LeaveTypesPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  };
+  }, [showToast]);
+
+  useEffect(() => {
+    fetchLeaveTypes(!!cachedData);
+  }, [fetchLeaveTypes, cachedData]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -103,7 +102,7 @@ export default function LeaveTypesPage() {
         if (res.data.status === 'success') {
           showToast(res.data.message || 'Leave type updated successfully.', 'success');
           handleCancelEdit();
-          fetchLeaveTypes();
+          fetchLeaveTypes(true);
         } else {
           showToast(res.data.message || 'Failed to update leave type.', 'error');
         }
@@ -113,7 +112,7 @@ export default function LeaveTypesPage() {
         if (res.data.status === 'success') {
           showToast(res.data.message || 'Leave type added successfully.', 'success');
           setFormData({ leave: '', days: '' });
-          fetchLeaveTypes();
+          fetchLeaveTypes(true);
         } else {
           showToast(res.data.message || 'Failed to add leave type.', 'error');
         }
@@ -142,7 +141,7 @@ export default function LeaveTypesPage() {
         if (editId === id) {
           handleCancelEdit();
         }
-        fetchLeaveTypes();
+        fetchLeaveTypes(true);
       } else {
         showToast(res.data.message || 'Failed to delete leave type.', 'error');
       }
@@ -151,6 +150,7 @@ export default function LeaveTypesPage() {
       console.error(err);
     }
   };
+
 
   return (
     <motion.div 
@@ -218,7 +218,7 @@ export default function LeaveTypesPage() {
               >
                 {saving ? (
                   <>
-                    <Loader2 size={16} className="animate-spin" />
+                    <Loader2 size={16} className={styles.spinner} />
                     <span>Saving...</span>
                   </>
                 ) : (
@@ -236,23 +236,37 @@ export default function LeaveTypesPage() {
         <div className={styles.card}>
           <h2 className={styles.cardTitle}>Defined Leave Types</h2>
 
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem 0' }}>
-              <Loader2 size={32} className="animate-spin" style={{ color: 'var(--primary)' }} />
-            </div>
-          ) : leaveTypes.length > 0 ? (
-            <div className={styles.tableWrapper}>
-              <table className={styles.table}>
-                <thead>
+          <div className={styles.tableWrapper}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th style={{ width: '60px' }}>S/N</th>
+                  <th>Leave Type Name</th>
+                  <th>Days</th>
+                  <th style={{ width: '100px', textAlign: 'center' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
                   <tr>
-                    <th style={{ width: '60px' }}>S/N</th>
-                    <th>Leave Type Name</th>
-                    <th>Days</th>
-                    <th style={{ width: '100px', textAlign: 'center' }}>Actions</th>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '3rem 0' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', color: 'var(--secondary)' }}>
+                        <Loader2 className={styles.spinner} size={24} />
+                        <span style={{ fontSize: '0.9rem' }}>Loading leave types...</span>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {leaveTypes.map((item, index) => (
+                ) : leaveTypes.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '3rem 0' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', color: 'var(--secondary)' }}>
+                        <Calendar size={36} strokeWidth={1.5} />
+                        <span>No leave types have been defined yet.</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  leaveTypes.map((item, index) => (
                     <tr key={item.id}>
                       <td>{index + 1}</td>
                       <td style={{ fontWeight: '500' }}>{item.leaveType}</td>
@@ -276,16 +290,11 @@ export default function LeaveTypesPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className={styles.emptyState}>
-              <Calendar size={40} style={{ marginBottom: '0.75rem', strokeWidth: 1.5 }} />
-              <p>No leave types have been defined yet.</p>
-            </div>
-          )}
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

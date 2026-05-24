@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { Users, FileText, Calendar, TrendingUp, Building2, Briefcase } from 'lucide-react';
+import { Users, FileText, Calendar, TrendingUp, Building2, Briefcase, MapPin } from 'lucide-react';
 
 export default function HRDashboard() {
   const cards = [
@@ -29,6 +29,22 @@ export default function HRDashboard() {
       iconBg: 'rgba(139, 92, 246, 0.1)',
       iconColor: '#8b5cf6',
       path: '/dashboard/hr/designation'
+    },
+    {
+      title: 'Unit Setup',
+      description: 'Configure and organize structural operational units within departments.',
+      icon: <Building2 size={20} />,
+      iconBg: 'rgba(59, 130, 246, 0.1)',
+      iconColor: 'var(--primary)',
+      path: '/dashboard/hr/unit'
+    },
+    {
+      title: 'LGA Covered',
+      description: 'Configure and register local government areas covered for geographical assignments.',
+      icon: <MapPin size={20} />,
+      iconBg: 'rgba(245, 158, 11, 0.1)',
+      iconColor: '#f59e0b',
+      path: '/dashboard/hr/lga'
     },
     {
       title: 'Leave Management',

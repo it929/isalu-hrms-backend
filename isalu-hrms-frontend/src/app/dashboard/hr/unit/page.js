@@ -35,24 +35,27 @@ function buildHeaders() {
   return uid ? { 'X-User-Id': uid } : {};
 }
 
-export default function DepartmentPage() {
-  const cachedData = getCache('department');
+export default function UnitPage() {
+  const cachedData = getCache('unit');
   const [loading, setLoading] = useState(!cachedData);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const [courtList, setCourtList] = useState(cachedData?.CourtList || []);
   const [departmentList, setDepartmentList] = useState(cachedData?.DepartmentList || []);
-  const [courtInfo, setCourtInfo] = useState(cachedData?.CourtInfo || { courtstatus: 1 });
+  const [unitList, setUnitList] = useState(cachedData?.UnitList || []);
+  
+  // Filter state for table listing
+  const [filterDept, setFilterDept] = useState('');
 
   // Form & Edit states
   const [editId, setEditId] = useState(null);
   const [formData, setFormData] = useState({
-    department: ''
+    department: '',
+    unit: ''
   });
 
   // Confirm delete modal state
-  const [confirmModal, setConfirmModal] = useState({ open: false, id: null, name: '' });
+  const [confirmModal, setConfirmModal] = useState({ open: false, item: null });
 
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
@@ -62,19 +65,17 @@ export default function DepartmentPage() {
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/hr/basic/section`, { headers: buildHeaders() });
+      const res = await axios.get(`${API_BASE}/hr/basic/unit`, { headers: buildHeaders() });
       if (res.data.status === 'success') {
         const data = {
-          CourtList: res.data.CourtList || [],
           DepartmentList: res.data.DepartmentList || [],
-          CourtInfo: res.data.CourtInfo || { courtstatus: 1 }
+          UnitList: res.data.UnitList || []
         };
-        setCache('department', data);
-        setCourtList(data.CourtList);
+        setCache('unit', data);
         setDepartmentList(data.DepartmentList);
-        setCourtInfo(data.CourtInfo);
+        setUnitList(data.UnitList);
       } else {
-        showToast(res.data.message || 'Failed to load data.', 'error');
+        showToast(res.data.message || 'Failed to load unit data.', 'error');
       }
     } catch (err) {
       showToast('Failed to connect to server.', 'error');
@@ -84,6 +85,7 @@ export default function DepartmentPage() {
   }, [showToast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData(!!cachedData);
   }, [fetchData, cachedData]);
 
@@ -95,76 +97,83 @@ export default function DepartmentPage() {
     }));
   };
 
-  const handleEdit = (dept) => {
-    setEditId(dept.id);
+  const handleEdit = (item) => {
+    setEditId(item.unitID);
     setFormData({
-      department: dept.department
+      department: item.departmentID || '',
+      unit: item.unit
     });
   };
 
   const handleCancelEdit = () => {
     setEditId(null);
     setFormData({
-      department: ''
+      department: '',
+      unit: ''
     });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const { department } = formData;
-    if (!department) return showToast('Please enter a department name.', 'warning');
+    const { unit, department } = formData;
+    if (!unit) return showToast('Please enter a unit name.', 'warning');
+    if (!department) return showToast('Please select a department.', 'warning');
 
     setSaving(true);
     try {
       let res;
-      const payload = {
-        department,
-        court: courtInfo?.courtid || (courtList.length > 0 ? courtList[0].id : '')
-      };
-
       if (editId) {
-        // Edit Department
-        payload.editid = editId;
-        res = await axios.post(`${API_BASE}/hr/basic/section`, payload, { headers: buildHeaders() });
+        // Edit Unit
+        const payload = {
+          PostID: editId,
+          unit: unit.toUpperCase(),
+          DeptID: department
+        };
+        res = await axios.post(`${API_BASE}/hr/basic/unit/edit`, payload, { headers: buildHeaders() });
       } else {
-        // Add Department
-        payload.add = true;
-        res = await axios.post(`${API_BASE}/hr/basic/section`, payload, { headers: buildHeaders() });
+        // Add Unit
+        const payload = {
+          unit: unit.toUpperCase(),
+          department
+        };
+        res = await axios.post(`${API_BASE}/hr/basic/unit`, payload, { headers: buildHeaders() });
       }
 
       if (res.data.status === 'success') {
-        showToast(res.data.message || `Department ${editId ? 'updated' : 'added'} successfully.`, 'success');
+        showToast(res.data.message || `Unit ${editId ? 'updated' : 'added'} successfully.`, 'success');
         handleCancelEdit();
         fetchData(true);
       } else {
-        showToast(res.data.message || `Failed to ${editId ? 'update' : 'add'} department.`, 'error');
+        showToast(res.data.message || `Failed to ${editId ? 'update' : 'add'} unit.`, 'error');
       }
     } catch (err) {
-      showToast(err.response?.data?.message || 'Server error occurred while saving.', 'error');
+      showToast(err.response?.data?.message || 'Server error while saving.', 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeleteClick = (dept) => {
-    setConfirmModal({ open: true, id: dept.id, name: dept.department });
+  const handleDeleteClick = (item) => {
+    setConfirmModal({ open: true, item });
   };
 
   const handleConfirmDelete = async () => {
-    const id = confirmModal.id;
-    setConfirmModal({ open: false, id: null, name: '' });
+    const item = confirmModal.item;
+    setConfirmModal({ open: false, item: null });
 
     try {
-      const payload = { delcode: id };
-      const res = await axios.post(`${API_BASE}/hr/basic/section`, payload, { headers: buildHeaders() });
+      const payload = {
+        PostID: item.unitID
+      };
+      const res = await axios.post(`${API_BASE}/hr/basic/unit/delete`, payload, { headers: buildHeaders() });
       if (res.data.status === 'success') {
-        showToast('Department deleted successfully.', 'success');
-        if (editId === id) {
+        showToast('Unit deleted successfully.', 'success');
+        if (editId === item.unitID) {
           handleCancelEdit();
         }
         fetchData(true);
       } else {
-        showToast(res.data.message || 'Failed to delete department.', 'error');
+        showToast(res.data.message || 'Failed to delete unit.', 'error');
       }
     } catch (err) {
       showToast(err.response?.data?.message || 'Server error while deleting.', 'error');
@@ -172,6 +181,11 @@ export default function DepartmentPage() {
   };
 
 
+
+  // Filter unit list client side based on department filter dropdown
+  const filteredUnits = filterDept
+    ? unitList.filter(u => String(u.departmentID) === String(filterDept))
+    : unitList;
 
   return (
     <motion.div 
@@ -181,28 +195,45 @@ export default function DepartmentPage() {
       transition={{ duration: 0.4 }}
     >
       <div className={styles.header}>
-        <h1><Building2 size={26} style={{ strokeWidth: 2.2 }} /> Department Setup</h1>
-        <p>Manage company departments and sections.</p>
+        <h1><Building2 size={26} style={{ strokeWidth: 2.2 }} /> Unit Setup</h1>
+        <p>Manage and structure operational units within departments.</p>
       </div>
 
       <div className={styles.layoutGrid}>
         {/* Form Card */}
         <div className={styles.card}>
           <h2 className={styles.cardTitle}>
-            {editId ? 'Edit Department' : 'Add Department'}
+            {editId ? 'Edit Unit' : 'Add Unit'}
           </h2>
           
           <form className={styles.form} onSubmit={handleSubmit}>
-            
             <div className={styles.formGroup}>
-              <label htmlFor="department" className={styles.label}>Department Name</label>
-              <input 
-                type="text" 
+              <label htmlFor="department" className={styles.label}>Department</label>
+              <select 
                 id="department"
                 name="department"
                 className={styles.input} 
-                placeholder="Enter department name" 
-                value={formData.department}
+                value={formData.department} 
+                onChange={handleInputChange}
+                required
+                disabled={loading}
+              >
+                <option value="">{loading ? '-- Loading Departments... --' : '-- Select Department --'}</option>
+                {!loading && departmentList.map((d) => (
+                  <option key={d.id} value={d.id}>{d.department}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label htmlFor="unit" className={styles.label}>Unit Name</label>
+              <input 
+                type="text" 
+                id="unit"
+                name="unit"
+                className={styles.input} 
+                placeholder="Input Unit name" 
+                value={formData.unit}
                 onChange={handleInputChange}
                 required
               />
@@ -241,50 +272,70 @@ export default function DepartmentPage() {
 
         {/* List Card */}
         <div className={styles.card}>
-          <h2 className={styles.cardTitle}>Department List</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <h2 className={styles.cardTitle} style={{ margin: 0, borderBottom: 'none', padding: 0 }}>Unit List</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <label htmlFor="filterDept" style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--secondary)' }}>Filter Department:</label>
+              <select
+                id="filterDept"
+                className={styles.input}
+                style={{ width: '200px', padding: '0.4rem 0.6rem' }}
+                value={filterDept}
+                onChange={(e) => setFilterDept(e.target.value)}
+                disabled={loading}
+              >
+                <option value="">{loading ? 'Loading...' : 'All Departments'}</option>
+                {!loading && departmentList.map((d) => (
+                  <option key={d.id} value={d.id}>{d.department}</option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div className={styles.tableWrapper}>
             <table className={styles.table}>
               <thead>
                 <tr>
                   <th style={{ width: '60px' }}>S/N</th>
                   <th>Department</th>
+                  <th>Unit</th>
                   <th style={{ width: '120px', textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', padding: '3rem 0' }}>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '3rem 0' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', color: 'var(--secondary)' }}>
                         <Loader2 className={styles.spinner} size={24} />
-                        <span style={{ fontSize: '0.9rem' }}>Loading departments...</span>
+                        <span style={{ fontSize: '0.9rem' }}>Loading units...</span>
                       </div>
                     </td>
                   </tr>
-                ) : departmentList.length === 0 ? (
+                ) : filteredUnits.length === 0 ? (
                   <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', padding: '3rem 0' }}>
-                      No departments found.
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '3rem 0' }}>
+                      No units found.
                     </td>
                   </tr>
                 ) : (
-                  departmentList.map((dept, index) => (
-                    <tr key={dept.id}>
+                  filteredUnits.map((item, index) => (
+                    <tr key={item.unitID}>
                       <td>{index + 1}</td>
-                      <td style={{ fontWeight: '500' }}>{dept.department}</td>
+                      <td>{item.department || 'N/A'}</td>
+                      <td style={{ fontWeight: '500' }}>{item.unit}</td>
                       <td>
                         <div className={styles.actions}>
                           <button
                             className={`${styles.actionBtn} ${styles.editBtn}`}
                             title="Edit"
-                            onClick={() => handleEdit(dept)}
+                            onClick={() => handleEdit(item)}
                           >
                             <Edit2 size={16} />
                           </button>
                           <button
                             className={`${styles.actionBtn} ${styles.deleteBtn}`}
                             title="Delete"
-                            onClick={() => handleDeleteClick(dept)}
+                            onClick={() => handleDeleteClick(item)}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -307,7 +358,7 @@ export default function DepartmentPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setConfirmModal({ open: false, id: null, name: '' })}
+            onClick={() => setConfirmModal({ open: false, item: null })}
           >
             <motion.div
               className={styles.modalBox}
@@ -320,15 +371,15 @@ export default function DepartmentPage() {
               <div className={styles.modalIcon}>
                 <Trash2 size={28} />
               </div>
-              <h3 className={styles.modalTitle}>Delete Department</h3>
+              <h3 className={styles.modalTitle}>Delete Unit</h3>
               <p className={styles.modalMessage}>
-                Are you sure you want to delete department <strong>&ldquo;{confirmModal.name}&rdquo;</strong>?
+                Are you sure you want to delete unit <strong>&ldquo;{confirmModal.item?.unit}&rdquo;</strong>?
                 This action cannot be undone.
               </p>
               <div className={styles.modalActions}>
                 <button
                   className={styles.modalCancelBtn}
-                  onClick={() => setConfirmModal({ open: false, id: null, name: '' })}
+                  onClick={() => setConfirmModal({ open: false, item: null })}
                 >
                   Cancel
                 </button>

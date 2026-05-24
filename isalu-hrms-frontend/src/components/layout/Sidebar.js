@@ -23,6 +23,8 @@ import {
   ClipboardList,
   HeartPulse,
   Landmark,
+  MapPin,
+  DollarSign,
 } from 'lucide-react';
 import styles from './Sidebar.module.css';
 
@@ -30,6 +32,8 @@ const hrSubModules = [
   { name: 'Employee Records',  path: '/dashboard/hr/employees',   icon: <UserCircle size={16} /> },
   { name: 'Department Setup',  path: '/dashboard/hr/department',  icon: <Building2 size={16} /> },
   { name: 'Designation Setup', path: '/dashboard/hr/designation', icon: <Briefcase size={16} /> },
+  { name: 'Unit Setup',        path: '/dashboard/hr/unit',        icon: <Building2 size={16} /> },
+  { name: 'LGA Covered',       path: '/dashboard/hr/lga',         icon: <MapPin size={16} /> },
   { name: 'Apply for Leave',   path: '/dashboard/hr/apply-leave', icon: <CalendarDays size={16} /> },
   { name: 'Apply for LOA',     path: '/dashboard/hr/apply-loa',   icon: <CalendarDays size={16} /> },
   { name: 'Update Staff Status', path: '/dashboard/hr/staff-status', icon: <UserCircle size={16} /> },
@@ -50,8 +54,10 @@ export default function Sidebar() {
   const { logout } = useSession();
   const { isCollapsed } = useSidebar();
   const [hrOpen, setHrOpen] = useState(pathname.startsWith('/dashboard/hr'));
+  const [payrollOpen, setPayrollOpen] = useState(pathname.startsWith('/dashboard/payroll'));
 
   const isHrActive = pathname.startsWith('/dashboard/hr');
+  const isPayrollActive = pathname.startsWith('/dashboard/payroll');
 
   const handleLogout = () => {
     logout();
@@ -59,7 +65,17 @@ export default function Sidebar() {
   };
 
   const topMenuItems = [
-    { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
+    { name: 'Dashboard', path: '/dashboard',         icon: <LayoutDashboard size={20} /> },
+  ];
+
+  const payrollSubModules = [
+    { name: 'Payroll Report',  path: '/dashboard/payroll',                  icon: <FileText size={16} /> },
+    { name: 'Salary Structure', path: '/dashboard/payroll/salary-structure', icon: <Landmark size={16} /> },
+    { name: 'Apply for Loan',   path: '/dashboard/payroll/apply-loan',       icon: <DollarSign size={16} /> },
+    { name: 'Apply for IOU',    path: '/dashboard/payroll/apply-iou',        icon: <DollarSign size={16} /> },
+    { name: 'Staff Control Variable', path: '/dashboard/payroll/staff-control-variable', icon: <Settings size={16} /> },
+    { name: 'Control Variable Setup', path: '/dashboard/payroll/cv-setup',   icon: <Settings size={16} /> },
+    { name: 'Loan Types Setup', path: '/dashboard/payroll/loan-types',       icon: <Settings size={16} /> },
   ];
 
   const bottomMenuItems = [
@@ -84,6 +100,41 @@ export default function Sidebar() {
               </li>
             );
           })}
+
+          {/* Payroll Module with dropdown */}
+          <li>
+            <button
+              className={`${styles.menuItem} ${styles.menuItemBtn} ${isPayrollActive ? styles.active : ''}`}
+              onClick={() => setPayrollOpen((prev) => !prev)}
+              aria-expanded={payrollOpen}
+            >
+              <span className={styles.icon}><DollarSign size={20} /></span>
+              <span className={styles.text}>Payroll</span>
+              <span className={`${styles.chevron} ${payrollOpen ? styles.chevronOpen : ''}`}>
+                <ChevronDown size={16} />
+              </span>
+            </button>
+
+            {/* Sub-modules dropdown */}
+            <div className={`${styles.subMenu} ${payrollOpen ? styles.subMenuOpen : ''}`}>
+              <ul className={styles.subMenuList}>
+                {payrollSubModules.map((sub) => {
+                  const isSubActive = pathname === sub.path;
+                  return (
+                    <li key={sub.path}>
+                      <Link
+                        href={sub.path}
+                        className={`${styles.subMenuItem} ${isSubActive ? styles.subMenuItemActive : ''}`}
+                      >
+                        <span className={styles.subIcon}>{sub.icon}</span>
+                        <span>{sub.name}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </li>
 
           {/* HR Module with dropdown */}
           <li>

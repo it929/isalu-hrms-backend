@@ -5,7 +5,7 @@
               {{ $i + 1 }}
 
               <!-- Edit icon -->
-              <a href="{{ route('leave.edit', $list->id) }}" class="text-primary" style="margin-left: 6px;">
+              <a href="{{ route('leave.edit', $list->loa_id) }}" class="text-primary" style="margin-left: 6px;">
                   <i class="fa fa-edit"></i>
               </a>
           </td> --}}

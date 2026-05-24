@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
+import { getCache, setCache, hasCache } from '../../../../utils/dataCache';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import {
@@ -35,19 +36,19 @@ function buildHeaders() {
 }
 
 export default function DesignationPage() {
-  const [loading, setLoading] = useState(true);
+  const cachedData = getCache('designation');
+  const [loading, setLoading] = useState(!cachedData);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const [courtList, setCourtList] = useState([]);
-  const [departmentList, setDepartmentList] = useState([]);
-  const [designationList, setDesignationList] = useState([]);
-  const [courtInfo, setCourtInfo] = useState({ courtstatus: 1 });
+  const [courtList, setCourtList] = useState(cachedData?.CourtList || []);
+  const [departmentList, setDepartmentList] = useState(cachedData?.DepartmentList || []);
+  const [designationList, setDesignationList] = useState(cachedData?.DesignationList || []);
+  const [courtInfo, setCourtInfo] = useState(cachedData?.CourtInfo || { courtstatus: 1 });
 
   // Form & Edit states
   const [editId, setEditId] = useState(null);
   const [formData, setFormData] = useState({
-    court: '',
     department: '',
     designation: ''
   });
@@ -65,10 +66,17 @@ export default function DesignationPage() {
     try {
       const res = await axios.get(`${API_BASE}/hr/basic/designation`, { headers: buildHeaders() });
       if (res.data.status === 'success') {
-        setCourtList(res.data.CourtList || []);
-        setDepartmentList(res.data.DepartmentList || []);
-        setDesignationList(res.data.DesignationList || []);
-        setCourtInfo(res.data.CourtInfo || { courtstatus: 1 });
+        const data = {
+          CourtList: res.data.CourtList || [],
+          DepartmentList: res.data.DepartmentList || [],
+          DesignationList: res.data.DesignationList || [],
+          CourtInfo: res.data.CourtInfo || { courtstatus: 1 }
+        };
+        setCache('designation', data);
+        setCourtList(data.CourtList);
+        setDepartmentList(data.DepartmentList);
+        setDesignationList(data.DesignationList);
+        setCourtInfo(data.CourtInfo);
       } else {
         showToast(res.data.message || 'Failed to load data.', 'error');
       }
@@ -80,25 +88,17 @@ export default function DesignationPage() {
   }, [showToast]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchData(!!cachedData);
+  }, [fetchData, cachedData]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => {
-      const updated = { ...prev, [name]: value };
-      // If we change court, reset department selection to prevent invalid pairings
-      if (name === 'court') {
-        updated.department = '';
-      }
-      return updated;
-    });
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleEdit = (item) => {
     setEditId(item.id);
     setFormData({
-      court: item.courtID || '',
       department: item.departmentID || '',
       designation: item.designation
     });
@@ -107,7 +107,6 @@ export default function DesignationPage() {
   const handleCancelEdit = () => {
     setEditId(null);
     setFormData({
-      court: '',
       department: '',
       designation: ''
     });
@@ -115,16 +114,15 @@ export default function DesignationPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const { designation, department, court } = formData;
+    const { designation, department } = formData;
     if (!designation) return showToast('Please enter a designation.', 'warning');
     if (!department) return showToast('Please select a department.', 'warning');
-    if (courtInfo.courtstatus === 1 && !court) return showToast('Please select a court.', 'warning');
 
     setSaving(true);
     try {
       let res;
       const selectedDept = departmentList.find(d => String(d.id) === String(department));
-      const resolvedCourt = selectedDept ? selectedDept.courtID : (courtInfo.courtstatus === 0 ? courtInfo.courtid : court);
+      const resolvedCourt = selectedDept?.courtID || courtInfo?.courtid || '';
 
       if (editId) {
         // Edit Designation
@@ -189,19 +187,9 @@ export default function DesignationPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className={styles.loadingState}>
-        <Loader2 className={styles.spinner} size={40} />
-        <p>Loading Designation Data...</p>
-      </div>
-    );
-  }
 
-  // Filter departments based on selected court (if multi-court mode)
-  const filteredDepartments = departmentList.filter(
-    (d) => !formData.court || String(d.courtID) === String(formData.court)
-  );
+
+  const filteredDepartments = departmentList;
 
   return (
     <motion.div 
@@ -223,25 +211,6 @@ export default function DesignationPage() {
           </h2>
           
           <form className={styles.form} onSubmit={handleSubmit}>
-            {courtInfo.courtstatus === 1 && (
-              <div className={styles.formGroup}>
-                <label htmlFor="court" className={styles.label}>Court</label>
-                <select 
-                  id="court"
-                  name="court"
-                  className={styles.input} 
-                  value={formData.court} 
-                  onChange={handleInputChange}
-                  required
-                >
-                  <option value="">-- Select Court --</option>
-                  {courtList.map((c) => (
-                    <option key={c.id} value={c.id}>{c.court_name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            
             <div className={styles.formGroup}>
               <label htmlFor="department" className={styles.label}>Department</label>
               <select 
@@ -251,9 +220,10 @@ export default function DesignationPage() {
                 value={formData.department} 
                 onChange={handleInputChange}
                 required
+                disabled={loading}
               >
-                <option value="">-- Select Department --</option>
-                {filteredDepartments.map((d) => (
+                <option value="">{loading ? '-- Loading Departments... --' : '-- Select Department --'}</option>
+                {!loading && filteredDepartments.map((d) => (
                   <option key={d.id} value={d.id}>{d.department}</option>
                 ))}
               </select>
@@ -312,16 +282,24 @@ export default function DesignationPage() {
               <thead>
                 <tr>
                   <th style={{ width: '60px' }}>S/N</th>
-                  {courtInfo.courtstatus === 1 && <th>Court</th>}
                   <th>Department</th>
                   <th>Designation</th>
                   <th style={{ width: '120px', textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {designationList.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td colSpan={courtInfo.courtstatus === 1 ? 5 : 4} style={{ textAlign: 'center', padding: '3rem 0' }}>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '3rem 0' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', color: 'var(--secondary)' }}>
+                        <Loader2 className={styles.spinner} size={24} />
+                        <span style={{ fontSize: '0.9rem' }}>Loading designations...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : designationList.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '3rem 0' }}>
                       No designations found.
                     </td>
                   </tr>
@@ -329,7 +307,6 @@ export default function DesignationPage() {
                   designationList.map((item, index) => (
                     <tr key={item.id}>
                       <td>{index + 1}</td>
-                      {courtInfo.courtstatus === 1 && <td>{item.court_name || 'N/A'}</td>}
                       <td>{item.department || 'N/A'}</td>
                       <td style={{ fontWeight: '500' }}>{item.designation}</td>
                       <td>

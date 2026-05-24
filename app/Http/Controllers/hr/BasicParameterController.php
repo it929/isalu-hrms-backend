@@ -149,33 +149,7 @@ class BasicParameterController extends functionController
         return view('auth.user_update', $data);
     }
 
-    public function getDepartmentOLD(Request $request)
-    {
-        $data['error'] = "";
-        $data['warning'] = "";
-        $data['department'] = "";
-        $data['court'] = "";
-        $data['CourtInfo'] = $this->CourtInfo();
-        if ($data['CourtInfo']->courtstatus == 0) {
-            $request['court'] = $data['CourtInfo']->courtid;
-        }
-        if ($data['CourtInfo']->divisionstatus == 0) {
-            $request['division'] = $data['CourtInfo']->divisionid;
-        }
-        $court = trim($request['court']);
-
-        $data['success'] = "";
-
-        $data['CourtList'] = DB::table('tbl_court')->select('id', 'court_name')->get();
-        $data['DepartmentList'] = $this->DepartmentList($court);
-        $data['showcourt'] = true;
-        if ($this->UserType($this->username) == 'NONTECHNICAL') {
-            $data['showcourt'] = false;
-            $data['court'] = $this->StaffCourt($this->username);
-            $data['courtname'] = $this->CourtName($this->StaffCourt($this->username));
-        }
-        return view('hr.basicparameter.department', $data);
-    }
+   
 
     public function getDepartment(Request $request)
     {
@@ -502,22 +476,7 @@ class BasicParameterController extends functionController
 
 
 
-    public function updateDesignation2026(Request $request)
-    {
-        $data['error'] = "";
-        $data['warning'] = "";
-        $data['success'] = "";
-        $CourtID = trim($request['CourtID']);
-        $department = trim($request['DeptID']);
-        Session::put('DepartmentID', $department);
-        Session::put('CourtID', $CourtID);
-        $designation = trim($request['designation']);
-        $PostID = trim($request['PostID']);
-
-        DB::table('tbldesignation')->where('id', $PostID)->update(['designation' => $designation, 'departmentID' => $department,]);
-        // return redirect('basic/designation')->with('message', ' successfully updated');;
-        return redirect()->back()->with('success', 'Designation updated successfully!');
-    }
+   
 
 
     public function updateDesignation(Request $request)
@@ -536,22 +495,7 @@ class BasicParameterController extends functionController
         // return redirect('basic/designation')->with('message', ' successfully updated');;
         return redirect()->back()->with('success', 'Designation updated successfully!');
     }
-    public function updateUnit_16_4_2026(Request $request)
-    {
-        $data['error'] = "";
-        $data['warning'] = "";
-        $data['success'] = "";
-        // $CourtID = trim($request['CourtID']);
-        $department = trim($request['DeptID']);
-        Session::put('DepartmentID', $department);
-        // Session::put('CourtID', $CourtID);
-        $unit = strtoupper(trim($request->unit));
-        $PostID = trim($request['PostID']);
-
-        DB::table('tblunits')->where('unitID', $PostID)->update(['unit' => $unit, 'departmentID' => $department,]);
-        // return redirect('basic/designation')->with('message', ' successfully updated');;
-        return redirect()->back()->with('success', 'Unit updated successfully!');
-    }
+ 
 
     public function updateUnit(Request $request)
     {
