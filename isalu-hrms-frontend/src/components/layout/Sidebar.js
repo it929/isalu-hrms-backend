@@ -73,6 +73,7 @@ export default function Sidebar() {
     { name: 'Salary Structure', path: '/dashboard/payroll/salary-structure', icon: <Landmark size={16} /> },
     { name: 'Apply for Loan',   path: '/dashboard/payroll/apply-loan',       icon: <DollarSign size={16} /> },
     { name: 'Apply for IOU',    path: '/dashboard/payroll/apply-iou',        icon: <DollarSign size={16} /> },
+    { name: 'Salary Compute',   path: '/dashboard/payroll/salary-compute',   icon: <Settings size={16} /> },
     { name: 'Staff Control Variable', path: '/dashboard/payroll/staff-control-variable', icon: <Settings size={16} /> },
     { name: 'Control Variable Setup', path: '/dashboard/payroll/cv-setup',   icon: <Settings size={16} /> },
     { name: 'Loan Types Setup', path: '/dashboard/payroll/loan-types',       icon: <Settings size={16} /> },

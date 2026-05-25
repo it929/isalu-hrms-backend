@@ -11,6 +11,18 @@
   --border: #e2e8f0;
   --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --radius: 0.5rem;
+
+  /* Custom variables for sidebar/navbar - dark themed even in light mode */
+  --navbar-bg: #0f172a;
+  --navbar-color: #94a3b8;
+  --navbar-color-active: #ffffff;
+  --navbar-border: #1e293b;
+  
+  --sidebar-bg: #0f172a;
+  --sidebar-color: #94a3b8;
+  --sidebar-color-active: #ffffff;
+  --sidebar-hover: #1e293b;
+  --sidebar-border: #1e293b;
 }
 
 [data-theme='dark'] {
@@ -23,6 +35,18 @@
   --secondary: #94a3b8;
   --border: #334155;
   --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+
+  /* Custom variables for sidebar/navbar in dark mode */
+  --navbar-bg: #0f172a;
+  --navbar-color: #94a3b8;
+  --navbar-color-active: #ffffff;
+  --navbar-border: #1e293b;
+  
+  --sidebar-bg: #0f172a;
+  --sidebar-color: #94a3b8;
+  --sidebar-color-active: #ffffff;
+  --sidebar-hover: #1e293b;
+  --sidebar-border: #1e293b;
 }
 
 * {

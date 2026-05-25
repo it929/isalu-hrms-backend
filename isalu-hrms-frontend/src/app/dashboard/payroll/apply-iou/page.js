@@ -97,6 +97,15 @@ export default function ApplyIouPage() {
   });
   const [reason, setReason] = useState('');
 
+  // Monthly Limit Tracking Details
+  const [limitDetails, setLimitDetails] = useState({
+    gross_salary: 0,
+    max_limit: 0,
+    used_amount: 0,
+    remaining_limit: 0,
+    month_name: ''
+  });
+
   // Client-side pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
@@ -108,11 +117,27 @@ export default function ApplyIouPage() {
 
   // Fetch staff list for dropdown
   const fetchStaffData = useCallback(async () => {
+    const cacheKey = 'hrms_apply_iou_staff_cache';
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          setStaffList(JSON.parse(cached));
+        }
+      } catch (err) {
+        console.error('Failed to parse cached staff list:', err);
+      }
+    }
+
     const headers = buildHeaders();
     try {
       const staffRes = await axios.get(`${API_BASE}/payroll/ious/staff`, { headers });
       if (staffRes.data.status === 'success') {
-        setStaffList(staffRes.data.data || []);
+        const freshData = staffRes.data.data || [];
+        setStaffList(freshData);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(cacheKey, JSON.stringify(freshData));
+        }
       }
     } catch (err) {
       console.error('Failed to load staff list:', err);
@@ -122,14 +147,19 @@ export default function ApplyIouPage() {
   // Fetch submitted IOUs list
   const fetchRecords = useCallback(async (silent = false) => {
     const cacheKeyRecords = 'hrms_ious_records_cache';
+    const cacheKeyCtx = 'hrms_apply_iou_user_ctx_cache';
     let hasCache = false;
 
     if (!silent) {
       if (typeof window !== 'undefined') {
         const cachedRecords = sessionStorage.getItem(cacheKeyRecords);
-        if (cachedRecords) {
+        const cachedCtx = sessionStorage.getItem(cacheKeyCtx);
+        if (cachedRecords && cachedCtx) {
           setRecords(JSON.parse(cachedRecords));
+          setUserCtx(JSON.parse(cachedCtx));
           hasCache = true;
+        } else if (cachedRecords) {
+          setRecords(JSON.parse(cachedRecords));
         }
       }
       if (!hasCache) setLoading(true);
@@ -141,16 +171,18 @@ export default function ApplyIouPage() {
       if (res.data.status === 'success') {
         const freshRecords = res.data.data || [];
         setRecords(freshRecords);
-        setUserCtx({
+        const freshCtx = {
           isSuperAdmin: res.data.isSuperAdmin || false,
           isAdminStaff: res.data.isAdminStaff || false,
           isFinanceStaff: res.data.isFinanceStaff || false,
           isAuditStaff: res.data.isAuditStaff || false,
           isHod: res.data.isHod || false,
           employee: res.data.employee || null,
-        });
+        };
+        setUserCtx(freshCtx);
         if (typeof window !== 'undefined') {
           sessionStorage.setItem(cacheKeyRecords, JSON.stringify(freshRecords));
+          sessionStorage.setItem(cacheKeyCtx, JSON.stringify(freshCtx));
         }
       }
     } catch (err) {
@@ -193,15 +225,69 @@ export default function ApplyIouPage() {
   useEffect(() => {
     const currentEmployee = userCtx.employee;
 
-    if (!canSelectStaff && currentEmployee && staffList.length > 0) {
+    if (!canSelectStaff && currentEmployee) {
       const empId = currentEmployee.ID ?? currentEmployee.id;
+      const rawName = `${currentEmployee.surname || ''} ${currentEmployee.first_name || ''} ${currentEmployee.othernames || ''}`;
+      const fullName = currentEmployee.name || rawName.replace(/\s+/g, ' ').trim();
+
       const matchingStaff = staffList.find(s => String(s.id) === String(empId));
       if (matchingStaff) {
         setSelectedStaff(matchingStaff);
         setDropdownSearch(matchingStaff.name);
+      } else {
+        setSelectedStaff({
+          id: empId,
+          name: fullName,
+          fileNo: currentEmployee.fileNo || '',
+          salary: 0.00,
+          max_iou: 0.00
+        });
+        setDropdownSearch(fullName);
       }
     }
-  }, [staffList, userCtx]);
+  }, [staffList, userCtx, canSelectStaff]);
+
+  const fetchUsedLimit = useCallback(async (staffId, date, excludeId) => {
+    if (!staffId || !date) return;
+    const cacheKey = `hrms_apply_iou_limit_cache_${staffId}_${date}`;
+    if (!excludeId && typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          setLimitDetails(JSON.parse(cached));
+        }
+      } catch (err) {
+        console.error('Failed to parse cached limit details:', err);
+      }
+    }
+
+    const headers = buildHeaders();
+    try {
+      const res = await axios.get(`${API_BASE}/payroll/ious/used-limit?staff_id=${staffId}&date=${date}${excludeId ? `&exclude_id=${excludeId}` : ''}`, { headers });
+      if (res.data.status === 'success') {
+        setLimitDetails(res.data.data);
+        if (!excludeId && typeof window !== 'undefined') {
+          sessionStorage.setItem(cacheKey, JSON.stringify(res.data.data));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch monthly IOU limit details:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedStaff && iouDate) {
+      fetchUsedLimit(selectedStaff.id, iouDate, editId);
+    } else {
+      setLimitDetails({
+        gross_salary: 0,
+        max_limit: 0,
+        used_amount: 0,
+        remaining_limit: 0,
+        month_name: ''
+      });
+    }
+  }, [selectedStaff, iouDate, editId, fetchUsedLimit]);
 
   // Filter staff list
   const filteredStaff = dropdownSearch.trim() === ''
@@ -258,11 +344,18 @@ export default function ApplyIouPage() {
       return;
     }
 
-    // Limit Validation check
+    // Limit Validation check (cumulative monthly validation)
     const requestedAmt = parseFloat(amount);
-    const maxAllowed = selectedStaff.max_iou || 0;
-    if (requestedAmt > maxAllowed) {
-      showToast(`IOU requested amount exceeds the 50% limit of ₦${fmt(maxAllowed)}.`, 'error');
+    const maxAllowed = limitDetails.max_limit || selectedStaff.max_iou || 0;
+    const alreadyUsed = limitDetails.used_amount || 0;
+    const remainingLimit = limitDetails.remaining_limit !== undefined ? limitDetails.remaining_limit : maxAllowed;
+
+    if (requestedAmt > remainingLimit) {
+      if (alreadyUsed > 0) {
+        showToast(`Requested amount (₦${fmt(requestedAmt)}) exceeds the remaining monthly limit of ₦${fmt(remainingLimit)} (₦${fmt(alreadyUsed)} already applied in ${limitDetails.month_name}).`, 'error');
+      } else {
+        showToast(`Requested amount (₦${fmt(requestedAmt)}) exceeds the 50% limit of ₦${fmt(maxAllowed)}.`, 'error');
+      }
       return;
     }
 
@@ -281,6 +374,13 @@ export default function ApplyIouPage() {
       const res = await axios.post(`${API_BASE}/payroll/ious`, payload, { headers });
       if (res.data.status === 'success') {
         showToast(res.data.message || 'IOU record saved successfully.');
+        if (typeof window !== 'undefined') {
+          Object.keys(sessionStorage).forEach(key => {
+            if (key.startsWith('hrms_apply_iou_limit_cache_')) {
+              sessionStorage.removeItem(key);
+            }
+          });
+        }
         handleClearForm();
         fetchRecords(true); // silent refresh
       } else {
@@ -339,6 +439,13 @@ export default function ApplyIouPage() {
       const res = await axios.delete(`${API_BASE}/payroll/ious/${id}`, { headers });
       if (res.data.status === 'success') {
         showToast('IOU application deleted successfully.');
+        if (typeof window !== 'undefined') {
+          Object.keys(sessionStorage).forEach(key => {
+            if (key.startsWith('hrms_apply_iou_limit_cache_')) {
+              sessionStorage.removeItem(key);
+            }
+          });
+        }
         setConfirmDelete(null);
         fetchRecords(true); // silent sync
       } else {
@@ -369,6 +476,40 @@ export default function ApplyIouPage() {
     if (!recordId) return;
 
     setActionLoading(true);
+
+    // Optimistic UI Update: immediately reflect change in the table row
+    const originalRecords = [...records];
+    setRecords(prevRecords =>
+      prevRecords.map(r => {
+        if (r.id === recordId) {
+          const updated = { ...r };
+          if (action === 'approve') {
+            if (level === 'HOD') updated.hod_status = 1;
+            if (level === 'HR') updated.admin_status = 1;
+            if (level === 'Finance') {
+              updated.finance_status = 1;
+              updated.status = 1; // overall approved
+            }
+          } else {
+            if (level === 'HOD') {
+              updated.hod_status = 2;
+              updated.status = 2; // overall rejected
+            }
+            if (level === 'HR') {
+              updated.admin_status = 2;
+              updated.status = 2; // overall rejected
+            }
+            if (level === 'Finance') {
+              updated.finance_status = 2;
+              updated.status = 2; // overall rejected
+            }
+          }
+          return updated;
+        }
+        return r;
+      })
+    );
+
     const headers = buildHeaders();
     const actionUrl = `${API_BASE}/payroll/ious/${level.toLowerCase()}-${action}/${recordId}?remarks=${encodeURIComponent(remarks)}`;
 
@@ -376,12 +517,21 @@ export default function ApplyIouPage() {
       const res = await axios.get(actionUrl, { headers });
       if (res.data.status === 'success') {
         showToast(res.data.message || `IOU successfully ${action === 'approve' ? 'recommended/approved' : 'rejected'}.`);
+        if (typeof window !== 'undefined') {
+          Object.keys(sessionStorage).forEach(key => {
+            if (key.startsWith('hrms_apply_iou_limit_cache_')) {
+              sessionStorage.removeItem(key);
+            }
+          });
+        }
         setApprovalModal({ show: false, recordId: null, level: '', action: '', remarks: '' });
         fetchRecords(true);
       } else {
+        setRecords(originalRecords); // rollback
         showToast(res.data.message || 'Approval action failed.', 'error');
       }
     } catch (err) {
+      setRecords(originalRecords); // rollback
       const msg = err.response?.data?.message ?? 'Failed to process IOU action.';
       showToast(msg, 'error');
     } finally {
@@ -390,10 +540,13 @@ export default function ApplyIouPage() {
   };
 
   // Helper values for Progress Bar & Limits
-  const grossSalary = selectedStaff?.salary || 0;
-  const maxIouLimit = selectedStaff?.max_iou || 0;
+  const grossSalary = limitDetails.gross_salary || selectedStaff?.salary || 0;
+  const maxIouLimit = limitDetails.max_limit || selectedStaff?.max_iou || 0;
+  const alreadyUsedAmount = limitDetails.used_amount || 0;
   const currentRequestAmount = parseFloat(amount) || 0;
-  const percentUsed = grossSalary > 0 ? (currentRequestAmount / grossSalary) * 100 : 0;
+  const totalPlannedAmount = alreadyUsedAmount + currentRequestAmount;
+  const percentUsed = grossSalary > 0 ? (totalPlannedAmount / grossSalary) * 100 : 0;
+  const remainingLimit = limitDetails.remaining_limit !== undefined ? limitDetails.remaining_limit : maxIouLimit;
 
   // Determine progress color
   let progressClass = styles.progressBarGreen;
@@ -457,7 +610,7 @@ export default function ApplyIouPage() {
       return (
         <span className={styles.tierBadgeItem}>
           <span className={styles.tierLabel}>{label}:</span>
-          <span className={`${styles.badge} ${badgeStyle}`} style={{ padding: '0.1rem 0.4rem', fontSize: '0.68rem' }}>Recommended</span>
+          <span className={`${styles.badge} ${badgeStyle}`} style={{ padding: '0.1rem 0.4rem', fontSize: '0.68rem' }}>Approved</span>
         </span>
       );
     }
@@ -527,7 +680,7 @@ export default function ApplyIouPage() {
                     />
                   </div>
 
-                  {showDropdown && filteredStaff.length > 0 && (
+                  {showDropdown && canSelectStaff && filteredStaff.length > 0 && (
                     <ul className={styles.dropdownList}>
                       {filteredStaff.map((staff) => (
                         <li
@@ -542,7 +695,7 @@ export default function ApplyIouPage() {
                     </ul>
                   )}
 
-                  {showDropdown && filteredStaff.length === 0 && (
+                  {showDropdown && canSelectStaff && filteredStaff.length === 0 && (
                     <div className={styles.dropdownList}>
                       <div className={styles.dropdownEmpty}>No active staff records found</div>
                     </div>
@@ -556,9 +709,17 @@ export default function ApplyIouPage() {
                 <div className={styles.salaryIndicatorCard}>
                   {selectedStaff ? (
                     <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                        <span>Gross Salary: <strong>₦{fmt(grossSalary)}</strong></span>
-                        <span>Max IOU: <strong>₦{fmt(maxIouLimit)}</strong></span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.82rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Gross Salary: <strong>₦{fmt(grossSalary)}</strong></span>
+                          <span>Max IOU Limit: <strong>₦{fmt(maxIouLimit)}</strong></span>
+                        </div>
+                        {limitDetails.month_name && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.85, fontSize: '0.78rem', borderTop: '1px dashed rgba(0,0,0,0.1)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
+                            <span>Already Applied ({limitDetails.month_name}): <strong>₦{fmt(alreadyUsedAmount)}</strong></span>
+                            <span>Remaining Limit: <strong style={{ color: remainingLimit > 0 ? 'var(--primary)' : 'var(--danger)' }}>₦{fmt(remainingLimit)}</strong></span>
+                          </div>
+                        )}
                       </div>
                       <div className={styles.progressBarContainer}>
                         <div
@@ -567,8 +728,12 @@ export default function ApplyIouPage() {
                         />
                       </div>
                       <div className={`${styles.limitText} ${textClass}`}>
-                        <span>Requested amount is {percentUsed.toFixed(1)}% of gross monthly salary</span>
-                        {percentUsed > 50 && (
+                        {alreadyUsedAmount > 0 ? (
+                          <span>Total request ({percentUsed.toFixed(1)}% of salary) = ₦{fmt(alreadyUsedAmount)} (applied) + ₦{fmt(currentRequestAmount)} (current)</span>
+                        ) : (
+                          <span>Requested amount is {percentUsed.toFixed(1)}% of gross monthly salary</span>
+                        )}
+                        {totalPlannedAmount > maxIouLimit && (
                           <span style={{ fontWeight: 700 }}>EXCEEDS 50% LIMIT</span>
                         )}
                       </div>
@@ -787,7 +952,7 @@ export default function ApplyIouPage() {
                                 <button
                                   type="button"
                                   className={`${styles.iconBtn} ${styles.approveBtn}`}
-                                  title="HOD Recommend"
+                                  title="HOD Approve"
                                   onClick={() => handleApprovalAction(row.id, 'HOD', 'approve')}
                                 >
                                   <Check size={16} />
@@ -808,7 +973,7 @@ export default function ApplyIouPage() {
                                 <button
                                   type="button"
                                   className={`${styles.iconBtn} ${styles.approveBtn}`}
-                                  title="HR Recommend"
+                                  title="HR Approve"
                                   onClick={() => handleApprovalAction(row.id, 'HR', 'approve')}
                                 >
                                   <Check size={16} />
@@ -934,22 +1099,22 @@ export default function ApplyIouPage() {
                     <span className={styles.detailValue}>{getOverallBadge(detailRecord.status)}</span>
                   </div>
 
-                  <div className={styles.detailItemFull}>
+                  <div className={styles.detailItem}>
                     <span className={styles.detailLabel}>HOD Status Details</span>
                     <span className={styles.detailValue}>
-                      {detailRecord.hod_status === 1 ? `Recommended (ID: ${detailRecord.hod_id || '—'} on ${detailRecord.hod_date || '—'})` : detailRecord.hod_status === 2 ? 'Rejected' : 'Pending'}
+                      {detailRecord.hod_status === 1 ? `Approved by ${detailRecord.hod_name || 'HOD'} on ${detailRecord.hod_date || '—'}` : detailRecord.hod_status === 2 ? 'Rejected' : 'Pending'}
                     </span>
                   </div>
-                  <div className={styles.detailItemFull}>
+                  <div className={styles.detailItem}>
+                    <span className={styles.detailLabel}>HR Status Details</span>
+                    <span className={styles.detailValue}>
+                      {detailRecord.admin_status === 1 ? `Approved by ${detailRecord.admin_name || 'HR Admin'} on ${detailRecord.admin_date || '—'}` : detailRecord.admin_status === 2 ? 'Rejected' : 'Pending'}
+                    </span>
+                  </div>
+                  <div className={styles.detailItem}>
                     <span className={styles.detailLabel}>Finance Status Details</span>
                     <span className={styles.detailValue}>
-                      {detailRecord.finance_status === 1 ? `Recommended (ID: ${detailRecord.finance_id || '—'} on ${detailRecord.finance_date || '—'})` : detailRecord.finance_status === 2 ? 'Rejected' : 'Pending'}
-                    </span>
-                  </div>
-                  <div className={styles.detailItemFull}>
-                    <span className={styles.detailLabel}>Admin Status Details</span>
-                    <span className={styles.detailValue}>
-                      {detailRecord.admin_status === 1 ? `Approved (ID: ${detailRecord.admin_id || '—'} on ${detailRecord.admin_date || '—'})` : detailRecord.admin_status === 2 ? 'Rejected' : 'Pending'}
+                      {detailRecord.finance_status === 1 ? `Approved by ${detailRecord.finance_name || 'Finance Staff'} on ${detailRecord.finance_date || '—'}` : detailRecord.finance_status === 2 ? 'Rejected' : 'Pending'}
                     </span>
                   </div>
 
@@ -1038,7 +1203,7 @@ export default function ApplyIouPage() {
             >
               <div className={styles.modalHeader}>
                 <h3 className={styles.modalTitle}>
-                  {approvalModal.action === 'approve' ? 'Recommend/Approve Application' : 'Reject Application'}
+                  {approvalModal.action === 'approve' ? 'Approve Application' : 'Reject Application'}
                 </h3>
                 <button
                   className={styles.modalClose}
@@ -1051,7 +1216,7 @@ export default function ApplyIouPage() {
               <div className={styles.modalBody}>
                 <div className={styles.detailItemFull}>
                   <p className={styles.confirmMsg} style={{ textAlign: 'left', marginBottom: '0.5rem' }}>
-                    You are performing a <strong>{approvalModal.level}</strong> level <strong>{approvalModal.action === 'approve' ? 'recommendation / approval' : 'rejection'}</strong>.
+                    You are performing a <strong>{approvalModal.level}</strong> level <strong>{approvalModal.action === 'approve' ? 'approval' : 'rejection'}</strong>.
                   </p>
                   <label className={styles.label}>Provide Remarks / Comments (Optional)</label>
                   <textarea

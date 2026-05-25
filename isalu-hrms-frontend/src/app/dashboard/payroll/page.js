@@ -426,22 +426,6 @@ export default function PayrollPage() {
               </select>
             </div>
 
-            {/* Division */}
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="pr-division">Division</label>
-              <select
-                id="pr-division"
-                className={styles.formSelect}
-                value={divisionID}
-                onChange={e => setDivisionID(e.target.value)}
-              >
-                <option value="">-- All Divisions --</option>
-                {divisions.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-
             {/* Bank */}
             <div className={styles.formGroup}>
               <label className={styles.formLabel} htmlFor="pr-bank">Bank</label>
@@ -471,21 +455,6 @@ export default function PayrollPage() {
                   : <Search size={16} />
                 }
                 {loading ? 'Loading…' : 'Generate'}
-              </button>
-
-              <button
-                id="pr-export-btn"
-                type="button"
-                className={styles.btnExport}
-                disabled={exporting || !searched}
-                onClick={handleExport}
-                title={!searched ? 'Generate payroll first' : 'Download as CSV'}
-              >
-                {exporting
-                  ? <Loader2 size={16} className={styles.spinner} />
-                  : <Download size={16} />
-                }
-                {exporting ? 'Exporting…' : 'Export CSV'}
               </button>
             </div>
           </div>
@@ -569,9 +538,30 @@ export default function PayrollPage() {
                   </span>
                 )}
               </h2>
-              <span className={styles.tableMeta}>
-                {total.toLocaleString()} staff · Page {page}/{lastPage}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span className={styles.tableMeta}>
+                  {total.toLocaleString()} staff · Page {page}/{lastPage}
+                </span>
+                <button
+                  id="pr-export-btn"
+                  type="button"
+                  className={styles.btnExport}
+                  disabled={exporting}
+                  onClick={handleExport}
+                  title="Download as CSV"
+                  style={{
+                    padding: '0.45rem 0.85rem',
+                    fontSize: '0.8rem',
+                    borderRadius: '8px',
+                  }}
+                >
+                  {exporting
+                    ? <Loader2 size={14} className={styles.spinner} />
+                    : <Download size={14} />
+                  }
+                  {exporting ? 'Exporting…' : 'Export CSV'}
+                </button>
+              </div>
             </div>
 
             {/* Scrollable table */}

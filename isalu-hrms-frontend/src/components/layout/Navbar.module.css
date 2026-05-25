@@ -1,7 +1,7 @@
 .navbar {
   height: 70px;
-  background-color: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background-color: var(--navbar-bg);
+  border-bottom: 1px solid var(--navbar-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -20,7 +20,7 @@
 .menuBtn {
   background: transparent;
   border: none;
-  color: var(--secondary);
+  color: var(--navbar-color);
   cursor: pointer;
   padding: 0.5rem;
   border-radius: var(--radius);
@@ -31,7 +31,7 @@
 }
 
 .menuBtn:hover {
-  background-color: var(--surface-hover);
+  background-color: var(--sidebar-hover);
   color: var(--primary);
 }
 
@@ -51,7 +51,7 @@
 .iconBtn {
   background: transparent;
   border: none;
-  color: var(--secondary);
+  color: var(--navbar-color);
   cursor: pointer;
   padding: 0.5rem;
   border-radius: 50%;
@@ -62,7 +62,7 @@
 }
 
 .iconBtn:hover {
-  background-color: var(--surface-hover);
+  background-color: var(--sidebar-hover);
   color: var(--primary);
 }
 
@@ -72,7 +72,7 @@
   gap: 0.75rem;
   margin-left: 1rem;
   padding-left: 1rem;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--navbar-border);
 }
 
 .avatar {
@@ -94,9 +94,10 @@
 .name {
   font-weight: 600;
   font-size: 0.9rem;
+  color: var(--navbar-color-active);
 }
 
 .role {
   font-size: 0.75rem;
-  color: var(--secondary);
+  color: var(--navbar-color);
 }

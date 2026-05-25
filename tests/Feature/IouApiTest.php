@@ -101,14 +101,15 @@ class IouApiTest extends TestCase
         );
 
         $headers = $this->getHeaders($user->id);
+        $testDate = '2034-01-15';
 
         // 1. Submit IOU exceeding the 50% limit (e.g. 90,000 > 80,000) -> should fail
         $payloadExceeding = [
             'staff_id'       => $staff->ID,
             'amount'         => 90000.00,
             'reason'         => 'Test exceeding limit reason',
-            'iou_date'       => date('Y-m-d'),
-            'repayment_date' => date('Y-m-d', strtotime('+30 days')),
+            'iou_date'       => $testDate,
+            'repayment_date' => '2034-02-15',
         ];
 
         $responseExceeding = $this->postJson('/api/nextjs/payroll/ious', $payloadExceeding, $headers);
@@ -123,8 +124,8 @@ class IouApiTest extends TestCase
             'staff_id'       => $staff->ID,
             'amount'         => 50000.00,
             'reason'         => 'Test valid IOU application reason',
-            'iou_date'       => date('Y-m-d'),
-            'repayment_date' => date('Y-m-d', strtotime('+30 days')),
+            'iou_date'       => $testDate,
+            'repayment_date' => '2034-02-15',
         ];
 
         $responseValid = $this->postJson('/api/nextjs/payroll/ious', $payloadValid, $headers);
@@ -152,8 +153,8 @@ class IouApiTest extends TestCase
             'staff_id'       => $staff->ID,
             'amount'         => 60000.00, // modify amount
             'reason'         => 'Updated reason',
-            'iou_date'       => date('Y-m-d'),
-            'repayment_date' => date('Y-m-d', strtotime('+30 days')),
+            'iou_date'       => $testDate,
+            'repayment_date' => '2034-02-15',
         ];
 
         $responseUpdate = $this->postJson('/api/nextjs/payroll/ious', $payloadUpdate, $headers);
@@ -221,5 +222,177 @@ class IouApiTest extends TestCase
 
         $this->assertDatabaseMissing('iou_records', ['id' => $iouId]);
         $this->assertDatabaseMissing('iou_approvals', ['iou_id' => $iouId]);
+    }
+
+    /**
+     * Test retrieving cumulative used limit details for a staff member.
+     */
+    public function test_get_used_limit_endpoint()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in DB.');
+        }
+
+        $staff = DB::table('tblper')->first();
+        if (!$staff) {
+            $this->markTestSkipped('No staff record found in tblper.');
+        }
+
+        // Gross salary = 200,000 (50% limit = 100,000)
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $staff->ID],
+            [
+                'basic_salary' => 100000.00,
+                'housing_allowance' => 40000.00,
+                'transport_allowance' => 20000.00,
+                'medical_allowance' => 10000.00,
+                'utility_allowance' => 15000.00,
+                'meal_allowance' => 15000.00,
+            ]
+        );
+
+        $date = '2035-05-15';
+        $headers = $this->getHeaders($user->id);
+
+        // Seed some IOUs for this month
+        // 1. Pending IOU of 30,000
+        $iouId1 = DB::table('iou_records')->insertGetId([
+            'staff_id' => $staff->ID,
+            'amount' => 30000.00,
+            'reason' => 'First pending request',
+            'iou_date' => '2035-05-10',
+            'status' => 0,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // 2. Approved IOU of 25,000
+        $iouId2 = DB::table('iou_records')->insertGetId([
+            'staff_id' => $staff->ID,
+            'amount' => 25000.00,
+            'reason' => 'Second approved request',
+            'iou_date' => '2035-05-12',
+            'status' => 1,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // 3. Rejected IOU of 40,000 (should be excluded)
+        $iouId3 = DB::table('iou_records')->insertGetId([
+            'staff_id' => $staff->ID,
+            'amount' => 40000.00,
+            'reason' => 'Third rejected request',
+            'iou_date' => '2035-05-14',
+            'status' => 2,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        $response = $this->getJson("/api/nextjs/payroll/ious/used-limit?staff_id={$staff->ID}&date={$date}", $headers);
+
+        try {
+            $response->assertStatus(200)
+                ->assertJson([
+                    'status' => 'success',
+                    'data' => [
+                        'gross_salary' => 200000.00,
+                        'max_limit' => 100000.00,
+                        'used_amount' => 55000.00, // 30k + 25k (40k rejected is excluded)
+                        'remaining_limit' => 45000.00,
+                        'month_name' => 'May 2035',
+                    ]
+                ]);
+        } finally {
+            // Clean up seeded records for this test specifically
+            DB::table('iou_records')->whereIn('id', [$iouId1, $iouId2, $iouId3])->delete();
+        }
+    }
+
+    public function test_cumulative_limit_check_across_multiple_applications()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in DB.');
+        }
+
+        DB::table('assign_user_role')->updateOrInsert(
+            ['userID' => $user->id, 'roleID' => 1],
+            ['created_at' => now()]
+        );
+
+        $staff = DB::table('tblper')->first();
+        if (!$staff) {
+            $this->markTestSkipped('No staff record found in tblper.');
+        }
+
+        // Gross salary = 160,000 (50% limit = 80,000)
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $staff->ID],
+            [
+                'basic_salary' => 80000.00,
+                'housing_allowance' => 30000.00,
+                'transport_allowance' => 20000.00,
+                'medical_allowance' => 10000.00,
+                'utility_allowance' => 10000.00,
+                'meal_allowance' => 10000.00,
+            ]
+        );
+
+        $headers = $this->getHeaders($user->id);
+        $monthStr = '2036-05';
+        $createdIds = [];
+
+        try {
+            // 1. Submit first IOU of 30,000 (Pending)
+            $payload1 = [
+                'staff_id' => $staff->ID,
+                'amount' => 30000.00,
+                'reason' => 'IOU Request #1',
+                'iou_date' => "{$monthStr}-01",
+            ];
+            $res1 = $this->postJson('/api/nextjs/payroll/ious', $payload1, $headers);
+            $res1->assertStatus(200);
+            if ($res1->json('id')) $createdIds[] = $res1->json('id');
+
+            // 2. Submit second IOU of 40,000 (Pending). Cumulative = 70,000 <= 80,000. Should succeed.
+            $payload2 = [
+                'staff_id' => $staff->ID,
+                'amount' => 40000.00,
+                'reason' => 'IOU Request #2',
+                'iou_date' => "{$monthStr}-10",
+            ];
+            $res2 = $this->postJson('/api/nextjs/payroll/ious', $payload2, $headers);
+            $res2->assertStatus(200);
+            if ($res2->json('id')) $createdIds[] = $res2->json('id');
+
+            // 3. Submit third IOU of 20,000. Cumulative = 90,000 > 80,000. Should fail.
+            $payload3 = [
+                'staff_id' => $staff->ID,
+                'amount' => 20000.00,
+                'reason' => 'IOU Request #3 (exceeding)',
+                'iou_date' => "{$monthStr}-15",
+            ];
+            $response = $this->postJson('/api/nextjs/payroll/ious', $payload3, $headers);
+            $response->assertStatus(422);
+            $this->assertStringContainsString('plus already applied IOUs', $response->json('message'));
+
+            // 4. Submit IOU of 20,000 in a DIFFERENT month (June). Should succeed.
+            $payloadDifferentMonth = [
+                'staff_id' => $staff->ID,
+                'amount' => 20000.00,
+                'reason' => 'IOU Request in different month',
+                'iou_date' => '2036-06-01',
+            ];
+            $resDiff = $this->postJson('/api/nextjs/payroll/ious', $payloadDifferentMonth, $headers);
+            $resDiff->assertStatus(200);
+            if ($resDiff->json('id')) $createdIds[] = $resDiff->json('id');
+
+        } finally {
+            // Clean up seeded records for this test specifically
+            if (!empty($createdIds)) {
+                DB::table('iou_records')->whereIn('id', $createdIds)->delete();
+            }
+        }
     }
 }

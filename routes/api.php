@@ -123,6 +123,7 @@ Route::prefix('nextjs')->group(function () {
         Route::get('/metadata', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getMetadata']);
         Route::get('/',         [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getPayrollList']);
         Route::get('/export',   [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'exportPayroll']);
+        Route::post('/compute', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'computeSalary']);
 
         // Salary Structures
         Route::prefix('salary-structures')->group(function () {
@@ -170,6 +171,7 @@ Route::prefix('nextjs')->group(function () {
         // Employee IOUs
         Route::prefix('ious')->group(function () {
             Route::get('/staff', [\App\Http\Controllers\Api\IouApiController::class, 'getStaffList']);
+            Route::get('/used-limit', [\App\Http\Controllers\Api\IouApiController::class, 'getUsedLimit']);
             Route::get('/', [\App\Http\Controllers\Api\IouApiController::class, 'index']);
             Route::post('/', [\App\Http\Controllers\Api\IouApiController::class, 'store']);
             Route::delete('/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'destroy']);

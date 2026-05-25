@@ -66,37 +66,42 @@ class IouApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized.'], 401);
             }
 
-            $query = DB::table('tblper')
-                ->where('rank', '!=', 2) // Exclude terminated/retired
-                ->select('ID as id', 'fileNo', 'surname', 'first_name', 'othernames')
-                ->orderBy('surname', 'asc');
+            $query = DB::table('tblper as p')
+                ->leftJoin('salary_structures as ss', 'ss.staffId', '=', 'p.ID')
+                ->where('p.rank', '!=', 2) // Exclude terminated/retired
+                ->select(
+                    'p.ID as id',
+                    'p.fileNo',
+                    'p.surname',
+                    'p.first_name',
+                    'p.othernames',
+                    'ss.basic_salary',
+                    'ss.housing_allowance',
+                    'ss.transport_allowance',
+                    'ss.medical_allowance',
+                    'ss.utility_allowance',
+                    'ss.meal_allowance'
+                )
+                ->orderBy('p.surname', 'asc');
 
             // Non-admins can only select themselves
             if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
                 if ($ctx['employee']) {
-                    $query->where('ID', $ctx['employee']->ID);
+                    $query->where('p.ID', $ctx['employee']->ID);
                 } else {
-                    $query->where('ID', 0); // fallback empty
+                    $query->where('p.ID', 0); // fallback empty
                 }
             }
 
             $staff = $query->get()->map(function ($row) {
                 $fullName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 
-                // Fetch salary structure
-                $struct = DB::table('salary_structures')
-                    ->where('staffId', $row->id)
-                    ->first();
-                
-                $grossSalary = 0.00;
-                if ($struct) {
-                    $grossSalary = (float)$struct->basic_salary +
-                                   (float)$struct->housing_allowance +
-                                   (float)$struct->transport_allowance +
-                                   (float)$struct->medical_allowance +
-                                   (float)$struct->utility_allowance +
-                                   (float)$struct->meal_allowance;
-                }
+                $grossSalary = (float)($row->basic_salary ?? 0.00) +
+                               (float)($row->housing_allowance ?? 0.00) +
+                               (float)($row->transport_allowance ?? 0.00) +
+                               (float)($row->medical_allowance ?? 0.00) +
+                               (float)($row->utility_allowance ?? 0.00) +
+                               (float)($row->meal_allowance ?? 0.00);
 
                 return [
                     'id'       => $row->id,
@@ -122,6 +127,90 @@ class IouApiController extends Controller
     }
 
     /**
+     * GET /api/nextjs/payroll/ious/used-limit
+     * Fetch already applied IOU total for the staff in the month and year of the specified date.
+     */
+    public function getUsedLimit(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized.'], 401);
+            }
+
+            $staffId = $request->input('staff_id');
+            $date = $request->input('date');
+            $excludeId = $request->input('exclude_id');
+
+            if (!$staffId || !$date) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'staff_id and date query parameters are required.'
+                ], 400);
+            }
+
+            // Extract month and year from the date
+            $time = strtotime($date);
+            if (!$time) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Invalid date format.'
+                ], 400);
+            }
+            $month = date('m', $time);
+            $year = date('Y', $time);
+
+            // Fetch salary structure
+            $struct = DB::table('salary_structures')
+                ->where('staffId', $staffId)
+                ->first();
+
+            $grossSalary = 0.00;
+            if ($struct) {
+                $grossSalary = (float)$struct->basic_salary +
+                               (float)$struct->housing_allowance +
+                               (float)$struct->transport_allowance +
+                               (float)$struct->medical_allowance +
+                               (float)$struct->utility_allowance +
+                               (float)$struct->meal_allowance;
+            }
+
+            $maxLimit = $grossSalary * 0.50;
+
+            // Sum already used amount for this month and year (exclude rejected status = 2)
+            $query = DB::table('iou_records')
+                ->where('staff_id', $staffId)
+                ->where('status', '!=', 2)
+                ->whereYear('iou_date', $year)
+                ->whereMonth('iou_date', $month);
+
+            if ($excludeId) {
+                $query->where('id', '!=', $excludeId);
+            }
+
+            $usedAmount = (float) $query->sum('amount');
+            $remainingLimit = max(0.00, $maxLimit - $usedAmount);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'gross_salary' => $grossSalary,
+                    'max_limit' => $maxLimit,
+                    'used_amount' => $usedAmount,
+                    'remaining_limit' => $remainingLimit,
+                    'month_name' => date('F Y', $time),
+                ]
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('IouApiController getUsedLimit: ' . $th->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * GET /api/nextjs/payroll/ious
      * List all IOUs matching user credentials.
      */
@@ -137,13 +226,26 @@ class IouApiController extends Controller
             $query = DB::table('iou_records as ir')
                 ->join('tblper as p', 'p.ID', '=', 'ir.staff_id')
                 ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
+                ->leftJoin('users as u_hod', 'u_hod.id', '=', 'ir.hod_id')
+                ->leftJoin('users as u_admin', 'u_admin.id', '=', 'ir.admin_id')
+                ->leftJoin('users as u_finance', 'u_finance.id', '=', 'ir.finance_id')
+                ->leftJoin('salary_structures as ss', 'ss.staffId', '=', 'ir.staff_id')
                 ->select(
                     'ir.*',
                     'p.fileNo',
                     'p.surname',
                     'p.first_name',
                     'p.othernames',
-                    'd.department'
+                    'd.department',
+                    'u_hod.name as hod_name',
+                    'u_admin.name as admin_name',
+                    'u_finance.name as finance_name',
+                    'ss.basic_salary',
+                    'ss.housing_allowance',
+                    'ss.transport_allowance',
+                    'ss.medical_allowance',
+                    'ss.utility_allowance',
+                    'ss.meal_allowance'
                 );
 
             if ($search !== '') {
@@ -173,20 +275,12 @@ class IouApiController extends Controller
             $records = $query->orderBy('ir.id', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 
-                // Fetch salary structure to calculate dynamic limit details on the table rows
-                $struct = DB::table('salary_structures')
-                    ->where('staffId', $row->staff_id)
-                    ->first();
-                
-                $grossSalary = 0.00;
-                if ($struct) {
-                    $grossSalary = (float)$struct->basic_salary +
-                                   (float)$struct->housing_allowance +
-                                   (float)$struct->transport_allowance +
-                                   (float)$struct->medical_allowance +
-                                   (float)$struct->utility_allowance +
-                                   (float)$struct->meal_allowance;
-                }
+                $grossSalary = (float)($row->basic_salary ?? 0.00) +
+                               (float)($row->housing_allowance ?? 0.00) +
+                               (float)($row->transport_allowance ?? 0.00) +
+                               (float)($row->medical_allowance ?? 0.00) +
+                               (float)($row->utility_allowance ?? 0.00) +
+                               (float)($row->meal_allowance ?? 0.00);
 
                 $row->gross_salary = $grossSalary;
                 $row->percentage_of_salary = $grossSalary > 0 ? round(((float)$row->amount / $grossSalary) * 100, 2) : 0;
@@ -259,13 +353,43 @@ class IouApiController extends Controller
 
             $maxAllowed = $grossSalary * 0.50;
             $amount = (float) $validated['amount'];
+            $id = $validated['id'] ?? null;
 
-            if ($amount > $maxAllowed) {
+            // Extract month and year from the application date
+            $time = strtotime($validated['iou_date']);
+            $month = date('m', $time);
+            $year = date('Y', $time);
+
+            // Calculate other active requests for this month (excluding rejected status = 2)
+            $query = DB::table('iou_records')
+                ->where('staff_id', $validated['staff_id'])
+                ->where('status', '!=', 2)
+                ->whereYear('iou_date', $year)
+                ->whereMonth('iou_date', $month);
+
+            if ($id) {
+                $query->where('id', '!=', $id);
+            }
+
+            $alreadyUsed = (float) $query->sum('amount');
+            $totalPlanned = $alreadyUsed + $amount;
+
+            if ($totalPlanned > $maxAllowed) {
                 $formattedMax = number_format($maxAllowed, 2);
                 $formattedSalary = number_format($grossSalary, 2);
+                $formattedAlready = number_format($alreadyUsed, 2);
+                $formattedRequested = number_format($amount, 2);
+                $monthName = date('F Y', $time);
+                
+                if ($alreadyUsed > 0) {
+                    $msg = "The IOU amount (₦{$formattedRequested}) plus already applied IOUs for {$monthName} (₦{$formattedAlready}) exceeds the maximum allowed limit of 50% of the employee's salary (₦{$formattedMax}).";
+                } else {
+                    $msg = "The IOU amount (₦{$formattedRequested}) exceeds the maximum allowed limit of 50% of the employee's salary (₦{$formattedMax}).";
+                }
+
                 return response()->json([
                     'status'  => 'error',
-                    'message' => "The IOU amount (₦" . number_format($amount, 2) . ") exceeds the maximum allowed limit of 50% of the employee's salary. Maximum allowed: ₦{$formattedMax} (Gross Salary: ₦{$formattedSalary})."
+                    'message' => $msg
                 ], 422);
             }
 
