@@ -177,10 +177,10 @@ class IouApiController extends Controller
 
             $maxLimit = $grossSalary * 0.50;
 
-            // Sum already used amount for this month and year (exclude rejected status = 2)
+            // Sum already used amount for this month and year where finance approval is done (finance_status = 1)
             $query = DB::table('iou_records')
                 ->where('staff_id', $staffId)
-                ->where('status', '!=', 2)
+                ->where('finance_status', 1)
                 ->whereYear('iou_date', $year)
                 ->whereMonth('iou_date', $month);
 
@@ -360,10 +360,10 @@ class IouApiController extends Controller
             $month = date('m', $time);
             $year = date('Y', $time);
 
-            // Calculate other active requests for this month (excluding rejected status = 2)
+            // Calculate other active requests for this month where finance approval is done (finance_status = 1)
             $query = DB::table('iou_records')
                 ->where('staff_id', $validated['staff_id'])
-                ->where('status', '!=', 2)
+                ->where('finance_status', 1)
                 ->whereYear('iou_date', $year)
                 ->whereMonth('iou_date', $month);
 

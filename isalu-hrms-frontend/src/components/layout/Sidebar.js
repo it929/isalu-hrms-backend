@@ -71,6 +71,8 @@ export default function Sidebar() {
   const payrollSubModules = [
     { name: 'Payroll Report',  path: '/dashboard/payroll',                  icon: <FileText size={16} /> },
     { name: 'Salary Structure', path: '/dashboard/payroll/salary-structure', icon: <Landmark size={16} /> },
+    { name: 'Activate Pension', path: '/dashboard/payroll/pension-activation', icon: <Landmark size={16} /> },
+    { name: 'Activate Retention', path: '/dashboard/payroll/retention-activation', icon: <Landmark size={16} /> },
     { name: 'Apply for Loan',   path: '/dashboard/payroll/apply-loan',       icon: <DollarSign size={16} /> },
     { name: 'Apply for IOU',    path: '/dashboard/payroll/apply-iou',        icon: <DollarSign size={16} /> },
     { name: 'Salary Compute',   path: '/dashboard/payroll/salary-compute',   icon: <Settings size={16} /> },

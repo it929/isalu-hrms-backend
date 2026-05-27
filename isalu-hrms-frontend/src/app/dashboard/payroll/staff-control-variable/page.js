@@ -19,6 +19,9 @@ import {
   ChevronDown,
   X,
   XCircle,
+  Upload,
+  AlertTriangle,
+  Download,
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -95,6 +98,13 @@ export default function StaffControlVariablePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
+  // Import states
+  const [importFile, setImportFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const [showWarnings, setShowWarnings] = useState(false);
+  const fileInputRef = useRef(null);
+
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4500);
@@ -102,21 +112,6 @@ export default function StaffControlVariablePage() {
 
   // Fetch static metadata once on mount
   const fetchStaticData = useCallback(async () => {
-    const cacheKeyStaff = 'hrms_staff_cv_staff_cache';
-    const cacheKeyTypes = 'hrms_staff_cv_types_cache';
-    let cachedStaff = null;
-    let cachedTypes = null;
-
-    if (typeof window !== 'undefined') {
-      cachedStaff = sessionStorage.getItem(cacheKeyStaff);
-      cachedTypes = sessionStorage.getItem(cacheKeyTypes);
-      if (cachedStaff && cachedTypes) {
-        setStaffList(JSON.parse(cachedStaff));
-        setVariableTypes(JSON.parse(cachedTypes));
-        return;
-      }
-    }
-
     const headers = buildHeaders();
     try {
       const [staffRes, typesRes] = await Promise.all([
@@ -127,12 +122,10 @@ export default function StaffControlVariablePage() {
       if (staffRes.data.status === 'success') {
         const freshStaff = staffRes.data.data || [];
         setStaffList(freshStaff);
-        if (typeof window !== 'undefined') sessionStorage.setItem(cacheKeyStaff, JSON.stringify(freshStaff));
       }
       if (typesRes.data.status === 'success') {
         const freshTypes = typesRes.data.data || [];
         setVariableTypes(freshTypes);
-        if (typeof window !== 'undefined') sessionStorage.setItem(cacheKeyTypes, JSON.stringify(freshTypes));
       }
     } catch (err) {
       console.error('Failed to load static dropdown data:', err);
@@ -178,8 +171,11 @@ export default function StaffControlVariablePage() {
   }, [showToast]);
 
   useEffect(() => {
-    fetchStaticData();
-    fetchRecords();
+    const timer = setTimeout(() => {
+      fetchStaticData();
+      fetchRecords();
+    }, 50);
+    return () => clearTimeout(timer);
   }, [fetchStaticData, fetchRecords]);
 
   // Click outside dropdown handler
@@ -201,17 +197,20 @@ export default function StaffControlVariablePage() {
 
   // Prepopulate employee ID for non-admin users
   useEffect(() => {
-    const isSuperAdmin = userCtx.isSuperAdmin;
-    const isAdminStaff = userCtx.isAdminStaff;
-    const currentEmployee = userCtx.employee;
+    const timer = setTimeout(() => {
+      const isSuperAdmin = userCtx.isSuperAdmin;
+      const isAdminStaff = userCtx.isAdminStaff;
+      const currentEmployee = userCtx.employee;
 
-    if (!(isSuperAdmin || isAdminStaff) && currentEmployee && staffList.length > 0) {
-      const matchingStaff = staffList.find(s => s.id === currentEmployee.id);
-      if (matchingStaff) {
-        setSelectedStaff(matchingStaff);
-        setDropdownSearch(matchingStaff.name);
+      if (!(isSuperAdmin || isAdminStaff) && currentEmployee && staffList.length > 0) {
+        const matchingStaff = staffList.find(s => s.id === currentEmployee.id);
+        if (matchingStaff) {
+          setSelectedStaff(matchingStaff);
+          setDropdownSearch(matchingStaff.name);
+        }
       }
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [staffList, userCtx]);
 
   // Dynamically load descriptions when variable type changes
@@ -236,9 +235,12 @@ export default function StaffControlVariablePage() {
 
   // Track One-Time amount autofill
   useEffect(() => {
-    if (oneTime) {
-      setTargetAmount(amount);
-    }
+    const timer = setTimeout(() => {
+      if (oneTime) {
+        setTargetAmount(amount);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [amount, oneTime]);
 
   const handleCheckboxChange = (name) => {
@@ -360,6 +362,92 @@ export default function StaffControlVariablePage() {
       showToast(msg, 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const headers = ['Staff ID', 'Description', 'Amount', 'Target Amount', 'No Limit', 'One Time'];
+    const sampleRow1 = ['10', 'Housing Allowance', '45000.00', '', 'Yes', 'No'];
+    const sampleRow2 = ['12', 'Pension', '15000.00', '150000.00', 'No', 'No'];
+    const sampleRow3 = ['15', 'Other Deduction', '5000.00', '5000.00', 'No', 'Yes'];
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [
+          headers.join(','), 
+          sampleRow1.join(','), 
+          sampleRow2.join(','),
+          sampleRow3.join(',')
+        ].join('\n');
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "staff_control_variables_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImportFile(file);
+      setImportResult(null);
+    }
+  };
+
+  const handleImportSubmit = async (e) => {
+    e.preventDefault();
+    if (!importFile) {
+      showToast('Please select a file to import.', 'error');
+      return;
+    }
+
+    setUploading(true);
+    setImportResult(null);
+    const headers = buildHeaders();
+    
+    const formData = new FormData();
+    formData.append('excel_file', importFile);
+
+    try {
+      const res = await axios.post(`${API_BASE}/payroll/staff-control-variables/import`, formData, {
+        headers: {
+          ...headers,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (res.data.status === 'success') {
+        showToast(res.data.message || 'Import completed successfully.');
+        setImportResult({
+          success: true,
+          message: res.data.message,
+          importedCount: res.data.imported_count,
+          warnings: res.data.warnings || [],
+        });
+        setImportFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        fetchRecords(true);
+      } else {
+        showToast(res.data.message || 'Import failed.', 'error');
+        setImportResult({
+          success: false,
+          message: res.data.message || 'Import failed.',
+          warnings: res.data.warnings || [],
+        });
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message ?? 'Failed to import control variables.';
+      showToast(msg, 'error');
+      setImportResult({
+        success: false,
+        message: msg,
+        warnings: err.response?.data?.warnings || [],
+      });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -718,6 +806,145 @@ export default function StaffControlVariablePage() {
           </form>
         </div>
       </div>
+
+      {/* Bulk Import Card */}
+      {!isFormDisabled && (
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>
+            <h2 className={styles.cardTitle}>Bulk Import Control Variables</h2>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnSecondary}`}
+              style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
+              onClick={downloadTemplate}
+            >
+              <Download size={14} />
+              Download CSV Template
+            </button>
+          </div>
+          <div className={styles.cardBody}>
+            <form onSubmit={handleImportSubmit} className={styles.importForm}>
+              <div className={styles.importInfo}>
+                <p className={styles.importInstructions}>
+                  Upload an Excel (<code>.xlsx</code>, <code>.xls</code>) or <code>.csv</code> spreadsheet containing employee monthly variable allocations to update or insert records.
+                </p>
+                <div className={styles.templateRequirements}>
+                  <strong>Spreadsheet columns structure (with or without headers):</strong>
+                  <ul>
+                    <li>Column 1: <code>Staff ID</code> (Numeric ID in system, e.g. <code>12</code>)</li>
+                    <li>Column 2: <code>Description</code> (Setup name, e.g. <code>Pension</code>, <code>Overtime</code>, <code>Housing Allowance</code>)</li>
+                    <li>Column 3: <code>Amount</code> (Numeric monthly amount, e.g. <code>15000.00</code>)</li>
+                    <li>Column 4 (Optional): <code>Target Limit</code> (Total target amount, e.g. <code>50000.00</code>)</li>
+                    <li>Column 5 (Optional): <code>No Limit</code> (<code>Yes</code>/<code>No</code> or <code>1</code>/<code>0</code>)</li>
+                    <li>Column 6 (Optional): <code>One-Time</code> (<code>Yes</code>/<code>No</code> or <code>1</code>/<code>0</code>)</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className={styles.dropzoneContainer}>
+                <div 
+                  className={`${styles.dropzone} ${importFile ? styles.dropzoneActive : ''}`}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept=".xlsx,.xls,.csv"
+                    className={styles.hiddenInput}
+                  />
+                  <Upload className={styles.uploadIcon} size={24} />
+                  {importFile ? (
+                    <div className={styles.fileDetails}>
+                      <span className={styles.fileName}>{importFile.name}</span>
+                      <span className={styles.fileSize}>({(importFile.size / 1024).toFixed(1)} KB)</span>
+                    </div>
+                  ) : (
+                    <div className={styles.uploadPlaceholder}>
+                      <span>Drag & drop your file here, or <strong className={styles.browseText}>browse</strong></span>
+                      <span className={styles.uploadSubtext}>Supports .xlsx, .xls, .csv</span>
+                    </div>
+                  )}
+                </div>
+
+                {importFile && (
+                  <button
+                    type="button"
+                    className={styles.clearFileBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImportFile(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              <div className={styles.importActions}>
+                <button
+                  type="submit"
+                  className={`${styles.btn} ${styles.btnPrimary}`}
+                  disabled={uploading || !importFile}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className={styles.loadingSpinner} size={16} />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={16} />
+                      Upload & Import
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {/* Results & warnings summary */}
+            {importResult && (
+              <div className={`${styles.importResultBox} ${importResult.success ? styles.resultSuccess : styles.resultError}`}>
+                <div className={styles.resultHeader}>
+                  {importResult.success ? (
+                    <CheckCircle2 className={styles.resultIcon} size={20} />
+                  ) : (
+                    <XCircle className={styles.resultIcon} size={20} />
+                  )}
+                  <div>
+                    <h4 className={styles.resultTitle}>
+                      {importResult.success ? 'Import Complete' : 'Import Failed'}
+                    </h4>
+                    <p className={styles.resultMessage}>{importResult.message}</p>
+                  </div>
+                </div>
+
+                {importResult.warnings && importResult.warnings.length > 0 && (
+                  <div className={styles.warningsSection}>
+                    <button
+                      type="button"
+                      className={styles.toggleWarningsBtn}
+                      onClick={() => setShowWarnings(!showWarnings)}
+                    >
+                      <AlertTriangle size={14} style={{ marginRight: '4px' }} />
+                      {showWarnings ? 'Hide' : 'Show'} {importResult.warnings.length} warning(s)/error(s) occurred
+                      <ChevronDown size={14} style={{ marginLeft: 'auto', transform: showWarnings ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                    </button>
+                    {showWarnings && (
+                      <ul className={styles.warningsList}>
+                        {importResult.warnings.map((w, idx) => (
+                          <li key={idx} className={styles.warningItem}>{w}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* listings table */}
       <div className={styles.card}>

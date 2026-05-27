@@ -282,12 +282,17 @@ class NextJsPayrollApiController extends Controller
                 'pc.pension',
                 'pc.coop_savings',
                 'pc.other_deductions',
+                'pc.retention',
+                'pc.surcharges',
+                'pc.medical_loan',
+                'pc.coop_loan_rpyt',
                 'pc.total_deductions',
                 'pc.net_pay',
                 'pc.total_income',
                 'pc.declare_income',
                 'pc.iou',
                 'pc.absence_penalty',
+                'pc.leave_of_absence_deduction',
                 'p.AccNo',
                 'bl.bank as bankName',
                 'pc.paid_days'
@@ -309,14 +314,15 @@ class NextJsPayrollApiController extends Controller
                     'PAID DAYS'          => $row->paid_days,
                     'P.TAX'              => number_format((float)$row->paye_tax, 2, '.', ''),
                     'IOU'                => number_format((float)$row->iou, 2, '.', ''),
-                    'RETENTION'          => '0.00',
+                    'RETENTION'          => number_format((float)$row->retention, 2, '.', ''),
                     'LOAN'               => number_format((float)$row->loan_deduction, 2, '.', ''),
-                    'SURGHARGES'         => '0.00',
+                    'SURGHARGES'         => number_format((float)$row->surcharges, 2, '.', ''),
                     'PENSION'            => number_format((float)$row->pension,  2, '.', ''),
-                    'MEDICAL LOAN'       => '0.00',
+                    'MEDICAL LOAN'       => number_format((float)$row->medical_loan, 2, '.', ''),
                     'COOP. SAVING'       => number_format((float)$row->coop_savings, 2, '.', ''),
-                    'COOP. LOAN RPYT'    => '0.00',
+                    'COOP. LOAN RPYT'    => number_format((float)$row->coop_loan_rpyt, 2, '.', ''),
                     'ABSENCE PENALTY'    => number_format((float)$row->absence_penalty, 2, '.', ''),
+                    'LEAVE OF ABSENCE DEDUCTION' => number_format((float)$row->leave_of_absence_deduction, 2, '.', ''),
                     'OTHER DEDUCTION'    => number_format((float)$row->other_deductions, 2, '.', ''),
                     'TOTAL DEDUCTION'    => number_format((float)$row->total_deductions, 2, '.', ''),
                     'NETPAY'             => number_format((float)$row->net_pay,   2, '.', ''),
@@ -618,13 +624,19 @@ class NextJsPayrollApiController extends Controller
                 $paidDays = max(0, 30 - $loaDays);
 
                 // 3. Process earnings and deductions from staffEarningAndDeduction
-                $variables = DB::table('staffEarningAndDeduction')
-                    ->where('staffId', $emp->ID)
-                    ->get();
+                 $variables = DB::table('staffEarningAndDeduction')
+                     ->where('staffId', $emp->ID)
+                     ->get();
 
                 $loanDeduction = 0.00;
                 $coopSavings = 0.00;
                 $otherDeductions = 0.00;
+                $retention = 0.00;
+                $surcharges = 0.00;
+                $medicalLoan = 0.00;
+                $coopLoanRpyt = 0.00;
+                $absencePenalty = 0.00;
+                $leaveOfAbsenceDeduction = 0.00;
                 $totalEarningVars = 0.00;
                 $appliedAmountsMap = [];
                 $hasPensionDeduction = false;
@@ -636,12 +648,17 @@ class NextJsPayrollApiController extends Controller
                     $appliedAmount = 0.00;
 
                     // Check if it's a pension deduction flag
-                    if ($v->variable_type === 'deduction' && (stripos($v->description, 'pension') !== false || stripos($v->description, 'pention') !== false)) {
+                    if (strtolower($v->variable_type) === 'deduction' && (stripos($v->description, 'pension') !== false || stripos($v->description, 'pention') !== false)) {
                         $hasPensionDeduction = true;
                         continue; // Skip raw amount deduction since it is calculated as a percentage dynamically
                     }
 
-                    if ($v->variable_type === 'deduction') {
+                    // Skip raw retention deduction since it is calculated dynamically as 5% of salary structures if active
+                    if (strtolower($v->variable_type) === 'deduction' && stripos($v->description, 'retention') !== false) {
+                        continue;
+                    }
+
+                    if (strtolower($v->variable_type) === 'deduction') {
                         if ($v->one_time == 1) {
                             if ($totalDeducted == 0) {
                                 $appliedAmount = $amount;
@@ -671,15 +688,28 @@ class NextJsPayrollApiController extends Controller
 
                             // Categorize deduction
                             $desc = strtolower($v->description);
-                            if (strpos($desc, 'loan') !== false || strpos($desc, 'debt') !== false || in_array($v->cv_setup_id, [3, 7, 24])) {
-                                $loanDeduction += $appliedAmount;
+                            if (strpos($desc, 'retention') !== false) {
+                                $retention += $appliedAmount;
+                            } elseif (strpos($desc, 'absence pen') !== false || strpos($desc, 'absence penalty') !== false) {
+                                $absencePenalty += $appliedAmount;
+                            } elseif (strpos($desc, 'surcharge') !== false) {
+                                $surcharges += $appliedAmount;
+                            } elseif (strpos($desc, 'med. loan') !== false || strpos($desc, 'medical loan') !== false) {
+                                $medicalLoan += $appliedAmount;
+                            } elseif (
+                                (strpos($desc, 'coop') !== false || strpos($desc, 'cooperative') !== false) &&
+                                (strpos($desc, 'loan') !== false || strpos($desc, 'rpyt') !== false || strpos($desc, 'rpty') !== false || strpos($desc, 'repay') !== false || $v->cv_setup_id == 24)
+                            ) {
+                                $coopLoanRpyt += $appliedAmount;
                             } elseif (strpos($desc, 'coop') !== false || strpos($desc, 'saving') !== false || in_array($v->cv_setup_id, [2, 5, 6])) {
                                 $coopSavings += $appliedAmount;
+                            } elseif (strpos($desc, 'loan') !== false || strpos($desc, 'debt') !== false || in_array($v->cv_setup_id, [3, 7])) {
+                                $loanDeduction += $appliedAmount;
                             } else {
                                 $otherDeductions += $appliedAmount;
                             }
                         }
-                    } elseif ($v->variable_type === 'earning') {
+                    } elseif (strtolower($v->variable_type) === 'earning') {
                         if ($v->one_time == 1) {
                             if ($totalDeducted == 0) {
                                 $appliedAmount = $amount;
@@ -727,7 +757,7 @@ class NextJsPayrollApiController extends Controller
                 // PAYE and Pension calculated as percentage of computed incomes
                 $payeTax = $declareIncome * ($taxRate / 100.0);
                 $pension = 0.00;
-                if ($hasPensionDeduction) {
+                if ($struct && $struct->pen_act == 1) {
                     $pension = $grossPay * ($pensionRate / 100.0);
                 }
 
@@ -742,15 +772,38 @@ class NextJsPayrollApiController extends Controller
                     ->sum('amount');
 
                 // Compute leave of absence deduction: (grossPay / 30) * days_of_absent
-                $absencePenalty = ($grossPay / 30.0) * $loaDays;
+                $leaveOfAbsenceDeduction = ($grossPay / 30.0) * $loaDays;
 
-                $totalDeductions = $payeTax + $pension + $loanDeduction + $coopSavings + $otherDeductions + $iouSum + $absencePenalty;
+                // Compute dynamic retention if active in salary structure and count of previous deductions is < 20 months
+                if ($struct && $struct->reten_act == 1) {
+                    $previousDeductionsCount = DB::table('payroll_conpt as pc')
+                        ->join('payroll_runs as pr', 'pr.id', '=', 'pc.payroll_run_id')
+                        ->where('pc.staffID', $emp->ID)
+                        ->where('pc.retention', '>', 0)
+                        ->where(function($q) use ($year, $month) {
+                            $q->where('pr.year', '<', $year)
+                              ->orWhere(function($sq) use ($year, $month) {
+                                  $sq->where('pr.year', '=', $year)
+                                     ->where('pr.month', '<', $month);
+                              });
+                        })
+                        ->count();
+
+                    if ($previousDeductionsCount < 20) {
+                        $retentionBase = $basic + $housing + $transport + $medical + $utility + $meal;
+                        $retention = round(0.05 * $retentionBase, 2);
+                    }
+                }
+
+                $totalDeductions = $payeTax + $pension + $loanDeduction + $coopSavings + $otherDeductions + $iouSum + $absencePenalty + $retention + $surcharges + $medicalLoan + $coopLoanRpyt + $leaveOfAbsenceDeduction;
                 $netPay = $grossPay - $totalDeductions;
 
                 // 5. Submit detailed row into payroll_conpt table
                 DB::table('payroll_conpt')->insert([
                     'payroll_run_id'   => $runId,
                     'staffID'          => $emp->ID,
+                    'month'            => $month,
+                    'year'             => $year,
                     'basic'            => round($basicProrated, 2),
                     'housing'          => round($housingProrated, 2),
                     'transport'        => round($transportProrated, 2),
@@ -764,12 +817,17 @@ class NextJsPayrollApiController extends Controller
                     'pension'          => round($pension, 2),
                     'coop_savings'     => round($coopSavings, 2),
                     'other_deductions' => round($otherDeductions, 2),
+                    'retention'        => round($retention, 2),
+                    'surcharges'       => round($surcharges, 2),
+                    'medical_loan'     => round($medicalLoan, 2),
+                    'coop_loan_rpyt'   => round($coopLoanRpyt, 2),
                     'total_deductions' => round($totalDeductions, 2),
                     'net_pay'          => round($netPay, 2),
                     'total_income'     => round($totalIncome, 2),
                     'declare_income'   => round($declareIncome, 2),
                     'iou'              => round($iouSum, 2),
                     'absence_penalty'  => round($absencePenalty, 2),
+                    'leave_of_absence_deduction' => round($leaveOfAbsenceDeduction, 2),
                     'applied_amounts'  => !empty($appliedAmountsMap) ? json_encode($appliedAmountsMap) : null,
                     'created_at'       => now()
                 ]);

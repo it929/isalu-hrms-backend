@@ -319,20 +319,20 @@ export default function SalaryStructurePage() {
   // Export/Download Excel Template CSV
   const handleDownloadTemplate = () => {
     const headers = [
-      'Staff ID',
-      'Basic Salary',
-      'Declared Salary',
-      'Housing Allowance',
-      'Transport Allowance',
-      'Medical Allowance',
-      'Utility Allowance',
-      'Meal Allowance',
-      'Pension Rate (%)',
-      'Tax Rate (%)'
+      'staffId',
+      'basic_salary',
+      'declare_salary',
+      'housing_allowance',
+      'transport_allowance',
+      'medical_allowance',
+      'utility_allowance',
+      'meal_allowance',
+      'pension_rate',
+      'tax_rate'
     ];
 
     const sampleRow = [
-      '1', // staffId example
+      '1',
       '120000.00',
       '120000.00',
       '30000.00',
@@ -733,7 +733,7 @@ export default function SalaryStructurePage() {
                 Download CSV Column Template
               </button>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                Required column titles (or order): <strong>Staff ID, Basic Salary, Declared Salary, Housing, Transport, Medical, Utility, Meal, Pension, Tax</strong>
+                Required column titles (or order): <strong>staffId, basic_salary, declare_salary, housing_allowance, transport_allowance, medical_allowance, utility_allowance, meal_allowance, pension_rate, tax_rate</strong>
               </span>
             </div>
 

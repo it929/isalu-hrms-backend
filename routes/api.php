@@ -33,6 +33,7 @@ Route::prefix('nextjs')->group(function () {
     Route::get('/hr/add-staff/lgas/{stateID}', [\App\Http\Controllers\Api\HrStaffApiController::class, 'getLgas']);
     Route::post('/hr/add-staff', [\App\Http\Controllers\Api\HrStaffApiController::class, 'store']);
     Route::get('/hr/add-staff/list', [\App\Http\Controllers\Api\HrStaffApiController::class, 'list']);
+    Route::post('/hr/add-staff/import', [\App\Http\Controllers\Api\HrStaffApiController::class, 'importStaff']);
     // HR - Staff Documentation Wizard
     Route::prefix('hr/documentation')->group(function () {
         Route::get('/{id}', [\App\Http\Controllers\Api\HrStaffApiController::class, 'getDocumentation']);
@@ -157,6 +158,7 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/descriptions/{particularId}', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'getDescriptions']);
             Route::get('/', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'index']);
             Route::post('/', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'store']);
+            Route::post('/import', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'import']);
             Route::delete('/{id}', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'destroy']);
         });
 
@@ -181,6 +183,20 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/finance-reject/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'financeReject']);
             Route::get('/hr-approve/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'hrApprove']);
             Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'hrReject']);
+        });
+
+        // Pension Activation
+        Route::prefix('pension-activation')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\PensionActivationApiController::class, 'index']);
+            Route::post('/toggle', [\App\Http\Controllers\Api\PensionActivationApiController::class, 'togglePension']);
+            Route::post('/import', [\App\Http\Controllers\Api\PensionActivationApiController::class, 'importPension']);
+        });
+
+        // Retention Activation
+        Route::prefix('retention-activation')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\RetentionActivationApiController::class, 'index']);
+            Route::post('/toggle', [\App\Http\Controllers\Api\RetentionActivationApiController::class, 'toggleRetention']);
+            Route::post('/import', [\App\Http\Controllers\Api\RetentionActivationApiController::class, 'importRetention']);
         });
     });
 });

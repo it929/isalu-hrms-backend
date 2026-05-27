@@ -1012,4 +1012,432 @@ class HrStaffApiController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * POST /api/nextjs/hr/add-staff/import
+     * Bulk import staff via Excel/CSV spreadsheet.
+     */
+    public function importStaff(Request $request)
+    {
+        $request->validate([
+            'excel_file' => 'required|file'
+        ]);
+
+        $file = $request->file('excel_file');
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (!in_array($extension, ['xlsx', 'xls', 'csv'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid file format. Only .xlsx, .xls, and .csv files are allowed.'
+            ], 422);
+        }
+
+        try {
+            $rows = \Maatwebsite\Excel\Facades\Excel::toArray([], $file)[0];
+            if (empty($rows) || count($rows) <= 1) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'The uploaded spreadsheet is empty or contains no records.'
+                ], 422);
+            }
+
+            // Normalize headers from the first row
+            $headers = array_map(function ($h) {
+                return strtolower(trim((string)$h));
+            }, $rows[0]);
+
+            $fieldMap = [
+                'title' => -1,
+                'surname' => -1,
+                'firstname' => -1,
+                'othernames' => -1,
+                'sex' => -1,
+                'maritalstatus' => -1,
+                'date_of_birth' => -1,
+                'phoneno' => -1,
+                'email' => -1,
+                'address' => -1,
+                'department' => -1,
+                'unit' => -1,
+                'designation' => -1,
+                'date_of_joining' => -1,
+                'iou' => -1,
+            ];
+
+            foreach ($headers as $index => $header) {
+                $cleanHeader = str_replace([' ', '_', '-'], '', $header);
+                
+                if (in_array($cleanHeader, ['title'])) {
+                    $fieldMap['title'] = $index;
+                } elseif (in_array($cleanHeader, ['surname', 'lastname'])) {
+                    $fieldMap['surname'] = $index;
+                } elseif (in_array($cleanHeader, ['firstname', 'firstname', 'first_name'])) {
+                    $fieldMap['firstname'] = $index;
+                } elseif (in_array($cleanHeader, ['othernames', 'othername', 'middlename', 'middle_name'])) {
+                    $fieldMap['othernames'] = $index;
+                } elseif (in_array($cleanHeader, ['sex', 'gender'])) {
+                    $fieldMap['sex'] = $index;
+                } elseif (in_array($cleanHeader, ['maritalstatus', 'marital'])) {
+                    $fieldMap['maritalstatus'] = $index;
+                } elseif (in_array($cleanHeader, ['dateofbirth', 'dob', 'birthdate'])) {
+                    $fieldMap['date_of_birth'] = $index;
+                } elseif (in_array($cleanHeader, ['phoneno', 'phone_no', 'phone', 'telephone'])) {
+                    $fieldMap['phoneno'] = $index;
+                } elseif (in_array($cleanHeader, ['email', 'emailaddress'])) {
+                    $fieldMap['email'] = $index;
+                } elseif (in_array($cleanHeader, ['address', 'homeaddress', 'home_address'])) {
+                    $fieldMap['address'] = $index;
+                } elseif (in_array($cleanHeader, ['department', 'dept', 'departmentid'])) {
+                    $fieldMap['department'] = $index;
+                } elseif (in_array($cleanHeader, ['unit', 'unitid'])) {
+                    $fieldMap['unit'] = $index;
+                } elseif (in_array($cleanHeader, ['designation', 'desig', 'designationid'])) {
+                    $fieldMap['designation'] = $index;
+                } elseif (in_array($cleanHeader, ['dateofjoining', 'doj', 'joiningdate'])) {
+                    $fieldMap['date_of_joining'] = $index;
+                } elseif (in_array($cleanHeader, ['iou', 'ioucap', 'ioulimit'])) {
+                    $fieldMap['iou'] = $index;
+                }
+            }
+
+            $getValue = function($row, $field) use ($fieldMap) {
+                $idx = $fieldMap[$field];
+                if ($idx !== -1 && isset($row[$idx])) {
+                    return trim((string)$row[$idx]);
+                }
+                return null;
+            };
+
+            $departments = DB::table('tbldepartment')->get()->keyBy(function($item) {
+                return strtolower(trim($item->department));
+            });
+            $departmentsById = DB::table('tbldepartment')->get()->keyBy('id');
+
+            $units = DB::table('tblunits')->get();
+            $designations = DB::table('tbldesignation')->get();
+
+            // Calculate starting fileNo sequence
+            $records = DB::table('tblper')->pluck('fileNo');
+            $numbers = $records->map(function ($fNo) {
+                preg_match('/(\d+)$/', $fNo, $matches);
+                return isset($matches[1]) ? (int) $matches[1] : 0;
+            });
+            $maxNumber = $numbers->max();
+            $nextFileNumber = $maxNumber + 1;
+
+            $insertedCount = 0;
+            $warnings = [];
+
+            DB::beginTransaction();
+
+            for ($r = 1; $r < count($rows); $r++) {
+                $row = $rows[$r];
+
+                // Skip empty row
+                $isEmptyRow = true;
+                foreach ($row as $cell) {
+                    if (trim((string)$cell) !== '') {
+                        $isEmptyRow = false;
+                        break;
+                    }
+                }
+                if ($isEmptyRow) continue;
+
+                $surname = $getValue($row, 'surname');
+                $firstname = $getValue($row, 'firstname');
+                if (empty($surname) || empty($firstname)) {
+                    $warnings[] = "Row " . ($r + 1) . ": Surname and First Name are required. Skipping row.";
+                    continue;
+                }
+
+                // Resolve Department
+                $deptVal = $getValue($row, 'department');
+                $deptId = null;
+                if (!empty($deptVal)) {
+                    if (is_numeric($deptVal) && isset($departmentsById[$deptVal])) {
+                        $deptId = intval($deptVal);
+                    } else {
+                        $cleanDeptVal = strtolower($deptVal);
+                        if (isset($departments[$cleanDeptVal])) {
+                            $deptId = $departments[$cleanDeptVal]->id;
+                        } else {
+                            foreach ($departments as $name => $d) {
+                                if (strpos($name, $cleanDeptVal) !== false || strpos($cleanDeptVal, $name) !== false) {
+                                    $deptId = $d->id;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!$deptId) {
+                    $warnings[] = "Row " . ($r + 1) . ": Department '{$deptVal}' could not be resolved. Skipping row.";
+                    continue;
+                }
+
+                // Resolve Unit
+                $unitVal = $getValue($row, 'unit');
+                $unitId = null;
+                if (!empty($unitVal)) {
+                    if (is_numeric($unitVal)) {
+                        $foundUnit = $units->firstWhere('unitID', intval($unitVal));
+                        if ($foundUnit) {
+                            $unitId = $foundUnit->unitID;
+                        }
+                    } else {
+                        $cleanUnitVal = strtolower($unitVal);
+                        $foundUnit = $units->first(function($u) use ($cleanUnitVal, $deptId) {
+                            return $u->departmentID == $deptId && strtolower(trim($u->unit)) === $cleanUnitVal;
+                        });
+                        if (!$foundUnit) {
+                            $foundUnit = $units->first(function($u) use ($cleanUnitVal) {
+                                return strtolower(trim($u->unit)) === $cleanUnitVal;
+                            });
+                        }
+                        if (!$foundUnit) {
+                            $foundUnit = $units->first(function($u) use ($cleanUnitVal, $deptId) {
+                                $name = strtolower(trim($u->unit));
+                                return $u->departmentID == $deptId && (strpos($name, $cleanUnitVal) !== false || strpos($cleanUnitVal, $name) !== false);
+                            });
+                        }
+                        if (!$foundUnit) {
+                            $foundUnit = $units->first(function($u) use ($cleanUnitVal) {
+                                $name = strtolower(trim($u->unit));
+                                return strpos($name, $cleanUnitVal) !== false || strpos($cleanUnitVal, $name) !== false;
+                            });
+                        }
+                        
+                        if ($foundUnit) {
+                            $unitId = $foundUnit->unitID;
+                        }
+                    }
+                }
+
+                if (!$unitId) {
+                    $warnings[] = "Row " . ($r + 1) . ": Unit '{$unitVal}' could not be resolved. Skipping row.";
+                    continue;
+                }
+
+                // Resolve Designation
+                $desigVal = $getValue($row, 'designation');
+                $desigId = null;
+                if (!empty($desigVal)) {
+                    if (is_numeric($desigVal)) {
+                        $foundDesig = $designations->firstWhere('id', intval($desigVal));
+                        if ($foundDesig) {
+                            $desigId = $foundDesig->id;
+                        }
+                    } else {
+                        $cleanDesigVal = strtolower($desigVal);
+                        $foundDesig = $designations->first(function($d) use ($cleanDesigVal, $deptId) {
+                            return $d->departmentID == $deptId && strtolower(trim($d->designation)) === $cleanDesigVal;
+                        });
+                        if (!$foundDesig) {
+                            $foundDesig = $designations->first(function($d) use ($cleanDesigVal) {
+                                return strtolower(trim($d->designation)) === $cleanDesigVal;
+                            });
+                        }
+                        if (!$foundDesig) {
+                            $foundDesig = $designations->first(function($d) use ($cleanDesigVal, $deptId) {
+                                $name = strtolower(trim($d->designation));
+                                return $d->departmentID == $deptId && (strpos($name, $cleanDesigVal) !== false || strpos($cleanDesigVal, $name) !== false);
+                            });
+                        }
+                        if (!$foundDesig) {
+                            $foundDesig = $designations->first(function($d) use ($cleanDesigVal) {
+                                $name = strtolower(trim($d->designation));
+                                return strpos($name, $cleanDesigVal) !== false || strpos($cleanDesigVal, $name) !== false;
+                            });
+                        }
+
+                        if ($foundDesig) {
+                            $desigId = $foundDesig->id;
+                        }
+                    }
+                }
+
+                if (!$desigId) {
+                    $warnings[] = "Row " . ($r + 1) . ": Designation '{$desigVal}' could not be resolved. Skipping row.";
+                    continue;
+                }
+
+                // Resolve Gender
+                $sexVal = trim(strtolower((string)$getValue($row, 'sex')));
+                $gender = 'Male';
+                if ($sexVal === 'female' || $sexVal === 'f') {
+                    $gender = 'Female';
+                }
+
+                // Resolve Marital Status
+                $maritalVal = trim(strtolower((string)$getValue($row, 'maritalstatus')));
+                $maritalStatus = 'Single';
+                if ($maritalVal === 'married') {
+                    $maritalStatus = 'Married';
+                } elseif ($maritalVal === 'divorced') {
+                    $maritalStatus = 'Divorced';
+                } elseif ($maritalVal === 'widowed') {
+                    $maritalStatus = 'Widowed';
+                }
+
+                // Resolve DOB
+                $dobVal = $getValue($row, 'date_of_birth');
+                $dob = $this->parseSpreadsheetDate($dobVal);
+                if (!$dob) {
+                    $warnings[] = "Row " . ($r + 1) . ": Invalid or missing Date of Birth '{$dobVal}'. Skipping row.";
+                    continue;
+                }
+
+                // Resolve DOJ
+                $dojVal = $getValue($row, 'date_of_joining');
+                $doj = $this->parseSpreadsheetDate($dojVal);
+                if (!$doj) {
+                    $warnings[] = "Row " . ($r + 1) . ": Invalid or missing Date of Joining '{$dojVal}'. Skipping row.";
+                    continue;
+                }
+
+                // Resolve Address
+                $address = $getValue($row, 'address');
+                if (empty($address)) {
+                    $warnings[] = "Row " . ($r + 1) . ": Address is required. Skipping row.";
+                    continue;
+                }
+
+                // Title
+                $title = strtoupper((string)($getValue($row, 'title') ?: 'MR.'));
+
+                // Phone & Email & Othernames
+                $phone = $getValue($row, 'phoneno');
+                $email = $getValue($row, 'email');
+                $othernames = $getValue($row, 'othernames');
+
+                // IOU
+                $iouVal = $getValue($row, 'iou');
+                $iou = is_numeric($iouVal) ? floatval($iouVal) : 0.00;
+
+                // File number
+                $fileNox = str_pad($nextFileNumber, 4, '0', STR_PAD_LEFT);
+                $nextFileNumber++;
+
+                // Insert staff record
+                $staffId = DB::table('tblper')->insertGetId([
+                    'fileNo'        => $fileNox,
+                    'title'         => $title,
+                    'surname'       => strtoupper($surname),
+                    'first_name'    => strtoupper($firstname),
+                    'othernames'    => $othernames ? strtoupper($othernames) : null,
+                    'rank'          => 0,
+                    'bankGroup'     => 1,
+                    'bank_branch'   => 'ABJ',
+                    'courtID'       => 9,
+                    'divisionID'    => 1,
+                    'phone'         => $phone,
+                    'email'         => $email,
+                    'dob'           => $dob,
+                    'doj'           => $doj,
+                    'staff_status'  => 1,
+                    'status_value'  => 'active service',
+                    'gender'        => $gender,
+                    'maritalstatus' => $maritalStatus,
+                    'departmentID'  => $deptId,
+                    'unitID'        => $unitId,
+                    'designationID' => $desigId,
+                    'home_address'  => $address,
+                    'iou_cap'       => $iou,
+                    'isClaimed'     => 1,
+                    'isAdmin'       => 1,
+                    'progress_regID'=> 7
+                ]);
+
+                // Create user account in the users table if not exists
+                $userExists = DB::table('users')->where('username', $fileNox)->exists();
+                if (!$userExists) {
+                    $fullname = trim($surname . ' ' . $firstname . ' ' . ($othernames ?? ''));
+                    $userId = DB::table('users')->insertGetId([
+                        'name' => strtoupper($fullname),
+                        'username' => $fileNox,
+                        'password' => bcrypt('12345'),
+                        'courtID' => 9
+                    ]);
+                    DB::table('tblper')->where('ID', $staffId)->update(['UserID' => $userId]);
+                }
+
+                $insertedCount++;
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Successfully imported {$insertedCount} staff records.",
+                'imported_count' => $insertedCount,
+                'warnings' => $warnings
+            ]);
+
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to import staff: ' . $th->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Parses multiple formats of spreadsheet dates into Y-m-d.
+     */
+    private function parseSpreadsheetDate($val)
+    {
+        if (empty($val)) {
+            return null;
+        }
+
+        // If it's a numeric Excel serial date
+        if (is_numeric($val)) {
+            if (class_exists('\PhpOffice\PhpSpreadsheet\Shared\Date')) {
+                return date('Y-m-d', \PhpOffice\PhpSpreadsheet\Shared\Date::excelToTimestamp($val));
+            } else {
+                return date('Y-m-d', ($val - 25569) * 86400);
+            }
+        }
+
+        $val = trim((string)$val);
+
+        // Try standard PHP strtotime first
+        $ts = strtotime($val);
+        if ($ts !== false) {
+            return date('Y-m-d', $ts);
+        }
+
+        // Try parsing with various standard formats using DateTime::createFromFormat
+        $formats = [
+            'Y-m-d', 'm/d/Y', 'd-m-Y', 'd/m/Y', 'Y/m/d',
+            'j/n/Y', 'n/j/Y', 'j-n-Y', 'n-j-Y',
+            'Y-m-d H:i:s', 'Y/m/d H:i:s', 'd-m-Y H:i:s', 'd/m/Y H:i:s'
+        ];
+
+        foreach ($formats as $format) {
+            try {
+                $d = \DateTime::createFromFormat($format, $val);
+                if ($d && $d->format($format) === $val) {
+                    return $d->format('Y-m-d');
+                }
+            } catch (\Throwable $th) {}
+        }
+
+        // Fallback: try swapping delimiters to satisfy strtotime's delimiter expectation
+        if (strpos($val, '/') !== false) {
+            $ts = strtotime(str_replace('/', '-', $val));
+            if ($ts !== false) {
+                return date('Y-m-d', $ts);
+            }
+        } else {
+            $ts = strtotime(str_replace('-', '/', $val));
+            if ($ts !== false) {
+                return date('Y-m-d', $ts);
+            }
+        }
+
+        return null;
+    }
 }

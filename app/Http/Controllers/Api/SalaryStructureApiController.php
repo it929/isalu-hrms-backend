@@ -138,6 +138,9 @@ class SalaryStructureApiController extends Controller
                 DB::table('salary_structures')->insert($data);
             }
 
+            // Update staff_status to 1 in tblper
+            DB::table('tblper')->where('ID', $validated['staffId'])->update(['staff_status' => 1]);
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Salary structure saved successfully.'
@@ -158,8 +161,19 @@ class SalaryStructureApiController extends Controller
     public function upload(Request $request)
     {
         $request->validate([
-            'file' => 'required|mimes:xlsx,xls,csv'
+            'file' => 'required|file'
         ]);
+
+        $file = $request->file('file');
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (!in_array($extension, ['xlsx', 'xls', 'csv'])) {
+            return response()->json([
+                'message' => 'The given data was invalid.',
+                'errors' => [
+                    'file' => ['The file must be a file of type: xlsx, xls, csv.']
+                ]
+            ], 422);
+        }
 
         try {
             $data = Excel::toArray([], $request->file('file'))[0];
@@ -275,6 +289,9 @@ class SalaryStructureApiController extends Controller
                     $saveData['created_at'] = now();
                     DB::table('salary_structures')->insert($saveData);
                 }
+
+                // Update staff_status to 1 in tblper
+                DB::table('tblper')->where('ID', $staffId)->update(['staff_status' => 1]);
 
                 $updatedCount++;
             }

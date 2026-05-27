@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class StaffControlVariableApiTest extends TestCase
@@ -166,5 +167,56 @@ class StaffControlVariableApiTest extends TestCase
         $this->assertDatabaseMissing('staffEarningAndDeduction', [
             'id' => $record->id
         ]);
+    }
+
+    /**
+     * Test POST /api/nextjs/payroll/staff-control-variables/import
+     */
+    public function test_import_staff_control_variables()
+    {
+        $user = DB::table('users')->first();
+        $headers = [];
+        if ($user) {
+            $headers['X-User-Id'] = $user->id;
+        }
+
+        $staff = DB::table('tblper')->first();
+        $cvSetup = DB::table('tblcvSetup')->where('status', 1)->first();
+
+        $this->assertNotNull($staff, 'Require at least one staff in database');
+        $this->assertNotNull($cvSetup, 'Require at least one cvSetup entry in database');
+
+        // Create a CSV mock upload file
+        $csvContent = "Staff ID,Description,Amount,Target Amount,No Limit,One Time\n";
+        // Row 1: Valid earning/deduction insert with explicit target amount and no limit = Yes
+        $csvContent .= "{$staff->ID},{$cvSetup->description},12345.67,100000.00,Yes,No\n";
+        // Row 2: Warning check (invalid description)
+        $csvContent .= "{$staff->ID},Non-Existent CV Setup Variable,9999.00,,Yes,No\n";
+
+        $file = UploadedFile::fake()->createWithContent('variables_import.csv', $csvContent);
+
+        $response = $this->postJson('/api/nextjs/payroll/staff-control-variables/import', [
+            'excel_file' => $file
+        ], $headers);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'imported_count' => 1
+            ]);
+
+        // Check database
+        $this->assertDatabaseHas('staffEarningAndDeduction', [
+            'staffId' => $staff->ID,
+            'cv_setup_id' => $cvSetup->ID,
+            'amount' => 12345.67,
+            'target_amount' => 100000.00,
+            'no_limit' => 1,
+            'one_time' => 0
+        ]);
+
+        $warnings = $response->json('warnings');
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString("CV Description 'Non-Existent CV Setup Variable' is invalid or inactive", $warnings[0]);
     }
 }

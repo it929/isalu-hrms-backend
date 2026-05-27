@@ -193,9 +193,12 @@ export default function ApplyIouPage() {
   }, [showToast]);
 
   useEffect(() => {
-    fetchStaffData();
-    fetchRecords();
-    setMounted(true);
+    const timer = setTimeout(() => {
+      fetchStaffData();
+      fetchRecords();
+      setMounted(true);
+    }, 50);
+    return () => clearTimeout(timer);
   }, [fetchStaffData, fetchRecords]);
 
   // Click outside dropdown handler
@@ -203,11 +206,16 @@ export default function ApplyIouPage() {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowDropdown(false);
+        if (selectedStaff) {
+          setDropdownSearch(selectedStaff.name);
+        } else {
+          setDropdownSearch('');
+        }
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [selectedStaff]);
 
   // Determine if active user can select other staff members (Admin privileges)
   const canSelectStaff = userCtx.isSuperAdmin || userCtx.isAdminStaff || 
@@ -223,34 +231,37 @@ export default function ApplyIouPage() {
 
   // Prepopulate staff selection if user is not Admin/SuperAdmin
   useEffect(() => {
-    const currentEmployee = userCtx.employee;
+    const timer = setTimeout(() => {
+      const currentEmployee = userCtx.employee;
 
-    if (!canSelectStaff && currentEmployee) {
-      const empId = currentEmployee.ID ?? currentEmployee.id;
-      const rawName = `${currentEmployee.surname || ''} ${currentEmployee.first_name || ''} ${currentEmployee.othernames || ''}`;
-      const fullName = currentEmployee.name || rawName.replace(/\s+/g, ' ').trim();
+      if (!canSelectStaff && currentEmployee) {
+        const empId = currentEmployee.ID ?? currentEmployee.id;
+        const rawName = `${currentEmployee.surname || ''} ${currentEmployee.first_name || ''} ${currentEmployee.othernames || ''}`;
+        const fullName = currentEmployee.name || rawName.replace(/\s+/g, ' ').trim();
 
-      const matchingStaff = staffList.find(s => String(s.id) === String(empId));
-      if (matchingStaff) {
-        setSelectedStaff(matchingStaff);
-        setDropdownSearch(matchingStaff.name);
-      } else {
-        setSelectedStaff({
-          id: empId,
-          name: fullName,
-          fileNo: currentEmployee.fileNo || '',
-          salary: 0.00,
-          max_iou: 0.00
-        });
-        setDropdownSearch(fullName);
+        const matchingStaff = staffList.find(s => String(s.id) === String(empId));
+        if (matchingStaff) {
+          setSelectedStaff(matchingStaff);
+          setDropdownSearch(matchingStaff.name);
+        } else {
+          setSelectedStaff({
+            id: empId,
+            name: fullName,
+            fileNo: currentEmployee.fileNo || '',
+            salary: 0.00,
+            max_iou: 0.00
+          });
+          setDropdownSearch(fullName);
+        }
       }
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [staffList, userCtx, canSelectStaff]);
 
-  const fetchUsedLimit = useCallback(async (staffId, date, excludeId) => {
+  const fetchUsedLimit = useCallback(async (staffId, date, excludeId, forceRefresh = false) => {
     if (!staffId || !date) return;
     const cacheKey = `hrms_apply_iou_limit_cache_${staffId}_${date}`;
-    if (!excludeId && typeof window !== 'undefined') {
+    if (!forceRefresh && !excludeId && typeof window !== 'undefined') {
       try {
         const cached = sessionStorage.getItem(cacheKey);
         if (cached) {
@@ -276,17 +287,20 @@ export default function ApplyIouPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedStaff && iouDate) {
-      fetchUsedLimit(selectedStaff.id, iouDate, editId);
-    } else {
-      setLimitDetails({
-        gross_salary: 0,
-        max_limit: 0,
-        used_amount: 0,
-        remaining_limit: 0,
-        month_name: ''
-      });
-    }
+    const timer = setTimeout(() => {
+      if (selectedStaff && iouDate) {
+        fetchUsedLimit(selectedStaff.id, iouDate, editId);
+      } else {
+        setLimitDetails({
+          gross_salary: 0,
+          max_limit: 0,
+          used_amount: 0,
+          remaining_limit: 0,
+          month_name: ''
+        });
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [selectedStaff, iouDate, editId, fetchUsedLimit]);
 
   // Filter staff list
@@ -448,6 +462,9 @@ export default function ApplyIouPage() {
         }
         setConfirmDelete(null);
         fetchRecords(true); // silent sync
+        if (selectedStaff && iouDate) {
+          fetchUsedLimit(selectedStaff.id, iouDate, editId, true);
+        }
       } else {
         setRecords(originalRecords); // rollback
         showToast(res.data.message || 'Deletion failed.', 'error');
@@ -526,6 +543,9 @@ export default function ApplyIouPage() {
         }
         setApprovalModal({ show: false, recordId: null, level: '', action: '', remarks: '' });
         fetchRecords(true);
+        if (selectedStaff && iouDate) {
+          fetchUsedLimit(selectedStaff.id, iouDate, editId, true);
+        }
       } else {
         setRecords(originalRecords); // rollback
         showToast(res.data.message || 'Approval action failed.', 'error');
@@ -560,12 +580,17 @@ export default function ApplyIouPage() {
   }
 
   // Filter and paginated records
-  const filteredRecords = records.filter(r =>
-    r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.fileNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.reason.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (r.department && r.department.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredRecords = records.filter(r => {
+    if (selectedStaff && String(r.staff_id) !== String(selectedStaff.id)) {
+      return false;
+    }
+    return (
+      r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.fileNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.reason.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.department && r.department.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  });
 
   const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -643,7 +668,7 @@ export default function ApplyIouPage() {
       {/* Header */}
       <div className={styles.header}>
         <h1 className={styles.title}>Apply for IOU</h1>
-        <p className={styles.subtitle}>Submit salary IOUs. Requests are limited to a maximum of 50% of the employee's gross monthly salary.</p>
+        <p className={styles.subtitle}>Submit salary IOUs. Requests are limited to a maximum of 50% of the {"employee's"} gross monthly salary.</p>
       </div>
 
       {/* Form Card */}
@@ -672,9 +697,13 @@ export default function ApplyIouPage() {
                       onChange={(e) => {
                         setDropdownSearch(e.target.value);
                         setShowDropdown(true);
+                        setSelectedStaff(null);
                       }}
                       onFocus={() => {
-                        if (canSelectStaff) setShowDropdown(true);
+                        if (canSelectStaff) {
+                          setShowDropdown(true);
+                          setDropdownSearch('');
+                        }
                       }}
                       disabled={!canSelectStaff}
                     />

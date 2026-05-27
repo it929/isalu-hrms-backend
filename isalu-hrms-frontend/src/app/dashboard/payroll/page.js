@@ -84,6 +84,7 @@ const TABLE_COLUMNS = [
   { key: 'COOP. SAVING',     label: 'Coop. Saving',     cls: styles.tdDeduction },
   { key: 'COOP. LOAN RPYT',  label: 'Coop. Loan Rpyt',  cls: styles.tdDeduction },
   { key: 'ABSENCE PENALTY',  label: 'Absence Pen.',     cls: styles.tdNum },
+  { key: 'LEAVE OF ABSENCE DEDUCTION', label: 'LOA Dedn.', cls: styles.tdNum },
   { key: 'OTHER DEDUCTION',  label: 'Other Dedn.',      cls: styles.tdDeduction },
   { key: 'TOTAL DEDUCTION',  label: 'Total Dedn.',      cls: styles.tdDeduction },
   { key: 'NETPAY',           label: 'Net Pay',          cls: styles.tdNetPay },
