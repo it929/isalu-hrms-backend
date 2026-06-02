@@ -30,6 +30,14 @@ class SalaryComputeApiTest extends TestCase
             DB::table('salary_structures')->where('staffId', $employee->ID)->delete();
             DB::table('leave_of_absent')->where('staffId', $employee->ID)->delete();
             DB::table('payroll_conpt')->where('staffID', $employee->ID)->delete();
+            DB::table('coop_loan_deduction_setups')->where('staffId', $employee->ID)->delete();
+            DB::table('coop_savings_setups')->where('staffId', $employee->ID)->delete();
+            DB::table('medical_loan_deduction_setups')->where('staffId', $employee->ID)->delete();
+            DB::table('surcharge_deduction_setups')->where('staffId', $employee->ID)->delete();
+            DB::table('absence_penalty_deduction_setups')->where('staffId', $employee->ID)->delete();
+            DB::table('other_deduction_setups')->where('staffId', $employee->ID)->delete();
+            DB::table('employee_loans')->where('staffId', $employee->ID)->delete();
+            DB::table('loan_deduction_setups')->where('staffId', $employee->ID)->delete();
         }
         
         DB::table('payroll_runs')->where('month', 5)->where('year', 2026)->delete();
@@ -264,76 +272,63 @@ class SalaryComputeApiTest extends TestCase
         $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
         $this->assertNotNull($employee, 'Require at least one active employee');
 
-        // Delete any existing staff earning/deductions for this employee
+        // Delete any existing setups for this employee
         DB::table('staffEarningAndDeduction')->where('staffId', $employee->ID)->delete();
+        DB::table('surcharge_deduction_setups')->where('staffId', $employee->ID)->delete();
+        DB::table('medical_loan_deduction_setups')->where('staffId', $employee->ID)->delete();
+        DB::table('coop_loan_deduction_setups')->where('staffId', $employee->ID)->delete();
+        DB::table('coop_savings_setups')->where('staffId', $employee->ID)->delete();
 
-        // Create mock CV setups
-        $retentionCv = DB::table('tblcvSetup')->where('description', 'like', '%retention%')->first() 
-            ?? DB::table('tblcvSetup')->where('particularID', 2)->first();
-        $surchargesCv = DB::table('tblcvSetup')->where('description', 'like', '%surcharge%')->first() 
-            ?? DB::table('tblcvSetup')->where('particularID', 2)->first();
-        $medLoanCv = DB::table('tblcvSetup')->where('description', 'like', '%med. loan%')->first() 
-            ?? DB::table('tblcvSetup')->where('particularID', 2)->first();
-        $coopLoanCv = DB::table('tblcvSetup')->where('description', 'like', '%coop. loan rpyt%')->first() 
-            ?? DB::table('tblcvSetup')->where('particularID', 2)->first();
+        // Insert surcharge setup
+        DB::table('surcharge_deduction_setups')->insert([
+            'staffId' => $employee->ID,
+            'total_amount' => 5000.00,
+            'monthly_deduction' => 500.00,
+            'balance_remaining' => 5000.00,
+            'start_month' => '2026-05',
+            'is_active' => 1,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
 
-        // Insert specific deductions
-        DB::table('staffEarningAndDeduction')->insert([
-            [
-                'staffId' => $employee->ID,
-                'variable_type' => 'deduction',
-                'cv_setup_id' => $retentionCv ? $retentionCv->ID : 1,
-                'description' => 'Staff Retention Fee',
-                'amount' => 1500.00,
-                'no_limit' => 1,
-                'one_time' => 0,
-                'created_at' => now(),
-                'updated_at' => now()
-            ],
-            [
-                'staffId' => $employee->ID,
-                'variable_type' => 'deduction',
-                'cv_setup_id' => $surchargesCv ? $surchargesCv->ID : 1,
-                'description' => 'Monthly Surcharge',
-                'amount' => 500.00,
-                'no_limit' => 1,
-                'one_time' => 0,
-                'created_at' => now(),
-                'updated_at' => now()
-            ],
-            [
-                'staffId' => $employee->ID,
-                'variable_type' => 'deduction',
-                'cv_setup_id' => $medLoanCv ? $medLoanCv->ID : 1,
-                'description' => 'Med. Loan Repayment',
-                'amount' => 2000.00,
-                'no_limit' => 1,
-                'one_time' => 0,
-                'created_at' => now(),
-                'updated_at' => now()
-            ],
-            [
-                'staffId' => $employee->ID,
-                'variable_type' => 'deduction',
-                'cv_setup_id' => $coopLoanCv ? $coopLoanCv->ID : 1,
-                'description' => 'Coop. Loan Rpty',
-                'amount' => 3500.00,
-                'no_limit' => 1,
-                'one_time' => 0,
-                'created_at' => now(),
-                'updated_at' => now()
-            ],
-            [
-                'staffId' => $employee->ID,
-                'variable_type' => 'deduction',
-                'cv_setup_id' => 7,
-                'description' => 'Coop. Savings',
-                'amount' => 4500.00,
-                'no_limit' => 1,
-                'one_time' => 0,
-                'created_at' => now(),
-                'updated_at' => now()
-            ],
+        // Insert medical loan setup
+        DB::table('medical_loan_deduction_setups')->insert([
+            'staffId' => $employee->ID,
+            'loan_amount' => 20000.00,
+            'duration_months' => 10,
+            'monthly_deduction' => 2000.00,
+            'balance_remaining' => 20000.00,
+            'start_month' => '2026-05',
+            'end_month' => '2027-02',
+            'is_active' => 1,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // Insert coop loan setup
+        DB::table('coop_loan_deduction_setups')->insert([
+            'staffId' => $employee->ID,
+            'loan_amount' => 35000.00,
+            'interest_rate' => 0.0,
+            'duration_months' => 10,
+            'monthly_deduction' => 3500.00,
+            'balance_remaining' => 35000.00,
+            'start_month' => '2026-05',
+            'end_month' => '2027-02',
+            'is_active' => 1,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // Insert coop savings setup
+        DB::table('coop_savings_setups')->insert([
+            'staffId' => $employee->ID,
+            'monthly_saving' => 4500.00,
+            'saving_balance' => 0.00,
+            'start_month' => '2026-05',
+            'is_active' => 1,
+            'created_at' => now(),
+            'updated_at' => now()
         ]);
 
         // Ensure salary structure exists and has reten_act set to 1
@@ -362,7 +357,6 @@ class SalaryComputeApiTest extends TestCase
 
         $response->assertStatus(200);
         $runId = $response->json('payroll_run_id');
-
         // Assert database values
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $runId,
@@ -373,6 +367,24 @@ class SalaryComputeApiTest extends TestCase
             'coop_loan_rpyt' => 3500.00,
             'coop_savings' => 4500.00,
         ]);
+
+        // Run compute again (re-compute)
+        $response2 = $this->postJson('/api/nextjs/payroll/compute', [
+            'month' => 'MAY',
+            'year' => '2026'
+        ], $headers);
+        $response2->assertStatus(200);
+
+        // Verify that balances remain correctly decremented/incremented once (not twice)
+        $surchargeBal = DB::table('surcharge_deduction_setups')->where('staffId', $employee->ID)->value('balance_remaining');
+        $medLoanBal = DB::table('medical_loan_deduction_setups')->where('staffId', $employee->ID)->value('balance_remaining');
+        $coopLoanBal = DB::table('coop_loan_deduction_setups')->where('staffId', $employee->ID)->value('balance_remaining');
+        $coopSavingsBal = DB::table('coop_savings_setups')->where('staffId', $employee->ID)->value('saving_balance');
+
+        $this->assertEquals(4500.00, (float)$surchargeBal);
+        $this->assertEquals(18000.00, (float)$medLoanBal);
+        $this->assertEquals(31500.00, (float)$coopLoanBal);
+        $this->assertEquals(4500.00, (float)$coopSavingsBal);
 
         // Get list response and verify mapping
         $listResponse = $this->getJson("/api/nextjs/payroll?month=MAY&year=2026", $headers);
@@ -438,15 +450,18 @@ class SalaryComputeApiTest extends TestCase
             'created_at' => now()
         ]);
 
-        // 3. Add an unapproved absence penalty in staffEarningAndDeduction
-        DB::table('staffEarningAndDeduction')->insert([
+        // 3. Add an unapproved absence penalty in setups
+        DB::table('absence_penalty_deduction_setups')->where('staffId', $employee->ID)->delete();
+        DB::table('absence_penalty_deduction_setups')->insert([
             'staffId' => $employee->ID,
-            'variable_type' => 'deduction',
-            'cv_setup_id' => 1,
-            'description' => 'Absence Penalty Fee',
-            'amount' => 5000.00,
-            'no_limit' => 1,
-            'one_time' => 0,
+            'deduction_type' => 'one_time',
+            'total_amount' => 5000.00,
+            'duration_months' => 1,
+            'monthly_deduction' => 5000.00,
+            'balance_remaining' => 5000.00,
+            'start_month' => '2026-05',
+            'end_month' => '2026-05',
+            'is_active' => 1,
             'created_at' => now(),
             'updated_at' => now()
         ]);
@@ -488,5 +503,261 @@ class SalaryComputeApiTest extends TestCase
         $this->assertEquals(24, $employeeRow['PAID DAYS']);
         $this->assertEquals('30000.00', $employeeRow['LEAVE OF ABSENCE DEDUCTION']);
         $this->assertEquals('5000.00', $employeeRow['ABSENCE PENALTY']);
+    }
+
+    /**
+     * Test revolving loan balance displays and deduction limits.
+     */
+    public function test_revolving_loan_balance()
+    {
+        $superAdminRole = DB::table('assign_user_role')->where('roleID', 1)->first();
+        if (!$superAdminRole) {
+            $this->markTestSkipped('No admin user');
+        }
+        $headers = ['X-User-Id' => $superAdminRole->userID];
+
+        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
+        if (!$employee) {
+            $this->markTestSkipped('No active employee');
+        }
+
+        // Setup a basic structure for this employee
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $employee->ID],
+            [
+                'basic_salary' => 100000.00,
+                'housing_allowance' => 0.00,
+                'transport_allowance' => 0.00,
+                'medical_allowance' => 0.00,
+                'utility_allowance' => 0.00,
+                'meal_allowance' => 0.00,
+                'pension_rate' => 0.00,
+                'tax_rate' => 0.00,
+                'pen_act' => 0,
+                'reten_act' => 0,
+                'created_at' => now()
+            ]
+        );
+
+        DB::table('employee_loans')->where('staffId', $employee->ID)->delete();
+        DB::table('coop_loan_deduction_setups')->where('staffId', $employee->ID)->delete();
+
+        // Insert revolving loan into employee_loans
+        DB::table('employee_loans')->insert([
+            'staffId' => $employee->ID,
+            'loan_amount' => 50000.00,
+            'balance' => 50000.00,
+            'monthly_deduction' => 10000.00,
+            'status' => 'approved',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // Insert coop loan setup to ensure it is NOT counted in REVOLVING LOAN BAL
+        DB::table('coop_loan_deduction_setups')->insert([
+            'staffId' => $employee->ID,
+            'loan_amount' => 30000.00,
+            'interest_rate' => 0.0,
+            'duration_months' => 3,
+            'monthly_deduction' => 10000.00,
+            'balance_remaining' => 30000.00,
+            'start_month' => '2026-05',
+            'end_month' => '2026-07',
+            'is_active' => 1,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // Compute payroll
+        $response = $this->postJson('/api/nextjs/payroll/compute', [
+            'month' => 'MAY',
+            'year' => '2026'
+        ], $headers);
+
+        $response->assertStatus(200);
+
+        // Verify report returns REVOLVING LOAN BAL as 40000.00 (50000 - 10000) and COP. LONE BAL as 20000.00 (30000 - 10000)
+        $listResponse = $this->getJson("/api/nextjs/payroll?month=MAY&year=2026", $headers);
+        $listResponse->assertStatus(200);
+
+        $data = $listResponse->json('data');
+        $employeeRow = collect($data)->firstWhere('IDNO', $employee->fileNo);
+        $this->assertNotNull($employeeRow);
+        $this->assertEquals('40000.00', $employeeRow['REVOLVING LOAN BAL']);
+        $this->assertEquals('20000.00', $employeeRow['COP. LONE BAL']);
+    }
+
+    /**
+     * Test coop loan balance displays and deduction limits.
+     */
+    public function test_coop_loan_balance()
+    {
+        $superAdminRole = DB::table('assign_user_role')->where('roleID', 1)->first();
+        if (!$superAdminRole) {
+            $this->markTestSkipped('No admin user');
+        }
+        $headers = ['X-User-Id' => $superAdminRole->userID];
+
+        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
+        if (!$employee) {
+            $this->markTestSkipped('No active employee');
+        }
+
+        // Setup a basic structure for this employee
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $employee->ID],
+            [
+                'basic_salary' => 100000.00,
+                'housing_allowance' => 0.00,
+                'transport_allowance' => 0.00,
+                'medical_allowance' => 0.00,
+                'utility_allowance' => 0.00,
+                'meal_allowance' => 0.00,
+                'pension_rate' => 0.00,
+                'tax_rate' => 0.00,
+                'pen_act' => 0,
+                'reten_act' => 0,
+                'created_at' => now()
+            ]
+        );
+
+        DB::table('coop_loan_deduction_setups')->where('staffId', $employee->ID)->delete();
+
+        // Insert a coop loan setup
+        $coopLoanId = DB::table('coop_loan_deduction_setups')->insertGetId([
+            'staffId' => $employee->ID,
+            'loan_amount' => 30000.00,
+            'interest_rate' => 0.0,
+            'duration_months' => 3,
+            'monthly_deduction' => 10000.00,
+            'balance_remaining' => 30000.00,
+            'start_month' => '2026-05',
+            'end_month' => '2026-07',
+            'is_active' => 1,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // Compute payroll
+        $response = $this->postJson('/api/nextjs/payroll/compute', [
+            'month' => 'MAY',
+            'year' => '2026'
+        ], $headers);
+
+        $response->assertStatus(200);
+
+        // Verify balance_remaining has been decremented by 10000
+        $coopVar = DB::table('coop_loan_deduction_setups')->where('id', $coopLoanId)->first();
+        $this->assertEquals(20000.00, (float)$coopVar->balance_remaining);
+
+        // Verify report returns COP. LONE BAL as 20000.00 (30000 - 10000)
+        $listResponse = $this->getJson("/api/nextjs/payroll?month=MAY&year=2026", $headers);
+        $listResponse->assertStatus(200);
+
+        $data = $listResponse->json('data');
+        $employeeRow = collect($data)->firstWhere('IDNO', $employee->fileNo);
+        $this->assertNotNull($employeeRow);
+        $this->assertEquals('20000.00', $employeeRow['COP. LONE BAL']);
+    }
+
+    /**
+     * Test auto deactivation of deduction setups when balance reaches zero, and reactivation on revert.
+     */
+    public function test_deduction_setups_auto_deactivate_and_reactivate()
+    {
+        $superAdminRole = DB::table('assign_user_role')->where('roleID', 1)->first();
+        if (!$superAdminRole) {
+            $this->markTestSkipped('No superadmin user found in database.');
+            return;
+        }
+
+        $headers = ['X-User-Id' => $superAdminRole->userID];
+
+        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
+        if (!$employee) {
+            $this->markTestSkipped('No active employee');
+            return;
+        }
+
+        // Setup a basic structure for this employee
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $employee->ID],
+            [
+                'basic_salary' => 100000.00,
+                'housing_allowance' => 0.00,
+                'transport_allowance' => 0.00,
+                'medical_allowance' => 0.00,
+                'utility_allowance' => 0.00,
+                'meal_allowance' => 0.00,
+                'pension_rate' => 0.00,
+                'tax_rate' => 0.00,
+                'pen_act' => 0,
+                'reten_act' => 0,
+                'created_at' => now()
+            ]
+        );
+
+        DB::table('other_deduction_setups')->where('staffId', $employee->ID)->delete();
+
+        // Insert an other deduction setup with remaining balance exactly equal to monthly deduction
+        $otherDeductionId = DB::table('other_deduction_setups')->insertGetId([
+            'staffId' => $employee->ID,
+            'deduction_type' => 'one_time',
+            'total_amount' => 5000.00,
+            'duration_months' => 1,
+            'monthly_deduction' => 5000.00,
+            'balance_remaining' => 5000.00,
+            'start_month' => '2026-05',
+            'end_month' => '2026-05',
+            'is_active' => 1,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // Compute payroll first time - should reduce balance to 0 and deactivate
+        $response = $this->postJson('/api/nextjs/payroll/compute', [
+            'month' => 'MAY',
+            'year' => '2026'
+        ], $headers);
+
+        $response->assertStatus(200);
+
+        // Verify balance_remaining is 0 and is_active is 0
+        $setup = DB::table('other_deduction_setups')->where('id', $otherDeductionId)->first();
+        $this->assertEquals(0.00, (float)$setup->balance_remaining);
+        $this->assertEquals(0, $setup->is_active);
+
+        // Check conpt record is present with 5000.00 other_deductions
+        $conpt = DB::table('payroll_conpt')
+            ->where('staffID', $employee->ID)
+            ->where('month', 5)
+            ->where('year', 2026)
+            ->first();
+        $this->assertNotNull($conpt);
+        $this->assertEquals(5000.00, (float)$conpt->other_deductions);
+
+        // Compute payroll second time (recompute for the same month)
+        // Revert phase should restore balance to 5000.00 and reactivate (is_active = 1).
+        // Calculation phase should then compute it again, ending up as 0 and deactivated.
+        $response = $this->postJson('/api/nextjs/payroll/compute', [
+            'month' => 'MAY',
+            'year' => '2026'
+        ], $headers);
+
+        $response->assertStatus(200);
+
+        // Verify setup is still balance_remaining = 0 and is_active = 0
+        $setup = DB::table('other_deduction_setups')->where('id', $otherDeductionId)->first();
+        $this->assertEquals(0.00, (float)$setup->balance_remaining);
+        $this->assertEquals(0, $setup->is_active);
+
+        // Verify conpt record is still present with 5000.00 (which confirms it was reactivated and computed again)
+        $conpt = DB::table('payroll_conpt')
+            ->where('staffID', $employee->ID)
+            ->where('month', 5)
+            ->where('year', 2026)
+            ->first();
+        $this->assertNotNull($conpt);
+        $this->assertEquals(5000.00, (float)$conpt->other_deductions);
     }
 }

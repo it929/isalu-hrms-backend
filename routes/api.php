@@ -26,6 +26,35 @@ Route::prefix('nextjs')->group(function () {
     Route::get('/roles-modules', [\App\Http\Controllers\Api\NextJsApiController::class, 'getRolesAndModules']);
     Route::get('/hod-assignments', [\App\Http\Controllers\Api\NextJsApiController::class, 'getHodAssignments']);
 
+    // Roles management
+    Route::get('/roles', [\App\Http\Controllers\Api\UserRoleApiController::class, 'index']);
+    Route::post('/roles', [\App\Http\Controllers\Api\UserRoleApiController::class, 'store']);
+    Route::get('/roles/{id}', [\App\Http\Controllers\Api\UserRoleApiController::class, 'show']);
+    Route::post('/roles/update/{id}', [\App\Http\Controllers\Api\UserRoleApiController::class, 'update']);
+
+    // Modules management
+    Route::get('/modules', [\App\Http\Controllers\Api\ModuleApiController::class, 'index']);
+    Route::post('/modules', [\App\Http\Controllers\Api\ModuleApiController::class, 'store']);
+    Route::get('/modules/{id}', [\App\Http\Controllers\Api\ModuleApiController::class, 'show']);
+    Route::post('/modules/update/{id}', [\App\Http\Controllers\Api\ModuleApiController::class, 'update']);
+
+    // Submodules management
+    Route::get('/submodules', [\App\Http\Controllers\Api\SubModuleApiController::class, 'index']);
+    Route::post('/submodules', [\App\Http\Controllers\Api\SubModuleApiController::class, 'store']);
+    Route::get('/submodules/{id}', [\App\Http\Controllers\Api\SubModuleApiController::class, 'show']);
+    Route::post('/submodules/update/{id}', [\App\Http\Controllers\Api\SubModuleApiController::class, 'update']);
+    Route::post('/submodules/delete/{id}', [\App\Http\Controllers\Api\SubModuleApiController::class, 'destroy']);
+
+    // Assign modules to roles
+    Route::get('/assign-module/metadata', [\App\Http\Controllers\Api\AssignModuleRoleApiController::class, 'metadata']);
+    Route::get('/assign-module/assignments/{roleID}', [\App\Http\Controllers\Api\AssignModuleRoleApiController::class, 'assignments']);
+    Route::post('/assign-module/assign', [\App\Http\Controllers\Api\AssignModuleRoleApiController::class, 'assign']);
+
+    // Assign users to roles
+    Route::get('/user-assign/metadata', [\App\Http\Controllers\Api\AssignUserRoleApiController::class, 'metadata']);
+    Route::get('/user-assign/assignments', [\App\Http\Controllers\Api\AssignUserRoleApiController::class, 'assignments']);
+    Route::post('/user-assign/assign', [\App\Http\Controllers\Api\AssignUserRoleApiController::class, 'assign']);
+
     // HR - Add New Staff
     Route::get('/hr/add-staff/form-data', [\App\Http\Controllers\Api\HrStaffApiController::class, 'getFormData']);
     Route::get('/hr/add-staff/designations/{deptID}', [\App\Http\Controllers\Api\HrStaffApiController::class, 'getDesignations']);
@@ -126,6 +155,15 @@ Route::prefix('nextjs')->group(function () {
         Route::get('/export',   [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'exportPayroll']);
         Route::post('/compute', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'computeSalary']);
 
+        // Active Month Setup
+        Route::get('/active-month', [\App\Http\Controllers\Api\ActiveMonthApiController::class, 'index']);
+        Route::post('/active-month', [\App\Http\Controllers\Api\ActiveMonthApiController::class, 'store']);
+
+        // Active Month Lock/Unlock
+        Route::get('/lock-active-month', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'index']);
+        Route::post('/lock-active-month/lock', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'lock']);
+        Route::post('/lock-active-month/unlock', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'unlock']);
+
         // Salary Structures
         Route::prefix('salary-structures')->group(function () {
             Route::get('/staff',   [\App\Http\Controllers\Api\SalaryStructureApiController::class, 'getStaffList']);
@@ -149,6 +187,108 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/audit-reject/{id}',  [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'auditReject']);
             Route::get('/admin-approve/{id}', [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'adminApprove']);
             Route::get('/admin-reject/{id}',  [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'adminReject']);
+        });
+
+        // Cooperative Loans
+        Route::prefix('coop-loans')->group(function () {
+            Route::get('/staff',   [\App\Http\Controllers\Api\CoopLoanApiController::class, 'getStaffList']);
+            Route::get('/approved/{staffId}', [\App\Http\Controllers\Api\CoopLoanApiController::class, 'getApprovedLoan']);
+            Route::get('/',        [\App\Http\Controllers\Api\CoopLoanApiController::class, 'index']);
+            Route::post('/',       [\App\Http\Controllers\Api\CoopLoanApiController::class, 'store']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\CoopLoanApiController::class, 'destroy']);
+            Route::get('/hod-approve/{id}', [\App\Http\Controllers\Api\CoopLoanApiController::class, 'hodApprove']);
+            Route::get('/hod-reject/{id}',  [\App\Http\Controllers\Api\CoopLoanApiController::class, 'hodReject']);
+            Route::get('/audit-approve/{id}', [\App\Http\Controllers\Api\CoopLoanApiController::class, 'auditApprove']);
+            Route::get('/audit-reject/{id}',  [\App\Http\Controllers\Api\CoopLoanApiController::class, 'auditReject']);
+            Route::get('/admin-approve/{id}', [\App\Http\Controllers\Api\CoopLoanApiController::class, 'adminApprove']);
+            Route::get('/admin-reject/{id}',  [\App\Http\Controllers\Api\CoopLoanApiController::class, 'adminReject']);
+        });
+
+        // Cooperative Loan Deduction Setup
+        Route::prefix('coop-loan-deduction-setups')->group(function () {
+            Route::get('/',        [\App\Http\Controllers\Api\CoopLoanDeductionSetupApiController::class, 'index']);
+            Route::post('/',       [\App\Http\Controllers\Api\CoopLoanDeductionSetupApiController::class, 'store']);
+            Route::post('/toggle/{id}', [\App\Http\Controllers\Api\CoopLoanDeductionSetupApiController::class, 'toggleStatus']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\CoopLoanDeductionSetupApiController::class, 'destroy']);
+        });
+
+        // Loan Deduction Setup
+        Route::prefix('loan-deduction-setups')->group(function () {
+            Route::get('/approved-amount/{staffId}', [\App\Http\Controllers\Api\LoanDeductionSetupApiController::class, 'getApprovedLoanAmount']);
+            Route::get('/',        [\App\Http\Controllers\Api\LoanDeductionSetupApiController::class, 'index']);
+            Route::get('/template', [\App\Http\Controllers\Api\LoanDeductionSetupApiController::class, 'downloadTemplate']);
+            Route::post('/',       [\App\Http\Controllers\Api\LoanDeductionSetupApiController::class, 'store']);
+            Route::post('/toggle/{id}', [\App\Http\Controllers\Api\LoanDeductionSetupApiController::class, 'toggleStatus']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\LoanDeductionSetupApiController::class, 'destroy']);
+            Route::post('/import', [\App\Http\Controllers\Api\LoanDeductionSetupApiController::class, 'import']);
+        });
+
+        // Cooperative Savings Setup
+        Route::prefix('coop-savings-setups')->group(function () {
+            Route::get('/',        [\App\Http\Controllers\Api\CoopSavingsSetupApiController::class, 'index']);
+            Route::get('/template', [\App\Http\Controllers\Api\CoopSavingsSetupApiController::class, 'downloadTemplate']);
+            Route::post('/',       [\App\Http\Controllers\Api\CoopSavingsSetupApiController::class, 'store']);
+            Route::post('/toggle/{id}', [\App\Http\Controllers\Api\CoopSavingsSetupApiController::class, 'toggleStatus']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\CoopSavingsSetupApiController::class, 'destroy']);
+            Route::post('/import', [\App\Http\Controllers\Api\CoopSavingsSetupApiController::class, 'import']);
+        });
+
+        // Coop Savings → Loan Offset
+        Route::prefix('coop-savings-loan-offset')->group(function () {
+            Route::get('/staff-list',     [\App\Http\Controllers\Api\CoopSavingsLoanOffsetApiController::class, 'staffList']);
+            Route::get('/staff-balances', [\App\Http\Controllers\Api\CoopSavingsLoanOffsetApiController::class, 'staffBalances']);
+            Route::get('/history',        [\App\Http\Controllers\Api\CoopSavingsLoanOffsetApiController::class, 'history']);
+            Route::post('/',              [\App\Http\Controllers\Api\CoopSavingsLoanOffsetApiController::class, 'store']);
+        });
+
+        // Medical Loan Deduction Setup
+        Route::prefix('medical-loan-deduction-setups')->group(function () {
+            Route::get('/',        [\App\Http\Controllers\Api\MedicalLoanDeductionSetupApiController::class, 'index']);
+            Route::get('/template', [\App\Http\Controllers\Api\MedicalLoanDeductionSetupApiController::class, 'downloadTemplate']);
+            Route::post('/',       [\App\Http\Controllers\Api\MedicalLoanDeductionSetupApiController::class, 'store']);
+            Route::post('/toggle/{id}', [\App\Http\Controllers\Api\MedicalLoanDeductionSetupApiController::class, 'toggleStatus']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\MedicalLoanDeductionSetupApiController::class, 'destroy']);
+            Route::post('/import', [\App\Http\Controllers\Api\MedicalLoanDeductionSetupApiController::class, 'import']);
+        });
+
+        // Surcharge Deduction Setup
+        Route::prefix('surcharge-deduction-setups')->group(function () {
+            Route::get('/',        [\App\Http\Controllers\Api\SurchargeDeductionSetupApiController::class, 'index']);
+            Route::get('/template', [\App\Http\Controllers\Api\SurchargeDeductionSetupApiController::class, 'downloadTemplate']);
+            Route::post('/',       [\App\Http\Controllers\Api\SurchargeDeductionSetupApiController::class, 'store']);
+            Route::post('/toggle/{id}', [\App\Http\Controllers\Api\SurchargeDeductionSetupApiController::class, 'toggleStatus']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\SurchargeDeductionSetupApiController::class, 'destroy']);
+            Route::post('/import', [\App\Http\Controllers\Api\SurchargeDeductionSetupApiController::class, 'import']);
+        });
+
+        // Absence Penalty Deduction Setup
+        Route::prefix('absence-penalty-deduction-setups')->group(function () {
+            Route::get('/',        [\App\Http\Controllers\Api\AbsencePenaltyDeductionSetupApiController::class, 'index']);
+            Route::get('/template', [\App\Http\Controllers\Api\AbsencePenaltyDeductionSetupApiController::class, 'downloadTemplate']);
+            Route::post('/',       [\App\Http\Controllers\Api\AbsencePenaltyDeductionSetupApiController::class, 'store']);
+            Route::post('/toggle/{id}', [\App\Http\Controllers\Api\AbsencePenaltyDeductionSetupApiController::class, 'toggleStatus']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\AbsencePenaltyDeductionSetupApiController::class, 'destroy']);
+            Route::post('/import', [\App\Http\Controllers\Api\AbsencePenaltyDeductionSetupApiController::class, 'import']);
+        });
+
+        // Other Deduction Setup
+        Route::prefix('other-deduction-setups')->group(function () {
+            Route::get('/',        [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'index']);
+            Route::get('/template', [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'downloadTemplate']);
+            Route::post('/',       [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'store']);
+            Route::post('/toggle/{id}', [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'toggleStatus']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'destroy']);
+            Route::post('/import', [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'import']);
+        });
+
+        // Coop Asset Finance Deduction Setup
+        Route::prefix('coop-asset-finance-deduction-setups')->group(function () {
+            Route::get('/',        [\App\Http\Controllers\Api\CoopAssetFinanceDeductionSetupApiController::class, 'index']);
+            Route::get('/template', [\App\Http\Controllers\Api\CoopAssetFinanceDeductionSetupApiController::class, 'downloadTemplate']);
+            Route::post('/',       [\App\Http\Controllers\Api\CoopAssetFinanceDeductionSetupApiController::class, 'store']);
+            Route::post('/toggle/{id}', [\App\Http\Controllers\Api\CoopAssetFinanceDeductionSetupApiController::class, 'toggleStatus']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\CoopAssetFinanceDeductionSetupApiController::class, 'destroy']);
+            Route::post('/import', [\App\Http\Controllers\Api\CoopAssetFinanceDeductionSetupApiController::class, 'import']);
         });
         
         // Staff Control Variables

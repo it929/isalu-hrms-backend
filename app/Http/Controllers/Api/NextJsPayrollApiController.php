@@ -164,7 +164,7 @@ class NextJsPayrollApiController extends Controller
                 'PENSION', 'MEDICAL LOAN', 'COOP. SAVING', 'COOP. LOAN RPYT',
                 'ABSENCE PENALTY', 'OTHER DEDUCTION', 'TOTAL DEDUCTION', 'NETPAY',
                 'REVOLVING LOAN BAL', 'COP.CONTR', 'COP. LONE BAL',
-                'COP. ASSET FIN', 'MEDICAL DEBT', 'ACC. NO', 'BANK', 'CODE', 'PAYER ID',
+                'COOP.ASSET.', 'COP. ASSET FIN', 'MEDICAL DEBT', 'ACC. NO', 'BANK', 'CODE', 'PAYER ID',
             ];
 
             $callback = function () use ($records, $columns) {
@@ -200,6 +200,7 @@ class NextJsPayrollApiController extends Controller
                         $row['REVOLVING LOAN BAL'],
                         $row['COP.CONTR'],
                         $row['COP. LONE BAL'],
+                        $row['COOP.ASSET.'] ?? '0.00',
                         $row['COP. ASSET FIN'],
                         $row['MEDICAL DEBT'],
                         $row['ACC. NO'],
@@ -232,6 +233,78 @@ class NextJsPayrollApiController extends Controller
         int $perPage,
         int $page
     ): array {
+        $loanBalances = DB::table('employee_loans')
+            ->whereRaw("LOWER(status) = 'approved'")
+            ->pluck('balance', 'staffId')
+            ->toArray();
+
+        $loanSetupBalances = DB::table('loan_deduction_setups')
+            ->where('is_active', 1)
+            ->pluck('balance_remaining', 'staffId')
+            ->toArray();
+
+        $loanSetupDeductions = DB::table('loan_deduction_setups')
+            ->where('is_active', 1)
+            ->pluck('monthly_deduction', 'staffId')
+            ->toArray();
+
+        $revolvingLoanBalances = [];
+        foreach ($loanBalances as $sid => $bal) {
+            $revolvingLoanBalances[$sid] = $bal;
+        }
+        foreach ($loanSetupBalances as $sid => $bal) {
+            $revolvingLoanBalances[$sid] = $bal;
+        }
+
+        $coopLoanBalances = DB::table('coop_loan_deduction_setups')
+            ->where('is_active', 1)
+            ->pluck('balance_remaining', 'staffId')
+            ->toArray();
+
+        $medicalLoanBalances = DB::table('medical_loan_deduction_setups')
+            ->where('is_active', 1)
+            ->pluck('balance_remaining', 'staffId')
+            ->toArray();
+
+        $coopAssetFinanceBalances = DB::table('coop_asset_finance_deduction_setups')
+            ->where('is_active', 1)
+            ->pluck('balance_remaining', 'staffId')
+            ->toArray();
+
+        $legacyCoopLoanBalances = DB::table('staffEarningAndDeduction as sc')
+            ->leftJoin('tblcvSetup as cv', 'cv.ID', '=', 'sc.cv_setup_id')
+            ->where(function($q) {
+                $q->where('cv.system_code', 'coop_loan_rpyt')
+                  ->orWhere(function($sq) {
+                      $sq->where(function($sub) {
+                             $sub->where('sc.description', 'like', '%coop%')
+                                 ->orWhere('sc.description', 'like', '%cooperative%');
+                         })
+                         ->where(function($sub) {
+                             $sub->where('sc.description', 'like', '%loan%')
+                                 ->orWhere('sc.description', 'like', '%rpyt%')
+                                 ->orWhere('sc.description', 'like', '%rpty%')
+                                 ->orWhere('sc.description', 'like', '%repay%');
+                         });
+                  })
+                  ->orWhere('sc.cv_setup_id', 24);
+            })
+            ->groupBy('sc.staffId')
+            ->select('sc.staffId', DB::raw('SUM(CASE WHEN sc.target_amount IS NOT NULL AND sc.target_amount > sc.total_deducted THEN sc.target_amount - sc.total_deducted ELSE 0 END) as balance'))
+            ->pluck('balance', 'staffId')
+            ->toArray();
+
+        foreach ($legacyCoopLoanBalances as $sid => $bal) {
+            if (!isset($coopLoanBalances[$sid])) {
+                $coopLoanBalances[$sid] = $bal;
+            }
+        }
+
+        $coopSavingsBalances = DB::table('coop_savings_setups')
+            ->where('is_active', 1)
+            ->pluck('saving_balance', 'staffId')
+            ->toArray();
+
         $yearInt = (int)$year;
         $monthInt = 0;
         if (is_numeric($month)) {
@@ -267,6 +340,7 @@ class NextJsPayrollApiController extends Controller
 
             $total   = $query->count();
             $allRows = $query->select(
+                'pc.staffID',
                 'p.fileNo',
                 DB::raw("CONCAT(p.surname, ' ', p.first_name, ' ', COALESCE(p.othernames, '')) as name"),
                 'dept.department',
@@ -286,6 +360,7 @@ class NextJsPayrollApiController extends Controller
                 'pc.surcharges',
                 'pc.medical_loan',
                 'pc.coop_loan_rpyt',
+                DB::raw('COALESCE(pc.coop_asset_finance, 0) as coop_asset_finance'),
                 'pc.total_deductions',
                 'pc.net_pay',
                 'pc.total_income',
@@ -298,7 +373,7 @@ class NextJsPayrollApiController extends Controller
                 'pc.paid_days'
             )->get();
 
-            $mapped = $allRows->map(function ($row) {
+            $mapped = $allRows->map(function ($row) use ($revolvingLoanBalances, $coopLoanBalances, $coopSavingsBalances, $medicalLoanBalances, $coopAssetFinanceBalances, $loanSetupDeductions) {
                 return [
                     'IDNO'               => $row->fileNo ?? '',
                     'NAME'               => $row->name   ?? '',
@@ -315,7 +390,7 @@ class NextJsPayrollApiController extends Controller
                     'P.TAX'              => number_format((float)$row->paye_tax, 2, '.', ''),
                     'IOU'                => number_format((float)$row->iou, 2, '.', ''),
                     'RETENTION'          => number_format((float)$row->retention, 2, '.', ''),
-                    'LOAN'               => number_format((float)$row->loan_deduction, 2, '.', ''),
+                    'LOAN'               => number_format((float)($loanSetupDeductions[$row->staffID] ?? $row->loan_deduction), 2, '.', ''),
                     'SURGHARGES'         => number_format((float)$row->surcharges, 2, '.', ''),
                     'PENSION'            => number_format((float)$row->pension,  2, '.', ''),
                     'MEDICAL LOAN'       => number_format((float)$row->medical_loan, 2, '.', ''),
@@ -326,11 +401,13 @@ class NextJsPayrollApiController extends Controller
                     'OTHER DEDUCTION'    => number_format((float)$row->other_deductions, 2, '.', ''),
                     'TOTAL DEDUCTION'    => number_format((float)$row->total_deductions, 2, '.', ''),
                     'NETPAY'             => number_format((float)$row->net_pay,   2, '.', ''),
-                    'REVOLVING LOAN BAL' => '0.00',
-                    'COP.CONTR'          => '0.00',
-                    'COP. LONE BAL'      => '0.00',
-                    'COP. ASSET FIN'     => '0.00',
-                    'MEDICAL DEBT'       => '0.00',
+                    'REVOLVING LOAN BAL' => number_format((float)($revolvingLoanBalances[$row->staffID] ?? 0.00), 2, '.', ''),
+                    'COP.CONTR'          => number_format((float)($coopSavingsBalances[$row->staffID] ?? 0.00), 2, '.', ''),
+                    'COP. LONE BAL'      => number_format((float)($coopLoanBalances[$row->staffID] ?? 0.00), 2, '.', ''),
+                    'COOP.ASSET.'        => number_format((float)($row->coop_asset_finance ?? 0.00), 2, '.', ''),
+                    'COP. ASSET FIN'     => number_format((float)($coopAssetFinanceBalances[$row->staffID] ?? 0.00), 2, '.', ''),
+                    'MEDICAL DEBT'       => number_format((float)($medicalLoanBalances[$row->staffID] ?? 0.00), 2, '.', ''),
+                    'LEAVE OF ABSENCE DEDUCTION' => number_format((float)($row->leave_of_absence_deduction ?? 0.00), 2, '.', ''),
                     'ACC. NO'            => $row->AccNo   ?? '',
                     'BANK'               => $row->bankName ?? '',
                     'CODE'               => '',
@@ -419,7 +496,7 @@ class NextJsPayrollApiController extends Controller
         }
 
         // 4. Map each row to the 34-column template
-        $mapped = $allRows->map(function ($row) use ($dynamicByStaff) {
+        $mapped = $allRows->map(function ($row) use ($dynamicByStaff, $revolvingLoanBalances, $coopLoanBalances, $coopSavingsBalances, $medicalLoanBalances, $coopAssetFinanceBalances, $loanSetupDeductions) {
             $sid = $row->staffid;
             $cvs = $dynamicByStaff[$sid] ?? [];
 
@@ -437,7 +514,7 @@ class NextJsPayrollApiController extends Controller
             // Dynamic columns from CV IDs
             $medical    = $cvs[self::CVID_MEDICAL_ALLOWANCE] ?? 0.00;
             $iou        = $cvs[self::CVID_OVERPAYMENT]       ?? 0.00;
-            $loan       = ($cvs[self::CVID_LAWYERS_LOAN] ?? 0) + ($cvs[self::CVID_VISA_LOAN] ?? 0);
+            $loan       = isset($loanSetupDeductions[$sid]) ? (float)$loanSetupDeductions[$sid] : (($cvs[self::CVID_LAWYERS_LOAN] ?? 0) + ($cvs[self::CVID_VISA_LOAN] ?? 0));
             $coopSaving = ($cvs[self::CVID_COOP_CHRISTIAN] ?? 0)
                         + ($cvs[self::CVID_COOP_MUSLIM_WOMEN] ?? 0)
                         + ($cvs[self::CVID_COOP_SCN] ?? 0);
@@ -473,11 +550,13 @@ class NextJsPayrollApiController extends Controller
                 'OTHER DEDUCTION'    => number_format($otherDeduction,2, '.', ''),
                 'TOTAL DEDUCTION'    => number_format($totalDedn,2, '.', ''),
                 'NETPAY'             => number_format($netPay,   2, '.', ''),
-                'REVOLVING LOAN BAL' => '0.00',
-                'COP.CONTR'          => '0.00',
-                'COP. LONE BAL'      => '0.00',
-                'COP. ASSET FIN'     => '0.00',
-                'MEDICAL DEBT'       => '0.00',
+                'REVOLVING LOAN BAL' => number_format((float)($revolvingLoanBalances[$row->staffid] ?? 0.00), 2, '.', ''),
+                'COP.CONTR'          => number_format((float)($coopSavingsBalances[$row->staffid] ?? 0.00), 2, '.', ''),
+                'COP. LONE BAL'      => number_format((float)($coopLoanBalances[$row->staffid] ?? 0.00), 2, '.', ''),
+                'COOP.ASSET.'        => '0.00',
+                'COP. ASSET FIN'     => number_format((float)($coopAssetFinanceBalances[$row->staffid] ?? 0.00), 2, '.', ''),
+                'MEDICAL DEBT'       => number_format((float)($medicalLoanBalances[$row->staffid] ?? 0.00), 2, '.', ''),
+                'LEAVE OF ABSENCE DEDUCTION' => '0.00',
                 'ACC. NO'            => $row->AccNo   ?? '',
                 'BANK'               => $row->bankName ?? '',
                 'CODE'               => '',
@@ -540,32 +619,210 @@ class NextJsPayrollApiController extends Controller
             // Start transaction
             DB::beginTransaction();
 
+            // Retrieve old conpt records for this month and year to revert total_deducted in staffEarningAndDeduction
+            $oldDetails = DB::table('payroll_conpt')
+                ->where('month', $month)
+                ->where('year', $year)
+                ->get();
+
+             foreach ($oldDetails as $od) {
+                // Revert coop_loan_deduction_setups balance_remaining
+                if ($od->coop_loan_rpyt > 0) {
+                    $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+                    $setup = DB::table('coop_loan_deduction_setups')
+                        ->where('staffId', $od->staffID)
+                        ->where('start_month', '<=', $currentMonthStr)
+                        ->where('end_month', '>=', $currentMonthStr)
+                        ->orderBy('is_active', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if ($setup) {
+                        DB::table('coop_loan_deduction_setups')
+                            ->where('id', $setup->id)
+                            ->update([
+                                'balance_remaining' => DB::raw('balance_remaining + ' . (float)$od->coop_loan_rpyt),
+                                'is_active' => 1
+                            ]);
+                    }
+                }
+
+                // Revert coop_savings_setups saving_balance
+                if ($od->coop_savings > 0) {
+                    $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+                    $setup = DB::table('coop_savings_setups')
+                        ->where('staffId', $od->staffID)
+                        ->where('start_month', '<=', $currentMonthStr)
+                        ->orderBy('is_active', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if ($setup) {
+                        DB::table('coop_savings_setups')
+                            ->where('id', $setup->id)
+                            ->decrement('saving_balance', $od->coop_savings);
+                    }
+                }
+
+                // Revert surcharge_deduction_setups balance_remaining
+                if ($od->surcharges > 0) {
+                    $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+                    $setup = DB::table('surcharge_deduction_setups')
+                        ->where('staffId', $od->staffID)
+                        ->where('start_month', '<=', $currentMonthStr)
+                        ->where(function($q) use ($currentMonthStr) {
+                            $q->whereNull('end_month')
+                              ->orWhere('end_month', '=', '')
+                              ->orWhere('end_month', '>=', $currentMonthStr);
+                        })
+                        ->orderBy('is_active', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if ($setup) {
+                        DB::table('surcharge_deduction_setups')
+                            ->where('id', $setup->id)
+                            ->update([
+                                'balance_remaining' => DB::raw('balance_remaining + ' . (float)$od->surcharges),
+                                'is_active' => 1
+                            ]);
+                    }
+                }
+
+                // Revert medical_loan_deduction_setups balance_remaining
+                if ($od->medical_loan > 0) {
+                    $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+                    $setup = DB::table('medical_loan_deduction_setups')
+                        ->where('staffId', $od->staffID)
+                        ->where('start_month', '<=', $currentMonthStr)
+                        ->where('end_month', '>=', $currentMonthStr)
+                        ->orderBy('is_active', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if ($setup) {
+                        DB::table('medical_loan_deduction_setups')
+                            ->where('id', $setup->id)
+                            ->update([
+                                'balance_remaining' => DB::raw('balance_remaining + ' . (float)$od->medical_loan),
+                                'is_active' => 1
+                            ]);
+                    }
+                }
+
+                // Revert absence_penalty_deduction_setups balance_remaining
+                if ($od->absence_penalty > 0) {
+                    $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+                    $setup = DB::table('absence_penalty_deduction_setups')
+                        ->where('staffId', $od->staffID)
+                        ->where('start_month', '<=', $currentMonthStr)
+                        ->where(function($q) use ($currentMonthStr) {
+                            $q->whereNull('end_month')
+                              ->orWhere('end_month', '=', '')
+                              ->orWhere('end_month', '>=', $currentMonthStr);
+                        })
+                        ->orderBy('is_active', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if ($setup) {
+                        DB::table('absence_penalty_deduction_setups')
+                            ->where('id', $setup->id)
+                            ->update([
+                                'balance_remaining' => DB::raw('balance_remaining + ' . (float)$od->absence_penalty),
+                                'is_active' => 1
+                            ]);
+                    }
+                }
+
+                // Revert other_deduction_setups balance_remaining
+                if ($od->other_deductions > 0) {
+                    $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+                    $setup = DB::table('other_deduction_setups')
+                        ->where('staffId', $od->staffID)
+                        ->where('start_month', '<=', $currentMonthStr)
+                        ->where(function($q) use ($currentMonthStr) {
+                            $q->whereNull('end_month')
+                              ->orWhere('end_month', '=', '')
+                              ->orWhere('end_month', '>=', $currentMonthStr);
+                        })
+                        ->orderBy('is_active', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if ($setup) {
+                        DB::table('other_deduction_setups')
+                            ->where('id', $setup->id)
+                            ->update([
+                                'balance_remaining' => DB::raw('balance_remaining + ' . (float)$od->other_deductions),
+                                'is_active' => 1
+                            ]);
+                    }
+                }
+
+                // Revert coop_asset_finance_deduction_setups balance_remaining
+                $coopAssetFinanceCol = isset($od->coop_asset_finance) ? (float)$od->coop_asset_finance : 0.00;
+                if ($coopAssetFinanceCol > 0) {
+                    $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+                    $setup = DB::table('coop_asset_finance_deduction_setups')
+                        ->where('staffId', $od->staffID)
+                        ->where('start_month', '<=', $currentMonthStr)
+                        ->where(function($q) use ($currentMonthStr) {
+                            $q->whereNull('end_month')
+                              ->orWhere('end_month', '=', '')
+                              ->orWhere('end_month', '>=', $currentMonthStr);
+                        })
+                        ->orderBy('is_active', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if ($setup) {
+                        DB::table('coop_asset_finance_deduction_setups')
+                            ->where('id', $setup->id)
+                            ->update([
+                                'balance_remaining' => DB::raw('balance_remaining + ' . $coopAssetFinanceCol),
+                                'is_active' => 1
+                            ]);
+                    }
+                }
+
+                // Revert loan_deduction_setups balance_remaining OR fallback to employee_loans balance
+                if ($od->loan_deduction > 0) {
+                    $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+                    $setup = DB::table('loan_deduction_setups')
+                        ->where('staffId', $od->staffID)
+                        ->where('start_month', '<=', $currentMonthStr)
+                        ->where('end_month', '>=', $currentMonthStr)
+                        ->orderBy('is_active', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if ($setup) {
+                        DB::table('loan_deduction_setups')
+                            ->where('id', $setup->id)
+                            ->update([
+                                'balance_remaining' => DB::raw('balance_remaining + ' . (float)$od->loan_deduction),
+                                'is_active' => 1
+                            ]);
+                    } else {
+                        $empLoan = DB::table('employee_loans')
+                            ->where('staffId', $od->staffID)
+                            ->whereRaw("LOWER(status) = 'approved'")
+                            ->orderBy('id', 'desc')
+                            ->first();
+                        if ($empLoan) {
+                            DB::table('employee_loans')
+                                ->where('id', $empLoan->id)
+                                ->increment('balance', $od->loan_deduction);
+                        }
+                    }
+                }
+            }
+
+            // Delete old payroll details for this month and year
+            DB::table('payroll_conpt')
+                ->where('month', $month)
+                ->where('year', $year)
+                ->delete();
+
             $existingRun = DB::table('payroll_runs')
                 ->where('month', $month)
                 ->where('year', $year)
                 ->first();
 
             if ($existingRun) {
-                // Retrieve old conpt records to revert total_deducted in staffEarningAndDeduction
-                $oldDetails = DB::table('payroll_conpt')
-                    ->where('payroll_run_id', $existingRun->id)
-                    ->get();
-
-                foreach ($oldDetails as $od) {
-                    if (!empty($od->applied_amounts)) {
-                        $appliedMap = json_decode($od->applied_amounts, true);
-                        if (is_array($appliedMap)) {
-                            foreach ($appliedMap as $sedId => $amount) {
-                                DB::table('staffEarningAndDeduction')
-                                    ->where('id', $sedId)
-                                    ->decrement('total_deducted', $amount);
-                            }
-                        }
-                    }
-                }
-
-                // If it already exists, delete old payroll details
-                DB::table('payroll_conpt')->where('payroll_run_id', $existingRun->id)->delete();
                 $runId = $existingRun->id;
 
                 DB::table('payroll_runs')->where('id', $runId)->update([
@@ -623,10 +880,111 @@ class NextJsPayrollApiController extends Controller
                 $loaDays = $this->getLoaDaysForMonth($emp->ID, $year, $month);
                 $paidDays = max(0, 30 - $loaDays);
 
-                // 3. Process earnings and deductions from staffEarningAndDeduction
-                 $variables = DB::table('staffEarningAndDeduction')
-                     ->where('staffId', $emp->ID)
-                     ->get();
+                // Check if there is an active coop loan setup
+                $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+                $coopLoanSetup = DB::table('coop_loan_deduction_setups')
+                    ->where('staffId', $emp->ID)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where('end_month', '>=', $currentMonthStr)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                // Check if there is an active coop savings setup
+                $coopSavingsSetup = DB::table('coop_savings_setups')
+                    ->where('staffId', $emp->ID)
+                    ->where('is_active', 1)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                // Check if there is an active surcharge setup
+                $surchargeSetup = DB::table('surcharge_deduction_setups')
+                    ->where('staffId', $emp->ID)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where(function($q) use ($currentMonthStr) {
+                        $q->whereNull('end_month')
+                          ->orWhere('end_month', '=', '')
+                          ->orWhere('end_month', '>=', $currentMonthStr);
+                    })
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                // Check if there is an active medical loan setup
+                $medicalLoanSetup = DB::table('medical_loan_deduction_setups')
+                    ->where('staffId', $emp->ID)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where('end_month', '>=', $currentMonthStr)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                // Check if there is an active absence penalty setup
+                $absencePenaltySetup = DB::table('absence_penalty_deduction_setups')
+                    ->where('staffId', $emp->ID)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where(function($q) use ($currentMonthStr) {
+                        $q->whereNull('end_month')
+                          ->orWhere('end_month', '=', '')
+                          ->orWhere('end_month', '>=', $currentMonthStr);
+                    })
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                // Check if there is an active other deduction setup
+                $otherDeductionSetup = DB::table('other_deduction_setups')
+                    ->where('staffId', $emp->ID)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where(function($q) use ($currentMonthStr) {
+                        $q->whereNull('end_month')
+                          ->orWhere('end_month', '=', '')
+                          ->orWhere('end_month', '>=', $currentMonthStr);
+                    })
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                // Check if there is an active coop asset finance deduction setup
+                $coopAssetFinanceSetup = DB::table('coop_asset_finance_deduction_setups')
+                    ->where('staffId', $emp->ID)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where(function($q) use ($currentMonthStr) {
+                        $q->whereNull('end_month')
+                          ->orWhere('end_month', '=', '')
+                          ->orWhere('end_month', '>=', $currentMonthStr);
+                    })
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                // Check if there is an active loan setup
+                $loanSetup = DB::table('loan_deduction_setups')
+                    ->where('staffId', $emp->ID)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where('end_month', '>=', $currentMonthStr)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                // Check if there is an active approved employee loan (fallback)
+                $employeeLoanSetup = null;
+                if (!$loanSetup) {
+                    $employeeLoanSetup = DB::table('employee_loans')
+                        ->where('staffId', $emp->ID)
+                        ->whereRaw("LOWER(status) = 'approved'")
+                        ->where('balance', '>', 0)
+                        ->orderBy('id', 'desc')
+                        ->first();
+                }
 
                 $loanDeduction = 0.00;
                 $coopSavings = 0.00;
@@ -636,109 +994,131 @@ class NextJsPayrollApiController extends Controller
                 $medicalLoan = 0.00;
                 $coopLoanRpyt = 0.00;
                 $absencePenalty = 0.00;
+                $coopAssetFinance = 0.00;
                 $leaveOfAbsenceDeduction = 0.00;
                 $totalEarningVars = 0.00;
                 $appliedAmountsMap = [];
-                $hasPensionDeduction = false;
 
-                foreach ($variables as $v) {
-                    $amount = (float)$v->amount;
-                    $totalDeducted = (float)($v->total_deducted ?? 0.00);
-                    $targetAmount = $v->target_amount !== null ? (float)$v->target_amount : 0.00;
-                    $appliedAmount = 0.00;
-
-                    // Check if it's a pension deduction flag
-                    if (strtolower($v->variable_type) === 'deduction' && (stripos($v->description, 'pension') !== false || stripos($v->description, 'pention') !== false)) {
-                        $hasPensionDeduction = true;
-                        continue; // Skip raw amount deduction since it is calculated as a percentage dynamically
+                // Process Coop Loan Repayment Setup
+                if ($coopLoanSetup) {
+                    $coopLoanRpyt = min((float)$coopLoanSetup->monthly_deduction, (float)$coopLoanSetup->balance_remaining);
+                    
+                    // Update remaining balance on setups table
+                    $newBalance = max(0.00, (float)$coopLoanSetup->balance_remaining - $coopLoanRpyt);
+                    $updateData = ['balance_remaining' => $newBalance];
+                    if ($newBalance <= 0) {
+                        $updateData['is_active'] = 0;
                     }
+                    DB::table('coop_loan_deduction_setups')
+                        ->where('id', $coopLoanSetup->id)
+                        ->update($updateData);
+                }
 
-                    // Skip raw retention deduction since it is calculated dynamically as 5% of salary structures if active
-                    if (strtolower($v->variable_type) === 'deduction' && stripos($v->description, 'retention') !== false) {
-                        continue;
+                // Process Coop Savings Setup
+                if ($coopSavingsSetup) {
+                    $coopSavings = (float)$coopSavingsSetup->monthly_saving;
+                    
+                    // Increment saving_balance on setups table
+                    DB::table('coop_savings_setups')
+                        ->where('id', $coopSavingsSetup->id)
+                        ->increment('saving_balance', $coopSavings);
+                }
+
+                // Process Surcharge Setup
+                if ($surchargeSetup) {
+                    $surcharges = min((float)$surchargeSetup->monthly_deduction, (float)$surchargeSetup->balance_remaining);
+                    
+                    // Update remaining balance on setups table
+                    $newBalance = max(0.00, (float)$surchargeSetup->balance_remaining - $surcharges);
+                    $updateData = ['balance_remaining' => $newBalance];
+                    if ($newBalance <= 0) {
+                        $updateData['is_active'] = 0;
                     }
+                    DB::table('surcharge_deduction_setups')
+                        ->where('id', $surchargeSetup->id)
+                        ->update($updateData);
+                }
 
-                    if (strtolower($v->variable_type) === 'deduction') {
-                        if ($v->one_time == 1) {
-                            if ($totalDeducted == 0) {
-                                $appliedAmount = $amount;
-                            }
-                        } else {
-                            if ($v->no_limit == 1) {
-                                $appliedAmount = $amount;
-                            } else {
-                                if ($targetAmount > 0) {
-                                    $remaining = max(0.00, $targetAmount - $totalDeducted);
-                                    if ($remaining > 0) {
-                                        $appliedAmount = min($amount, $remaining);
-                                    }
-                                } else {
-                                    $appliedAmount = 0.00;
-                                }
-                            }
-                        }
-
-                        if ($appliedAmount > 0) {
-                            // Update cumulative deducted amount
-                            DB::table('staffEarningAndDeduction')
-                                ->where('id', $v->id)
-                                ->increment('total_deducted', $appliedAmount);
-
-                            $appliedAmountsMap[$v->id] = $appliedAmount;
-
-                            // Categorize deduction
-                            $desc = strtolower($v->description);
-                            if (strpos($desc, 'retention') !== false) {
-                                $retention += $appliedAmount;
-                            } elseif (strpos($desc, 'absence pen') !== false || strpos($desc, 'absence penalty') !== false) {
-                                $absencePenalty += $appliedAmount;
-                            } elseif (strpos($desc, 'surcharge') !== false) {
-                                $surcharges += $appliedAmount;
-                            } elseif (strpos($desc, 'med. loan') !== false || strpos($desc, 'medical loan') !== false) {
-                                $medicalLoan += $appliedAmount;
-                            } elseif (
-                                (strpos($desc, 'coop') !== false || strpos($desc, 'cooperative') !== false) &&
-                                (strpos($desc, 'loan') !== false || strpos($desc, 'rpyt') !== false || strpos($desc, 'rpty') !== false || strpos($desc, 'repay') !== false || $v->cv_setup_id == 24)
-                            ) {
-                                $coopLoanRpyt += $appliedAmount;
-                            } elseif (strpos($desc, 'coop') !== false || strpos($desc, 'saving') !== false || in_array($v->cv_setup_id, [2, 5, 6])) {
-                                $coopSavings += $appliedAmount;
-                            } elseif (strpos($desc, 'loan') !== false || strpos($desc, 'debt') !== false || in_array($v->cv_setup_id, [3, 7])) {
-                                $loanDeduction += $appliedAmount;
-                            } else {
-                                $otherDeductions += $appliedAmount;
-                            }
-                        }
-                    } elseif (strtolower($v->variable_type) === 'earning') {
-                        if ($v->one_time == 1) {
-                            if ($totalDeducted == 0) {
-                                $appliedAmount = $amount;
-                            }
-                        } else {
-                            if ($v->no_limit == 1) {
-                                $appliedAmount = $amount;
-                            } else {
-                                if ($targetAmount > 0) {
-                                    $remaining = max(0.00, $targetAmount - $totalDeducted);
-                                    if ($remaining > 0) {
-                                        $appliedAmount = min($amount, $remaining);
-                                    }
-                                } else {
-                                    $appliedAmount = 0.00;
-                                }
-                            }
-                        }
-
-                        if ($appliedAmount > 0) {
-                            DB::table('staffEarningAndDeduction')
-                                ->where('id', $v->id)
-                                ->increment('total_deducted', $appliedAmount);
-
-                            $appliedAmountsMap[$v->id] = $appliedAmount;
-
-                            $totalEarningVars += $appliedAmount;
-                        }
+                // Process Medical Loan Setup
+                if ($medicalLoanSetup) {
+                    $medicalLoan = min((float)$medicalLoanSetup->monthly_deduction, (float)$medicalLoanSetup->balance_remaining);
+                    
+                    // Update remaining balance on setups table
+                    $newBalance = max(0.00, (float)$medicalLoanSetup->balance_remaining - $medicalLoan);
+                    $updateData = ['balance_remaining' => $newBalance];
+                    if ($newBalance <= 0) {
+                        $updateData['is_active'] = 0;
                     }
+                    DB::table('medical_loan_deduction_setups')
+                        ->where('id', $medicalLoanSetup->id)
+                        ->update($updateData);
+                }
+
+                // Process Absence Penalty Setup
+                if ($absencePenaltySetup) {
+                    $absencePenalty = min((float)$absencePenaltySetup->monthly_deduction, (float)$absencePenaltySetup->balance_remaining);
+                    
+                    // Update remaining balance on setups table
+                    $newBalance = max(0.00, (float)$absencePenaltySetup->balance_remaining - $absencePenalty);
+                    $updateData = ['balance_remaining' => $newBalance];
+                    if ($newBalance <= 0) {
+                        $updateData['is_active'] = 0;
+                    }
+                    DB::table('absence_penalty_deduction_setups')
+                        ->where('id', $absencePenaltySetup->id)
+                        ->update($updateData);
+                }
+
+                // Process Other Deduction Setup
+                if ($otherDeductionSetup) {
+                    $otherDeductions = min((float)$otherDeductionSetup->monthly_deduction, (float)$otherDeductionSetup->balance_remaining);
+                    
+                    // Update remaining balance on setups table
+                    $newBalance = max(0.00, (float)$otherDeductionSetup->balance_remaining - $otherDeductions);
+                    $updateData = ['balance_remaining' => $newBalance];
+                    if ($newBalance <= 0) {
+                        $updateData['is_active'] = 0;
+                    }
+                    DB::table('other_deduction_setups')
+                        ->where('id', $otherDeductionSetup->id)
+                        ->update($updateData);
+                }
+
+                // Process Coop Asset Finance Deduction Setup
+                if ($coopAssetFinanceSetup) {
+                    $coopAssetFinance = min((float)$coopAssetFinanceSetup->monthly_deduction, (float)$coopAssetFinanceSetup->balance_remaining);
+
+                    // Update remaining balance on setups table
+                    $newBalance = max(0.00, (float)$coopAssetFinanceSetup->balance_remaining - $coopAssetFinance);
+                    $updateData = ['balance_remaining' => $newBalance];
+                    if ($newBalance <= 0) {
+                        $updateData['is_active'] = 0;
+                    }
+                    DB::table('coop_asset_finance_deduction_setups')
+                        ->where('id', $coopAssetFinanceSetup->id)
+                        ->update($updateData);
+                }
+
+                // Process Employee Loan (Regular Employee Loans - new setup or fallback)
+                if ($loanSetup) {
+                    $loanDeduction = min((float)$loanSetup->monthly_deduction, (float)$loanSetup->balance_remaining);
+                    
+                    // Update remaining balance on loan_deduction_setups table
+                    $newBalance = max(0.00, (float)$loanSetup->balance_remaining - $loanDeduction);
+                    $updateData = ['balance_remaining' => $newBalance];
+                    if ($newBalance <= 0) {
+                        $updateData['is_active'] = 0;
+                    }
+                    DB::table('loan_deduction_setups')
+                        ->where('id', $loanSetup->id)
+                        ->update($updateData);
+                } elseif ($employeeLoanSetup) {
+                    $loanDeduction = min((float)$employeeLoanSetup->monthly_deduction, (float)$employeeLoanSetup->balance);
+                    
+                    // Update remaining balance on employee_loans table
+                    DB::table('employee_loans')
+                        ->where('id', $employeeLoanSetup->id)
+                        ->decrement('balance', $loanDeduction);
                 }
 
                 // 4. Perform salary calculation
@@ -795,7 +1175,7 @@ class NextJsPayrollApiController extends Controller
                     }
                 }
 
-                $totalDeductions = $payeTax + $pension + $loanDeduction + $coopSavings + $otherDeductions + $iouSum + $absencePenalty + $retention + $surcharges + $medicalLoan + $coopLoanRpyt + $leaveOfAbsenceDeduction;
+                $totalDeductions = $payeTax + $pension + $loanDeduction + $coopSavings + $otherDeductions + $iouSum + $absencePenalty + $retention + $surcharges + $medicalLoan + $coopLoanRpyt + $coopAssetFinance + $leaveOfAbsenceDeduction;
                 $netPay = $grossPay - $totalDeductions;
 
                 // 5. Submit detailed row into payroll_conpt table
@@ -818,18 +1198,19 @@ class NextJsPayrollApiController extends Controller
                     'coop_savings'     => round($coopSavings, 2),
                     'other_deductions' => round($otherDeductions, 2),
                     'retention'        => round($retention, 2),
-                    'surcharges'       => round($surcharges, 2),
-                    'medical_loan'     => round($medicalLoan, 2),
-                    'coop_loan_rpyt'   => round($coopLoanRpyt, 2),
-                    'total_deductions' => round($totalDeductions, 2),
-                    'net_pay'          => round($netPay, 2),
-                    'total_income'     => round($totalIncome, 2),
-                    'declare_income'   => round($declareIncome, 2),
-                    'iou'              => round($iouSum, 2),
-                    'absence_penalty'  => round($absencePenalty, 2),
+                    'surcharges'          => round($surcharges, 2),
+                    'medical_loan'        => round($medicalLoan, 2),
+                    'coop_loan_rpyt'      => round($coopLoanRpyt, 2),
+                    'coop_asset_finance'  => round($coopAssetFinance, 2),
+                    'total_deductions'    => round($totalDeductions, 2),
+                    'net_pay'             => round($netPay, 2),
+                    'total_income'        => round($totalIncome, 2),
+                    'declare_income'      => round($declareIncome, 2),
+                    'iou'                 => round($iouSum, 2),
+                    'absence_penalty'     => round($absencePenalty, 2),
                     'leave_of_absence_deduction' => round($leaveOfAbsenceDeduction, 2),
-                    'applied_amounts'  => !empty($appliedAmountsMap) ? json_encode($appliedAmountsMap) : null,
-                    'created_at'       => now()
+                    'applied_amounts'     => !empty($appliedAmountsMap) ? json_encode($appliedAmountsMap) : null,
+                    'created_at'          => now()
                 ]);
             }
 

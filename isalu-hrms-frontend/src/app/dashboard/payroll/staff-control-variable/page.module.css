@@ -984,3 +984,13 @@
 .warningItem:last-child {
   border-bottom: none;
 }
+
+.badgeActive {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.badgeInactive {
+  background: #fee2e2;
+  color: #9b1c1c;
+}

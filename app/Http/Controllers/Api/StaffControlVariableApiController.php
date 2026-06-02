@@ -219,6 +219,7 @@ class StaffControlVariableApiController extends Controller
                     'target_amount' => $row->target_amount !== null ? (float) $row->target_amount : null,
                     'no_limit'      => (int) $row->no_limit,
                     'one_time'      => (int) $row->one_time,
+                    'status'        => (int) ($row->status ?? 1),
                     'created_at'    => $row->created_at,
                     'updated_at'    => $row->updated_at,
                 ];
@@ -264,6 +265,7 @@ class StaffControlVariableApiController extends Controller
                 'target_amount' => 'nullable|numeric|min:0',
                 'no_limit'      => 'boolean',
                 'one_time'      => 'boolean',
+                'status'        => 'nullable|boolean',
             ]);
 
             $staffId      = $request->input('staffId');
@@ -272,6 +274,7 @@ class StaffControlVariableApiController extends Controller
             $amount       = (float) $request->input('amount');
             $noLimit      = $request->input('no_limit', false) ? 1 : 0;
             $oneTime      = $request->input('one_time', false) ? 1 : 0;
+            $status       = $request->input('status', true) ? 1 : 0;
 
             // One-Time automatically overrides target amount to amount
             $targetAmount = $oneTime ? $amount : ($request->input('target_amount') !== null ? (float) $request->input('target_amount') : null);
@@ -306,6 +309,7 @@ class StaffControlVariableApiController extends Controller
                 'target_amount' => $targetAmount,
                 'no_limit'      => $noLimit,
                 'one_time'      => $oneTime,
+                'status'        => $status,
                 'updated_at'    => now(),
             ];
 

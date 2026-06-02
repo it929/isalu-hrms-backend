@@ -91,6 +91,7 @@ const TABLE_COLUMNS = [
   { key: 'REVOLVING LOAN BAL', label: 'Rev. Loan Bal',  cls: styles.tdNum },
   { key: 'COP.CONTR',        label: 'Cop. Contr.',      cls: styles.tdNum },
   { key: 'COP. LONE BAL',    label: 'Cop. Lone Bal',    cls: styles.tdNum },
+  { key: 'COOP.ASSET.',      label: 'Coop. Asset',      cls: styles.tdNum },
   { key: 'COP. ASSET FIN',   label: 'Cop. Asset Fin',   cls: styles.tdNum },
   { key: 'MEDICAL DEBT',     label: 'Med. Debt',        cls: styles.tdNum },
   { key: 'ACC. NO',          label: 'Acc. No',          cls: '' },

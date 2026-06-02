@@ -116,23 +116,8 @@ export default function ApplyLoanPage() {
     setTimeout(() => setToast(null), 4500);
   }, []);
 
-  // Fetch static data (staff, loan types) once on mount (cached in sessionStorage)
+  // Fetch static data (staff, loan types) once on mount
   const fetchStaticData = useCallback(async () => {
-    const cacheKeyStaff = 'hrms_apply_loan_staff_cache';
-    const cacheKeyTypes = 'hrms_apply_loan_types_cache';
-    let cachedStaff = null;
-    let cachedTypes = null;
-
-    if (typeof window !== 'undefined') {
-      cachedStaff = sessionStorage.getItem(cacheKeyStaff);
-      cachedTypes = sessionStorage.getItem(cacheKeyTypes);
-      if (cachedStaff && cachedTypes) {
-        setStaffList(JSON.parse(cachedStaff));
-        setLoanTypes(JSON.parse(cachedTypes));
-        return; // skip network request if static data is cached
-      }
-    }
-
     const headers = buildHeaders();
     try {
       const [staffRes, typesRes] = await Promise.all([
@@ -141,14 +126,10 @@ export default function ApplyLoanPage() {
       ]);
 
       if (staffRes.data.status === 'success') {
-        const freshStaff = staffRes.data.data || [];
-        setStaffList(freshStaff);
-        if (typeof window !== 'undefined') sessionStorage.setItem(cacheKeyStaff, JSON.stringify(freshStaff));
+        setStaffList(staffRes.data.data || []);
       }
       if (typesRes.data.status === 'success') {
-        const freshTypes = typesRes.data.data || [];
-        setLoanTypes(freshTypes);
-        if (typeof window !== 'undefined') sessionStorage.setItem(cacheKeyTypes, JSON.stringify(freshTypes));
+        setLoanTypes(typesRes.data.data || []);
       }
     } catch (err) {
       console.error('Failed to retrieve static loan setup info:', err);

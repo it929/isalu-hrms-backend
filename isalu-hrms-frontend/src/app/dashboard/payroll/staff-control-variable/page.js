@@ -93,6 +93,7 @@ export default function StaffControlVariablePage() {
   const [targetAmount, setTargetAmount] = useState('');
   const [noLimit, setNoLimit] = useState(false);
   const [oneTime, setOneTime] = useState(false);
+  const [status, setStatus] = useState(true);
 
   // Client-side pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -307,6 +308,7 @@ export default function StaffControlVariablePage() {
     setTargetAmount('');
     setNoLimit(false);
     setOneTime(false);
+    setStatus(true);
     setShowVarTypeDropdown(false);
     setShowDescDropdown(false);
   };
@@ -346,6 +348,7 @@ export default function StaffControlVariablePage() {
       target_amount: (noLimit || oneTime) ? null : (targetAmount ? parseFloat(targetAmount) : null),
       no_limit: noLimit,
       one_time: oneTime,
+      status: status,
     };
 
     try {
@@ -484,6 +487,7 @@ export default function StaffControlVariablePage() {
     setAmount(record.amount);
     setNoLimit(record.no_limit === 1);
     setOneTime(record.one_time === 1);
+    setStatus(record.status === 1);
     setTargetAmount(record.target_amount ?? '');
   };
 
@@ -522,12 +526,18 @@ export default function StaffControlVariablePage() {
   };
 
   // Filtering listings table
-  const filteredRecords = records.filter(r =>
-    r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.fileNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.variable_type.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredRecords = records.filter(r => {
+    const matchesSearch =
+      r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.fileNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.variable_type.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (selectedStaff) {
+      return matchesSearch && r.staffId === selectedStaff.id;
+    }
+    return matchesSearch;
+  });
 
   // Pagination bounds
   const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
@@ -749,6 +759,17 @@ export default function StaffControlVariablePage() {
                     disabled={isFormDisabled}
                   />
                   One-Time Transaction
+                </label>
+
+                <label className={styles.checkboxLabel}>
+                  <input
+                    type="checkbox"
+                    className={styles.checkbox}
+                    checked={status}
+                    onChange={() => setStatus(!status)}
+                    disabled={isFormDisabled}
+                  />
+                  Active Status
                 </label>
               </div>
 
@@ -994,6 +1015,7 @@ export default function StaffControlVariablePage() {
                     <th>Limit Target</th>
                     <th>No Limit</th>
                     <th>One-Time</th>
+                    <th>Status</th>
                     {!isFormDisabled && <th>Actions</th>}
                   </tr>
                 </thead>
@@ -1031,6 +1053,11 @@ export default function StaffControlVariablePage() {
                       <td>
                         <span className={`${styles.badge} ${row.one_time === 1 ? styles.badgeYes : styles.badgeNo}`}>
                           {row.one_time === 1 ? 'Yes' : 'No'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`${styles.badge} ${row.status === 1 ? styles.badgeActive : styles.badgeInactive}`}>
+                          {row.status === 1 ? 'Active' : 'Inactive'}
                         </span>
                       </td>
                       {!isFormDisabled && (

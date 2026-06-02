@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { getCache, setCache } from '../../utils/dataCache';
 import axios from 'axios';
 import { useSession } from '../../contexts/SessionContext';
 import { Users, Briefcase, FileText, CheckCircle } from 'lucide-react';
@@ -17,17 +18,23 @@ const iconMap = {
 
 export default function DashboardHome() {
   const { user } = useSession();
-  const [stats, setStats] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cachedStats = getCache('dashboard_stats');
+  const [stats, setStats] = useState(cachedStats || []);
+  const [loading, setLoading] = useState(!cachedStats);
 
   useEffect(() => {
+    const hasCache = !!cachedStats;
     axios.get(`${API_BASE}/dashboard-stats`)
       .then(res => {
-        setStats(res.data.stats || []);
+        const data = res.data.stats || [];
+        setStats(data);
+        setCache('dashboard_stats', data);
       })
       .catch(err => console.error('Failed to fetch stats:', err))
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => {
+        if (!hasCache) setLoading(false);
+      });
+  }, [cachedStats]);
 
   return (
     <div>

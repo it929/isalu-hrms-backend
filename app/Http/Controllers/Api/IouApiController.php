@@ -69,6 +69,7 @@ class IouApiController extends Controller
             $query = DB::table('tblper as p')
                 ->leftJoin('salary_structures as ss', 'ss.staffId', '=', 'p.ID')
                 ->where('p.rank', '!=', 2) // Exclude terminated/retired
+                ->where('p.staff_status', 1)
                 ->select(
                     'p.ID as id',
                     'p.fileNo',

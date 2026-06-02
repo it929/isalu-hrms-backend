@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -47,14 +47,12 @@ const MONTHS = [
   { id: 'DECEMBER',  name: 'December'  },
 ];
 
-const curYear = new Date().getFullYear();
-const YEARS = Array.from({ length: 6 }, (_, i) => curYear - i).map(y => ({ id: y, name: String(y) }));
-
 export default function SalaryComputePage() {
   const router = useRouter();
   const [month, setMonth] = useState('');
-  const [year, setYear] = useState(String(curYear));
+  const [year, setYear] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fetchingActive, setFetchingActive] = useState(true);
   const [result, setResult] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -62,6 +60,27 @@ export default function SalaryComputePage() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4500);
   }, []);
+
+  useEffect(() => {
+    async function loadActivePeriod() {
+      try {
+        const res = await axios.get(`${API_BASE}/payroll/lock-active-month`, {
+          headers: buildHeaders(),
+        });
+        if (res.data.status === 'success' && res.data.activePeriod) {
+          setMonth(res.data.activePeriod.month);
+          setYear(String(res.data.activePeriod.year));
+        } else {
+          showToast('No active payroll period found.', 'error');
+        }
+      } catch (err) {
+        showToast('Failed to load active payroll period.', 'error');
+      } finally {
+        setFetchingActive(false);
+      }
+    }
+    loadActivePeriod();
+  }, [showToast]);
 
   const handleCompute = async (e) => {
     e.preventDefault();
@@ -88,7 +107,7 @@ export default function SalaryComputePage() {
         setResult({
           message: res.data.message || 'Salary payroll run computed successfully!',
           payrollRunId: res.data.payroll_run_id,
-          monthName: MONTHS.find(m => m.id === month)?.name,
+          monthName: MONTHS.find(m => m.id === month)?.name || month,
           year: year,
         });
         showToast('Salary computation completed successfully!', 'success');
@@ -141,39 +160,28 @@ export default function SalaryComputePage() {
 
         <form onSubmit={handleCompute}>
           <div className={styles.grid}>
-            {/* Month Select */}
+            {/* Month Readonly */}
             <div className={styles.formGroup}>
-              <label htmlFor="compute-month" className={styles.label}>Select Month *</label>
-              <select
+              <label htmlFor="compute-month" className={styles.label}>Month</label>
+              <input
+                type="text"
                 id="compute-month"
-                className={styles.select}
-                value={month}
-                onChange={e => setMonth(e.target.value)}
-                disabled={loading}
-                required
-              >
-                <option value="">-- Choose Month --</option>
-                {MONTHS.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
+                className={styles.inputReadOnly}
+                value={fetchingActive ? 'Loading...' : month || '—'}
+                readOnly
+              />
             </div>
 
-            {/* Year Select */}
+            {/* Year Readonly */}
             <div className={styles.formGroup}>
-              <label htmlFor="compute-year" className={styles.label}>Select Year *</label>
-              <select
+              <label htmlFor="compute-year" className={styles.label}>Year</label>
+              <input
+                type="text"
                 id="compute-year"
-                className={styles.select}
-                value={year}
-                onChange={e => setYear(e.target.value)}
-                disabled={loading}
-                required
-              >
-                {YEARS.map(y => (
-                  <option key={y.id} value={y.id}>{y.name}</option>
-                ))}
-              </select>
+                className={styles.inputReadOnly}
+                value={fetchingActive ? 'Loading...' : year || '—'}
+                readOnly
+              />
             </div>
           </div>
 

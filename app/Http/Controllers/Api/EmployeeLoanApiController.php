@@ -61,6 +61,7 @@ class EmployeeLoanApiController extends Controller
 
             $query = DB::table('tblper')
                 ->where('rank', '!=', 2)
+                ->where('staff_status', 1)
                 ->select('ID as id', 'fileNo', 'surname', 'first_name', 'othernames')
                 ->orderBy('surname', 'asc');
 
