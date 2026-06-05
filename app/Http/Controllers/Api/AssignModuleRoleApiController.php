@@ -74,13 +74,11 @@ class AssignModuleRoleApiController extends Controller
                     ];
                 });
 
-            // Fetch submodules joined with modules (conditionally filtered by status if column exists)
+            // Fetch submodules joined with modules directly filtering by active status
             $query = DB::table('module')
-                ->join('submodule', 'submodule.moduleID', '=', 'module.moduleID');
-
-            if (\Illuminate\Support\Facades\Schema::hasColumn('module', 'status')) {
-                $query->where('module.status', '=', 1);
-            }
+                ->join('submodule', 'submodule.moduleID', '=', 'module.moduleID')
+                ->where('module.active', '=', 1)
+                ->where('submodule.status', '=', 1);
 
             $submodules = $query->select([
                     'submodule.moduleID as modID',

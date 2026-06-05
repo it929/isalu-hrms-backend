@@ -23,6 +23,7 @@ Route::prefix('nextjs')->group(function () {
     Route::post('/login', [\App\Http\Controllers\Api\NextJsApiController::class, 'login']);
     Route::get('/dashboard-stats', [\App\Http\Controllers\Api\NextJsApiController::class, 'getDashboardStats']);
     Route::get('/technical-users', [\App\Http\Controllers\Api\NextJsApiController::class, 'getTechnicalUsers']);
+    Route::get('/sidebar-links', [\App\Http\Controllers\Api\NextJsApiController::class, 'getSidebarLinks']);
     Route::get('/roles-modules', [\App\Http\Controllers\Api\NextJsApiController::class, 'getRolesAndModules']);
     Route::get('/hod-assignments', [\App\Http\Controllers\Api\NextJsApiController::class, 'getHodAssignments']);
 
