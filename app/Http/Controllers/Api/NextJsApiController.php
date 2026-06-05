@@ -89,4 +89,81 @@ class NextJsApiController extends Controller
             ]
         ]);
     }
+
+    /**
+     * GET /api/nextjs/sidebar-links
+     * Returns dynamic sidebar modules and submodules links matching Laravel Blade logic.
+     */
+    public function getSidebarLinks(Request $request)
+    {
+        $userId = $request->header('X-User-Id');
+        if (!$userId) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+        }
+
+        try {
+            // Check if superadmin/technical user
+            $isTechnical = \DB::table('assign_user_role')
+                ->where('userID', $userId)
+                ->where('roleID', 1) // roleID 1 is Super Admin
+                ->exists();
+
+            // Fetch assigned modules for the user's role
+            $modules = \DB::table('assign_user_role')
+                ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+                ->join('assign_module_role', 'assign_module_role.roleID', '=', 'assign_user_role.roleID')
+                ->join('module', 'module.moduleID', '=', 'assign_module_role.moduleID')
+                ->where('assign_user_role.userID', '=', $userId)
+                ->whereRaw('module.moduleID = assign_module_role.moduleID')
+                ->whereRaw('user_role.roleID = assign_user_role.roleID')
+                ->distinct()
+                ->select('module.modulename', 'module.moduleID', 'module.link_type')
+                ->orderBy('module.link_type', 'ASC')
+                ->orderBy('module.modulename', 'ASC')
+                ->get();
+
+            $sidebarData = [];
+
+            foreach ($modules as $module) {
+                // Fetch assigned submodules for this module under the user's role
+                $submodules = \DB::table('assign_user_role')
+                    ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+                    ->join('assign_module_role', 'assign_module_role.roleID', '=', 'assign_user_role.roleID')
+                    ->join('submodule', 'submodule.submoduleID', '=', 'assign_module_role.submoduleID')
+                    ->where('assign_user_role.userID', '=', $userId)
+                    ->where('submodule.moduleID', '=', $module->moduleID)
+                    ->distinct()
+                    ->orderBy('submodule.sub_module_rank', 'ASC')
+                    ->orderBy('submodule.submodulename', 'ASC')
+                    ->get(['submodule.submoduleID', 'submodule.submodulename', 'submodule.route']);
+
+                if ($submodules->count() > 0) {
+                    $sidebarData[] = [
+                        'moduleID' => $module->moduleID,
+                        'modulename' => $module->modulename,
+                        'link_type' => $module->link_type,
+                        'submodules' => $submodules->map(function ($s) {
+                            return [
+                                'id' => $s->submoduleID ?? null,
+                                'name' => $s->submodulename,
+                                'path' => '/' . ltrim($s->route, '/'),
+                            ];
+                        })
+                    ];
+                }
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'is_admin' => $isTechnical,
+                'sidebar' => $sidebarData
+            ]);
+
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
 }

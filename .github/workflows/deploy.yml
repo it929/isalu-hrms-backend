@@ -1,0 +1,122 @@
+name: Deploy ISALU HRMS to Production
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # Step 2: Setup PHP
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, bcmath, ctype, fileinfo, json, pdo, pdo_mysql, tokenizer, xml, curl, zip
+          tools: composer:v2
+      
+      # Step 3: Install Composer dependencies
+      - name: Install Composer dependencies
+        run: |
+          composer install --no-dev --optimize-autoloader --no-interaction
+          composer dump-autoload --optimize
+      
+      # Step 4: Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: '../isalu-hrms-frontend/package-lock.json'
+      
+      # Step 5: Install Frontend dependencies
+      - name: Install Frontend dependencies
+        run: |
+          cd ../isalu-hrms-frontend
+          npm ci
+      
+      # Step 6: Build Frontend
+      - name: Build Next.js application
+        run: |
+          cd ../isalu-hrms-frontend
+          npm run build
+      
+      # Step 7: Create deployment package
+      - name: Create deployment package
+        run: |
+          # Create a temporary directory
+          mkdir -p deploy/backend deploy/frontend
+          
+          # Copy backend files
+          cp -r . deploy/backend/
+          cp .env deploy/backend/ 2>/dev/null || true
+          
+          # Copy frontend files
+          cp -r ../isalu-hrms-frontend/.next deploy/frontend/
+          cp -r ../isalu-hrms-frontend/public deploy/frontend/
+          cp ../isalu-hrms-frontend/package.json deploy/frontend/
+          cp ../isalu-hrms-frontend/.env.local deploy/frontend/ 2>/dev/null || true
+          
+          # Create archive
+          tar -czf deployment.tar.gz deploy/
+      
+      # Step 8: Upload to server via SCP
+      - name: Deploy to production server
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          source: "deployment.tar.gz"
+          target: "/tmp/"
+      
+      # Step 9: Extract and deploy on server
+      - name: Extract and deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          script: |
+            # Extract deployment package
+            cd /tmp
+            tar -xzf deployment.tar.gz
+            
+            # Deploy backend
+            sudo systemctl stop laravel-api
+            sudo cp -r deploy/backend/* /var/www/isalu-hrms-backend/
+            cd /var/www/isalu-hrms-backend
+            composer install --no-dev --optimize-autoloader
+            php artisan migrate --force
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
+            sudo systemctl start laravel-api
+            
+            # Deploy frontend
+            sudo cp -r /tmp/deploy/frontend/.next /var/www/isalu-hrms-frontend/
+            sudo cp -r /tmp/deploy/frontend/public /var/www/isalu-hrms-frontend/
+            cd /var/www/isalu-hrms-frontend
+            npm install --production
+            pm2 restart isalu-frontend
+            
+            # Reload Nginx
+            sudo systemctl reload nginx
+            
+            # Clean up
+            rm -rf /tmp/deploy /tmp/deployment.tar.gz
+            
+            echo "Deployment completed successfully!"
