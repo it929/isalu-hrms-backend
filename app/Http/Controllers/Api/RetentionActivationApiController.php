@@ -32,7 +32,7 @@ class RetentionActivationApiController extends Controller
         try {
             $search = trim($request->input('search', ''));
             $query = DB::table('tblper as p')
-                ->leftJoin('salary_structures as ss', 'ss.staffId', '=', 'p.ID')
+                ->join('salary_structures as ss', 'ss.staffId', '=', 'p.ID')
                 ->where('p.rank', '!=', 2) // Exclude terminated/retired staff
                 ->select(
                     'p.ID as id',
