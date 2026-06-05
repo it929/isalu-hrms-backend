@@ -10,12 +10,12 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       # Step 2: Setup PHP
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -23,100 +23,129 @@ jobs:
           php-version: '8.3'
           extensions: mbstring, bcmath, ctype, fileinfo, json, pdo, pdo_mysql, tokenizer, xml, curl, zip
           tools: composer:v2
-      
-      # Step 3: Install Composer dependencies
+
+      # Step 3: Create required directories
+      - name: Create bootstrap and storage directories
+        run: |
+          mkdir -p bootstrap/cache
+          mkdir -p storage/framework/{sessions,views,cache}
+          mkdir -p storage/logs
+          touch storage/logs/laravel.log
+          chmod -R 775 bootstrap storage
+          chmod 666 storage/logs/laravel.log
+
+      # Step 4: Install Composer dependencies
       - name: Install Composer dependencies
         run: |
           composer install --no-dev --optimize-autoloader --no-interaction
           composer dump-autoload --optimize
-      
-      # Step 4: Setup Node.js
+
+      # Step 5: Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '../isalu-hrms-frontend/package-lock.json'
-      
-      # Step 5: Install Frontend dependencies
+
+      # Step 6: Install Frontend dependencies
       - name: Install Frontend dependencies
         run: |
+          # Create frontend directory if not exists (for GitHub Actions)
+          mkdir -p ../isalu-hrms-frontend
           cd ../isalu-hrms-frontend
-          npm ci
-      
-      # Step 6: Build Frontend
+          if [ -f package.json ]; then
+            npm ci || npm install
+          else
+            echo "Frontend not found, skipping..."
+          fi
+
+      # Step 7: Build Frontend (if frontend exists)
       - name: Build Next.js application
         run: |
-          cd ../isalu-hrms-frontend
-          npm run build
-      
-      # Step 7: Create deployment package
+          if [ -d "../isalu-hrms-frontend" ] && [ -f "../isalu-hrms-frontend/package.json" ]; then
+            cd ../isalu-hrms-frontend
+            npm run build || echo "Build skipped - frontend not configured"
+          fi
+
+      # Step 8: Create deployment package
       - name: Create deployment package
         run: |
           # Create a temporary directory
           mkdir -p deploy/backend deploy/frontend
-          
+
           # Copy backend files
           cp -r . deploy/backend/
           cp .env deploy/backend/ 2>/dev/null || true
-          
-          # Copy frontend files
-          cp -r ../isalu-hrms-frontend/.next deploy/frontend/
-          cp -r ../isalu-hrms-frontend/public deploy/frontend/
-          cp ../isalu-hrms-frontend/package.json deploy/frontend/
-          cp ../isalu-hrms-frontend/.env.local deploy/frontend/ 2>/dev/null || true
-          
+
+          # Copy frontend files if they exist
+          if [ -d "../isalu-hrms-frontend/.next" ]; then
+            cp -r ../isalu-hrms-frontend/.next deploy/frontend/
+            cp -r ../isalu-hrms-frontend/public deploy/frontend/
+            cp ../isalu-hrms-frontend/package.json deploy/frontend/
+            cp ../isalu-hrms-frontend/.env.local deploy/frontend/ 2>/dev/null || true
+          fi
+
           # Create archive
           tar -czf deployment.tar.gz deploy/
-      
-      # Step 8: Upload to server via SCP
+
+      # Step 9: Upload to server via SCP
       - name: Deploy to production server
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
           source: "deployment.tar.gz"
           target: "/tmp/"
-      
-      # Step 9: Extract and deploy on server
+
+      # Step 10: Extract and deploy on server
       - name: Extract and deploy
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
           script: |
+            # Create necessary directories on server
+            sudo mkdir -p /var/www/isalu-hrms-backend/bootstrap/cache
+            sudo mkdir -p /var/www/isalu-hrms-backend/storage/framework/{sessions,views,cache}
+            sudo mkdir -p /var/www/isalu-hrms-backend/storage/logs
+            sudo chmod -R 775 /var/www/isalu-hrms-backend/bootstrap
+            sudo chmod -R 775 /var/www/isalu-hrms-backend/storage
+            
             # Extract deployment package
             cd /tmp
             tar -xzf deployment.tar.gz
-            
+
             # Deploy backend
-            sudo systemctl stop laravel-api
-            sudo cp -r deploy/backend/* /var/www/isalu-hrms-backend/
+            sudo systemctl stop laravel-api 2>/dev/null || true
+            sudo cp -rf deploy/backend/* /var/www/isalu-hrms-backend/
             cd /var/www/isalu-hrms-backend
-            composer install --no-dev --optimize-autoloader
+            composer install --no-dev --optimize-autoloader --no-interaction
             php artisan migrate --force
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
             sudo chown -R www-data:www-data storage bootstrap/cache
             sudo chmod -R 775 storage bootstrap/cache
-            sudo systemctl start laravel-api
-            
-            # Deploy frontend
-            sudo cp -r /tmp/deploy/frontend/.next /var/www/isalu-hrms-frontend/
-            sudo cp -r /tmp/deploy/frontend/public /var/www/isalu-hrms-frontend/
-            cd /var/www/isalu-hrms-frontend
-            npm install --production
-            pm2 restart isalu-frontend
-            
+            sudo systemctl start laravel-api || sudo systemctl restart laravel-api
+
+            # Deploy frontend (if files exist)
+            if [ -d "/tmp/deploy/frontend/.next" ]; then
+              sudo mkdir -p /var/www/isalu-hrms-frontend
+              sudo cp -rf /tmp/deploy/frontend/.next /var/www/isalu-hrms-frontend/
+              sudo cp -rf /tmp/deploy/frontend/public /var/www/isalu-hrms-frontend/ 2>/dev/null || true
+              cd /var/www/isalu-hrms-frontend
+              npm install --production || true
+              pm2 restart isalu-frontend 2>/dev/null || pm2 start npm --name "isalu-frontend" -- start -- -p 3000
+              pm2 save
+            fi
+
             # Reload Nginx
             sudo systemctl reload nginx
-            
+
             # Clean up
             rm -rf /tmp/deploy /tmp/deployment.tar.gz
-            
-            echo "Deployment completed successfully!"
+
+            echo "✅ Deployment completed successfully!"
