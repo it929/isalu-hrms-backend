@@ -20,6 +20,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 // Next.js Frontend APIs
 Route::prefix('nextjs')->group(function () {
+    Route::get('/sidebar-links', [App\Http\Controllers\Api\NextJsApiController::class, 'getSidebarLinks']);
     Route::post('/login', [\App\Http\Controllers\Api\NextJsApiController::class, 'login']);
     Route::get('/dashboard-stats', [\App\Http\Controllers\Api\NextJsApiController::class, 'getDashboardStats']);
     Route::get('/technical-users', [\App\Http\Controllers\Api\NextJsApiController::class, 'getTechnicalUsers']);
