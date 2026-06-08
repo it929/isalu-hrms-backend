@@ -32,7 +32,7 @@ class RetentionActivationApiController extends Controller
         try {
             $search = trim($request->input('search', ''));
             $query = DB::table('tblper as p')
-                ->join('salary_structures as ss', 'ss.staffId', '=', 'p.ID')
+                ->leftJoin('first_salary_structure as fss', 'fss.staffId', '=', 'p.ID')
                 ->where('p.rank', '!=', 2) // Exclude terminated/retired staff
                 ->select(
                     'p.ID as id',
@@ -40,14 +40,14 @@ class RetentionActivationApiController extends Controller
                     'p.surname',
                     'p.first_name',
                     'p.othernames',
-                    DB::raw('COALESCE(ss.reten_act, 0) as reten_act'),
+                    DB::raw('COALESCE(fss.reten_act, 0) as reten_act'),
                     DB::raw('(
-                        COALESCE(ss.basic_salary, 0.00) +
-                        COALESCE(ss.housing_allowance, 0.00) +
-                        COALESCE(ss.transport_allowance, 0.00) +
-                        COALESCE(ss.medical_allowance, 0.00) +
-                        COALESCE(ss.utility_allowance, 0.00) +
-                        COALESCE(ss.meal_allowance, 0.00)
+                        COALESCE(fss.basic_salary, 0.00) +
+                        COALESCE(fss.housing_allowance, 0.00) +
+                        COALESCE(fss.transport_allowance, 0.00) +
+                        COALESCE(fss.medical_allowance, 0.00) +
+                        COALESCE(fss.utility_allowance, 0.00) +
+                        COALESCE(fss.meal_allowance, 0.00)
                     ) as basic_salary')
                 );
 
@@ -102,14 +102,14 @@ class RetentionActivationApiController extends Controller
             $staffId = $request->input('staff_id');
             $retenAct = $request->input('reten_act');
 
-            $existing = DB::table('salary_structures')->where('staffId', $staffId)->first();
+            $existing = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
 
             if ($existing) {
-                DB::table('salary_structures')->where('staffId', $staffId)->update([
+                DB::table('first_salary_structure')->where('staffId', $staffId)->update([
                     'reten_act' => $retenAct,
                 ]);
             } else {
-                DB::table('salary_structures')->insert([
+                DB::table('first_salary_structure')->insert([
                     'staffId' => $staffId,
                     'basic_salary' => 0.00,
                     'declare_salary' => 0.00,
@@ -118,11 +118,10 @@ class RetentionActivationApiController extends Controller
                     'medical_allowance' => 0.00,
                     'utility_allowance' => 0.00,
                     'meal_allowance' => 0.00,
-                    'pension_rate' => 0.00,
-                    'tax_rate' => 0.00,
-                    'pen_act' => 0,
                     'reten_act' => $retenAct,
+                    'num_rente_months' => 0,
                     'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
             }
 
@@ -180,10 +179,38 @@ class RetentionActivationApiController extends Controller
             }, $rows[0]);
 
             $staffIdIndex = -1;
+            $basicSalaryIndex = -1;
+            $declareSalaryIndex = -1;
+            $housingAllowanceIndex = -1;
+            $transportAllowanceIndex = -1;
+            $medicalAllowanceIndex = -1;
+            $utilityAllowanceIndex = -1;
+            $mealAllowanceIndex = -1;
+            $numRetenMonthsIndex = -1;
+            $retenActIndex = -1;
+
             foreach ($headers as $index => $header) {
-                if ($header === 'staffid' || $header === 'staff_id' || $header === 'staff id' || $header === 'id') {
+                $h = str_replace(['_', ' '], '', $header);
+                if ($h === 'staffid' || $h === 'id') {
                     $staffIdIndex = $index;
-                    break;
+                } elseif ($h === 'basicsalary') {
+                    $basicSalaryIndex = $index;
+                } elseif ($h === 'declaresalary') {
+                    $declareSalaryIndex = $index;
+                } elseif ($h === 'housingallowance') {
+                    $housingAllowanceIndex = $index;
+                } elseif ($h === 'transportallowance') {
+                    $transportAllowanceIndex = $index;
+                } elseif ($h === 'medicalallowance') {
+                    $medicalAllowanceIndex = $index;
+                } elseif ($h === 'utilityallowance') {
+                    $utilityAllowanceIndex = $index;
+                } elseif ($h === 'mealallowance') {
+                    $mealAllowanceIndex = $index;
+                } elseif ($h === 'numretenmonths' || $h === 'numrentemonths') {
+                    $numRetenMonthsIndex = $index;
+                } elseif ($h === 'retenact') {
+                    $retenActIndex = $index;
                 }
             }
 
@@ -229,29 +256,40 @@ class RetentionActivationApiController extends Controller
                     continue;
                 }
 
-                // Activate retention in salary_structures
-                $existing = DB::table('salary_structures')->where('staffId', $staff->ID)->first();
+                // Extract values from Excel row
+                $basic = $basicSalaryIndex !== -1 && isset($row[$basicSalaryIndex]) && trim((string)$row[$basicSalaryIndex]) !== '' ? (float)$row[$basicSalaryIndex] : 0.00;
+                $declare = $declareSalaryIndex !== -1 && isset($row[$declareSalaryIndex]) && trim((string)$row[$declareSalaryIndex]) !== '' ? (float)$row[$declareSalaryIndex] : 0.00;
+                $housing = $housingAllowanceIndex !== -1 && isset($row[$housingAllowanceIndex]) && trim((string)$row[$housingAllowanceIndex]) !== '' ? (float)$row[$housingAllowanceIndex] : 0.00;
+                $transport = $transportAllowanceIndex !== -1 && isset($row[$transportAllowanceIndex]) && trim((string)$row[$transportAllowanceIndex]) !== '' ? (float)$row[$transportAllowanceIndex] : 0.00;
+                $medical = $medicalAllowanceIndex !== -1 && isset($row[$medicalAllowanceIndex]) && trim((string)$row[$medicalAllowanceIndex]) !== '' ? (float)$row[$medicalAllowanceIndex] : 0.00;
+                $utility = $utilityAllowanceIndex !== -1 && isset($row[$utilityAllowanceIndex]) && trim((string)$row[$utilityAllowanceIndex]) !== '' ? (float)$row[$utilityAllowanceIndex] : 0.00;
+                $meal = $mealAllowanceIndex !== -1 && isset($row[$mealAllowanceIndex]) && trim((string)$row[$mealAllowanceIndex]) !== '' ? (float)$row[$mealAllowanceIndex] : 0.00;
+                $numRetenMonths = $numRetenMonthsIndex !== -1 && isset($row[$numRetenMonthsIndex]) && trim((string)$row[$numRetenMonthsIndex]) !== '' ? (int)$row[$numRetenMonthsIndex] : 0;
+                $retenAct = $retenActIndex !== -1 && isset($row[$retenActIndex]) && trim((string)$row[$retenActIndex]) !== '' ? (int)$row[$retenActIndex] : 1;
+
+                // Activate/Create record in first_salary_structure
+                $existing = DB::table('first_salary_structure')->where('staffId', $staff->ID)->first();
+
+                $saveData = [
+                    'staffId' => $staff->ID,
+                    'basic_salary' => $basic,
+                    'declare_salary' => $declare,
+                    'housing_allowance' => $housing,
+                    'transport_allowance' => $transport,
+                    'medical_allowance' => $medical,
+                    'utility_allowance' => $utility,
+                    'meal_allowance' => $meal,
+                    'reten_act' => $retenAct,
+                    'num_rente_months' => $numRetenMonths,
+                ];
 
                 if ($existing) {
-                    DB::table('salary_structures')->where('staffId', $staff->ID)->update([
-                        'reten_act' => 1
-                    ]);
+                    $saveData['updated_at'] = now();
+                    DB::table('first_salary_structure')->where('staffId', $staff->ID)->update($saveData);
                 } else {
-                    DB::table('salary_structures')->insert([
-                        'staffId' => $staff->ID,
-                        'basic_salary' => 0.00,
-                        'declare_salary' => 0.00,
-                        'housing_allowance' => 0.00,
-                        'transport_allowance' => 0.00,
-                        'medical_allowance' => 0.00,
-                        'utility_allowance' => 0.00,
-                        'meal_allowance' => 0.00,
-                        'pension_rate' => 0.00,
-                        'tax_rate' => 0.00,
-                        'pen_act' => 0,
-                        'reten_act' => 1,
-                        'created_at' => now(),
-                    ]);
+                    $saveData['created_at'] = now();
+                    $saveData['updated_at'] = now();
+                    DB::table('first_salary_structure')->insert($saveData);
                 }
 
                 $activatedCount++;

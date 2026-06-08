@@ -109,6 +109,7 @@ class SalaryStructureApiController extends Controller
                 'meal_allowance' => 'nullable|numeric|min:0',
                 'pension_rate' => 'nullable|numeric|min:0|max:100',
                 'tax_rate' => 'nullable|numeric|min:0|max:100',
+                'structure_type' => 'nullable|string|in:first,current',
             ]);
 
             // Ensure the staff member exists in tblper
@@ -137,6 +138,32 @@ class SalaryStructureApiController extends Controller
             } else {
                 $data['created_at'] = now();
                 DB::table('salary_structures')->insert($data);
+            }
+
+            // Save to first_salary_structure table if type is 'first'
+            $structureType = $validated['structure_type'] ?? 'current';
+            if ($structureType === 'first') {
+                $firstData = [
+                    'staffId' => $validated['staffId'],
+                    'basic_salary' => $data['basic_salary'],
+                    'declare_salary' => $data['declare_salary'],
+                    'housing_allowance' => $data['housing_allowance'],
+                    'transport_allowance' => $data['transport_allowance'],
+                    'medical_allowance' => $data['medical_allowance'],
+                    'utility_allowance' => $data['utility_allowance'],
+                    'meal_allowance' => $data['meal_allowance'],
+                ];
+                $existingFirst = DB::table('first_salary_structure')->where('staffId', $validated['staffId'])->first();
+                if ($existingFirst) {
+                    $firstData['updated_at'] = now();
+                    DB::table('first_salary_structure')->where('staffId', $validated['staffId'])->update($firstData);
+                } else {
+                    $firstData['reten_act'] = 0;
+                    $firstData['num_rente_months'] = 0;
+                    $firstData['created_at'] = now();
+                    $firstData['updated_at'] = now();
+                    DB::table('first_salary_structure')->insert($firstData);
+                }
             }
 
             // Update staff_status to 1 in tblper

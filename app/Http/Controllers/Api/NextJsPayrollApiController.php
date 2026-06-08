@@ -809,6 +809,14 @@ class NextJsPayrollApiController extends Controller
                         }
                     }
                 }
+
+                // Revert retention count in first_salary_structure if old conpt record had a retention deduction
+                if (isset($od->retention) && $od->retention > 0) {
+                    DB::table('first_salary_structure')
+                        ->where('staffId', $od->staffID)
+                        ->where('num_rente_months', '>', 0)
+                        ->decrement('num_rente_months');
+                }
             }
 
             // Delete old payroll details for this month and year
@@ -1154,26 +1162,25 @@ class NextJsPayrollApiController extends Controller
                 // Compute leave of absence deduction: (grossPay / 30) * days_of_absent
                 $leaveOfAbsenceDeduction = ($grossPay / 30.0) * $loaDays;
 
-                // Compute dynamic retention if active in salary structure and count of previous deductions is < 20 months
-                if ($struct && $struct->reten_act == 1) {
-                    $previousDeductionsCount = DB::table('payroll_conpt as pc')
-                        ->join('payroll_runs as pr', 'pr.id', '=', 'pc.payroll_run_id')
-                        ->where('pc.staffID', $emp->ID)
-                        ->where('pc.retention', '>', 0)
-                        ->where(function($q) use ($year, $month) {
-                            $q->where('pr.year', '<', $year)
-                              ->orWhere(function($sq) use ($year, $month) {
-                                  $sq->where('pr.year', '=', $year)
-                                     ->where('pr.month', '<', $month);
-                              });
-                        })
-                        ->count();
-
-                    if ($previousDeductionsCount < 20) {
-                        $retentionBase = $basic + $housing + $transport + $medical + $utility + $meal;
+                // Compute retention using first_salary_structure if active and num_rente_months is less than 20
+                $firstStruct = DB::table('first_salary_structure')->where('staffId', $emp->ID)->first();
+                if ($firstStruct && $firstStruct->reten_act == 1) {
+                    if ($firstStruct->num_rente_months < 20) {
+                        $retentionBase = (float)$firstStruct->basic_salary +
+                                         (float)$firstStruct->housing_allowance +
+                                         (float)$firstStruct->transport_allowance +
+                                         (float)$firstStruct->medical_allowance +
+                                         (float)$firstStruct->utility_allowance +
+                                         (float)$firstStruct->meal_allowance;
                         $retention = round(0.05 * $retentionBase, 2);
+
+                        // Increment num_rente_months by 1
+                        DB::table('first_salary_structure')
+                            ->where('staffId', $emp->ID)
+                            ->increment('num_rente_months');
                     }
                 }
+
 
                 $totalDeductions = $payeTax + $pension + $loanDeduction + $coopSavings + $otherDeductions + $iouSum + $absencePenalty + $retention + $surcharges + $medicalLoan + $coopLoanRpyt + $coopAssetFinance + $leaveOfAbsenceDeduction;
                 $netPay = $grossPay - $totalDeductions;

@@ -28,6 +28,7 @@ class SalaryComputeApiTest extends TestCase
         if ($employee) {
             DB::table('staffEarningAndDeduction')->where('staffId', $employee->ID)->delete();
             DB::table('salary_structures')->where('staffId', $employee->ID)->delete();
+            DB::table('first_salary_structure')->where('staffId', $employee->ID)->delete();
             DB::table('leave_of_absent')->where('staffId', $employee->ID)->delete();
             DB::table('payroll_conpt')->where('staffID', $employee->ID)->delete();
             DB::table('coop_loan_deduction_setups')->where('staffId', $employee->ID)->delete();
@@ -345,6 +346,21 @@ class SalaryComputeApiTest extends TestCase
                 'tax_rate' => 0.00,
                 'pen_act' => 0,
                 'reten_act' => 1,
+                'created_at' => now()
+            ]
+        );
+
+        DB::table('first_salary_structure')->updateOrInsert(
+            ['staffId' => $employee->ID],
+            [
+                'basic_salary' => 100000.00,
+                'housing_allowance' => 20000.00,
+                'transport_allowance' => 10000.00,
+                'medical_allowance' => 0.00,
+                'utility_allowance' => 0.00,
+                'meal_allowance' => 0.00,
+                'reten_act' => 1,
+                'num_rente_months' => 0,
                 'created_at' => now()
             ]
         );

@@ -718,16 +718,52 @@ class HrStaffApiController extends Controller
             }
 
             // Check if user already exists
-            $userExists = DB::table('users')->where('username', $staff->fileNo)->exists();
-            if (!$userExists) {
-                $fullname = trim($staff->surname . ' ' . $staff->first_name . ' ' . ($staff->othernames ?? ''));
+            $fullname = trim($staff->surname . ' ' . $staff->first_name . ' ' . ($staff->othernames ?? ''));
+            $user = null;
+            if ($staff->UserID) {
+                $user = DB::table('users')->where('id', $staff->UserID)->first();
+            }
+            if (!$user) {
+                $user = DB::table('users')->where('username', (string)$staff->ID)->first();
+            }
+
+            if ($user) {
+                // Update existing user
+                DB::table('users')->where('id', $user->id)->update([
+                    'name' => strtoupper($fullname),
+                    'username' => (string)$staff->ID,
+                    'email' => $staff->email ?: ($staff->ID . '@isalu.gov.ng'),
+                    'user_type' => 'staff',
+                    'updated_at' => now()
+                ]);
+                $userId = $user->id;
+                DB::table('tblper')->where('ID', $id)->update(['UserID' => $userId]);
+            } else {
+                // Create new user
                 $userId = DB::table('users')->insertGetId([
-                    'name' => $fullname,
-                    'username' => $staff->fileNo,
+                    'name' => strtoupper($fullname),
+                    'username' => (string)$staff->ID,
+                    'email' => $staff->email ?: ($staff->ID . '@isalu.gov.ng'),
                     'password' => bcrypt('12345'),
-                    'courtID' => 9
+                    'courtID' => 9,
+                    'user_type' => 'staff',
+                    'created_at' => now(),
+                    'updated_at' => now()
                 ]);
                 DB::table('tblper')->where('ID', $id)->update(['UserID' => $userId]);
+            }
+
+            // Ensure role is assigned
+            $roleExists = DB::table('assign_user_role')
+                ->where('userID', $userId)
+                ->where('roleID', 2)
+                ->exists();
+            if (!$roleExists) {
+                DB::table('assign_user_role')->insert([
+                    'userID' => $userId,
+                    'roleID' => 2,
+                    'created_at' => now()
+                ]);
             }
 
             // Update candidate documentation status
@@ -1047,6 +1083,7 @@ class HrStaffApiController extends Controller
             }, $rows[0]);
 
             $fieldMap = [
+                'staffID' => -1,
                 'title' => -1,
                 'surname' => -1,
                 'firstname' => -1,
@@ -1067,7 +1104,9 @@ class HrStaffApiController extends Controller
             foreach ($headers as $index => $header) {
                 $cleanHeader = str_replace([' ', '_', '-'], '', $header);
                 
-                if (in_array($cleanHeader, ['title'])) {
+                if (in_array($cleanHeader, ['staffid', 'id'])) {
+                    $fieldMap['staffID'] = $index;
+                } elseif (in_array($cleanHeader, ['title'])) {
                     $fieldMap['title'] = $index;
                 } elseif (in_array($cleanHeader, ['surname', 'lastname'])) {
                     $fieldMap['surname'] = $index;
@@ -1315,12 +1354,27 @@ class HrStaffApiController extends Controller
                 $iouVal = $getValue($row, 'iou');
                 $iou = is_numeric($iouVal) ? floatval($iouVal) : 0.00;
 
+                // Resolve Staff ID
+                $staffIdVal = $getValue($row, 'staffID');
+                $staffId = is_numeric($staffIdVal) ? intval($staffIdVal) : null;
+                if (!$staffId) {
+                    $warnings[] = "Row " . ($r + 1) . ": Invalid or missing Staff ID '{$staffIdVal}'. Skipping row.";
+                    continue;
+                }
+
+                $staffExists = DB::table('tblper')->where('ID', $staffId)->exists();
+                if ($staffExists) {
+                    $warnings[] = "Row " . ($r + 1) . ": Staff with ID '{$staffId}' already exists in tblper. Skipping row.";
+                    continue;
+                }
+
                 // File number
                 $fileNox = str_pad($nextFileNumber, 4, '0', STR_PAD_LEFT);
                 $nextFileNumber++;
 
                 // Insert staff record
-                $staffId = DB::table('tblper')->insertGetId([
+                DB::table('tblper')->insert([
+                    'ID'            => $staffId,
                     'fileNo'        => $fileNox,
                     'title'         => $title,
                     'surname'       => strtoupper($surname),
@@ -1332,34 +1386,52 @@ class HrStaffApiController extends Controller
                     'courtID'       => 9,
                     'divisionID'    => 1,
                     'phone'         => $phone,
-                    'email'         => $email,
-                    'dob'           => $dob,
-                    'doj'           => $doj,
-                    'staff_status'  => 1,
-                    'status_value'  => 'active service',
-                    'gender'        => $gender,
+                    'email' => $email,
+                    'dob' => $dob,
+                    'doj' => $doj,
+                    'staff_status' => 1,
+                    'status_value' => 'active service',
+                    'gender' => $gender,
                     'maritalstatus' => $maritalStatus,
-                    'departmentID'  => $deptId,
-                    'unitID'        => $unitId,
+                    'departmentID' => $deptId,
+                    'unitID' => $unitId,
                     'designationID' => $desigId,
-                    'home_address'  => $address,
-                    'iou_cap'       => $iou,
-                    'isClaimed'     => 1,
-                    'isAdmin'       => 1,
-                    'progress_regID'=> 7
+                    'home_address' => $address,
+                    'iou_cap' => $iou,
+                    'isClaimed' => 1,
+                    'isAdmin' => 1,
+                    'progress_regID' => 7
                 ]);
 
                 // Create user account in the users table if not exists
-                $userExists = DB::table('users')->where('username', $fileNox)->exists();
+                // Save tblper ID of the staff for the username column in users table, user_type column should be staff
+                $userExists = DB::table('users')->where('username', (string)$staffId)->exists();
                 if (!$userExists) {
                     $fullname = trim($surname . ' ' . $firstname . ' ' . ($othernames ?? ''));
                     $userId = DB::table('users')->insertGetId([
                         'name' => strtoupper($fullname),
-                        'username' => $fileNox,
+                        'username' => (string)$staffId,
+                        'email' => $email ?: ($staffId . '@isalu.gov.ng'),
                         'password' => bcrypt('12345'),
-                        'courtID' => 9
+                        'courtID' => 9,
+                        'user_type' => 'staff',
+                        'created_at' => now(),
+                        'updated_at' => now()
                     ]);
                     DB::table('tblper')->where('ID', $staffId)->update(['UserID' => $userId]);
+
+                    // Assign default role mapping
+                    $roleExists = DB::table('assign_user_role')
+                        ->where('userID', $userId)
+                        ->where('roleID', 2)
+                        ->exists();
+                    if (!$roleExists) {
+                        DB::table('assign_user_role')->insert([
+                            'userID' => $userId,
+                            'roleID' => 2,
+                            'created_at' => now()
+                        ]);
+                    }
                 }
 
                 $insertedCount++;
