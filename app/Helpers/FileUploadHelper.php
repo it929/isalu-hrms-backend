@@ -30,7 +30,7 @@ class FileUploadHelper
 
         $file->move($path, $filename);
 
-        return url("$folder/$filename"); // full local URL
+        return url("api/nextjs/uploads/$folder/$filename"); // serve via API endpoint
     }
 
 

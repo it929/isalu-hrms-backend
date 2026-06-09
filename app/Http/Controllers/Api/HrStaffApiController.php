@@ -1512,4 +1512,14 @@ class HrStaffApiController extends Controller
 
         return null;
     }
+
+    public function serveUploadedFile($path)
+    {
+        $path = str_replace('..', '', $path);
+        $fullPath = public_path($path);
+        if (!file_exists($fullPath)) {
+            abort(404);
+        }
+        return response()->file($fullPath);
+    }
 }
