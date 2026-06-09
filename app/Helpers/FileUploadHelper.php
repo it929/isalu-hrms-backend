@@ -18,21 +18,15 @@ class FileUploadHelper
     {
         $filename = $filename ?? uniqid() . '.' . $file->getClientOriginalExtension();
 
-        if (app()->environment('local')) {
-            // Local upload
-            $path = public_path($folder);
-            if (!file_exists($path)) {
-                mkdir($path, 0777, true);
-            }
-
-            $file->move($path, $filename);
-
-            return url("$folder/$filename"); // full local URL
-        } else {
-            // S3 upload
-            $path = $file->storeAs($folder, $filename, 's3');
-            return Storage::disk('s3')->url($path);
+        // Local upload
+        $path = public_path($folder);
+        if (!file_exists($path)) {
+            mkdir($path, 0777, true);
         }
+
+        $file->move($path, $filename);
+
+        return url("$folder/$filename"); // full local URL
     }
 
 
