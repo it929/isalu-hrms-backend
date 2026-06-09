@@ -714,29 +714,13 @@ class AwardLetterController extends Controller
             return redirect()->back()->with('error', 'Letter not found');
         }
 
-        // For local environment
-        if (app()->environment('local')) {
-            $path = public_path(ltrim($letter->file_path, '/'));
-            
-            if (!file_exists($path)) {
-                return redirect()->back()->with('error', 'File not found');
-            }
-            
-            return response()->download($path, $letter->original_file_name);
-        } 
-        // For S3 or other environments
-        else {
-            // Extract filename from path
-            $filename = basename($letter->file_path);
-            $folder = 'uploads/letters/' . $letter->letter_type;
-            
-            // Get file from S3
-            $fileContents = Storage::disk('s3')->get($folder . '/' . $filename);
-            
-            return response($fileContents)
-                ->header('Content-Type', 'application/octet-stream')
-                ->header('Content-Disposition', 'attachment; filename="' . $letter->original_file_name . '"');
+        $path = public_path(ltrim($letter->file_path, '/'));
+        
+        if (!file_exists($path)) {
+            return redirect()->back()->with('error', 'File not found');
         }
+        
+        return response()->download($path, $letter->original_file_name);
     }
 
     /**
@@ -755,29 +739,13 @@ class AwardLetterController extends Controller
             return redirect($letter->full_url);
         }
 
-        // For local environment
-        if (app()->environment('local')) {
-            $path = public_path(ltrim($letter->file_path, '/'));
-            
-            if (!file_exists($path)) {
-                return redirect()->back()->with('error', 'File not found');
-            }
-            
-            return response()->file($path);
-        } 
-        // For S3
-        else {
-            $filename = basename($letter->file_path);
-            $folder = 'uploads/letters/' . $letter->letter_type;
-            
-            // Get file from S3
-            $fileContents = Storage::disk('s3')->get($folder . '/' . $filename);
-            $mimeType = Storage::disk('s3')->mimeType($folder . '/' . $filename);
-            
-            return response($fileContents)
-                ->header('Content-Type', $mimeType)
-                ->header('Content-Disposition', 'inline; filename="' . $letter->original_file_name . '"');
+        $path = public_path(ltrim($letter->file_path, '/'));
+        
+        if (!file_exists($path)) {
+            return redirect()->back()->with('error', 'File not found');
         }
+        
+        return response()->file($path);
     }
 
     /**
@@ -800,20 +768,6 @@ class AwardLetterController extends Controller
                     'updated_at' => now()
                 ]);
 
-            // Note: We're not deleting the actual file to maintain history
-            // If you want to delete the file as well, uncomment the code below:
-            
-            // if (app()->environment('local')) {
-            //     $path = public_path(ltrim($letter->file_path, '/'));
-            //     if (file_exists($path)) {
-            //         unlink($path);
-            //     }
-            // } else {
-            //     $filename = basename($letter->file_path);
-            //     $folder = 'uploads/letters/' . $letter->letter_type;
-            //     Storage::disk('s3')->delete($folder . '/' . $filename);
-            // }
-
             return redirect()->back()->with('success', 'Letter deleted successfully');
 
         } catch (\Exception $e) {
@@ -830,14 +784,7 @@ class AwardLetterController extends Controller
             return $letter->full_url;
         }
         
-        // Fallback to generating URL
-        if (app()->environment('local')) {
-            return url($letter->file_path);
-        } else {
-            $filename = basename($letter->file_path);
-            $folder = 'uploads/letters/' . $letter->letter_type;
-            return Storage::disk('s3')->url($folder . '/' . $filename);
-        }
+        return url($letter->file_path);
     }
 
 
