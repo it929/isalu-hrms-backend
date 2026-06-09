@@ -906,7 +906,7 @@ class HrStaffApiController extends Controller
             $wifeDetails = DB::table('tbldateofbirth_wife')->where('staffid', $id)->get();
 
             // Attachments
-            $attachments = DB::table('tblstaffattachment')->where('staffID', $id)->get();
+            $attachments = DB::table('tblstaffAttachment')->where('staffID', $id)->get();
 
             return response()->json([
                 'status' => 'success',
