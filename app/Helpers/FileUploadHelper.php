@@ -21,7 +21,11 @@ class FileUploadHelper
         // Local upload
         $path = public_path($folder);
         if (!file_exists($path)) {
-            mkdir($path, 0777, true);
+            try {
+                mkdir($path, 0777, true);
+            } catch (\Throwable $e) {
+                throw new \Exception("mkdir() failed at: " . $path . ". Error: " . $e->getMessage());
+            }
         }
 
         $file->move($path, $filename);
