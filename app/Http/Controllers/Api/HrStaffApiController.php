@@ -719,9 +719,13 @@ class HrStaffApiController extends Controller
 
             // Check if user already exists
             $fullname = trim($staff->surname . ' ' . $staff->first_name . ' ' . ($staff->othernames ?? ''));
+            $paddedUsername = str_pad((string)$staff->ID, 4, '0', STR_PAD_LEFT);
             $user = null;
             if ($staff->UserID) {
                 $user = DB::table('users')->where('id', $staff->UserID)->first();
+            }
+            if (!$user) {
+                $user = DB::table('users')->where('username', $paddedUsername)->first();
             }
             if (!$user) {
                 $user = DB::table('users')->where('username', (string)$staff->ID)->first();
@@ -731,8 +735,8 @@ class HrStaffApiController extends Controller
                 // Update existing user
                 DB::table('users')->where('id', $user->id)->update([
                     'name' => strtoupper($fullname),
-                    'username' => (string)$staff->ID,
-                    'email' => $staff->email ?: ($staff->ID . '@isalu.gov.ng'),
+                    'username' => $paddedUsername,
+                    'email' => $staff->email ?: ($paddedUsername . '@isalu.gov.ng'),
                     'user_type' => 'staff',
                     'updated_at' => now()
                 ]);
@@ -742,8 +746,8 @@ class HrStaffApiController extends Controller
                 // Create new user
                 $userId = DB::table('users')->insertGetId([
                     'name' => strtoupper($fullname),
-                    'username' => (string)$staff->ID,
-                    'email' => $staff->email ?: ($staff->ID . '@isalu.gov.ng'),
+                    'username' => $paddedUsername,
+                    'email' => $staff->email ?: ($paddedUsername . '@isalu.gov.ng'),
                     'password' => bcrypt('12345'),
                     'courtID' => 9,
                     'user_type' => 'staff',
@@ -1405,13 +1409,14 @@ class HrStaffApiController extends Controller
 
                 // Create user account in the users table if not exists
                 // Save tblper ID of the staff for the username column in users table, user_type column should be staff
-                $userExists = DB::table('users')->where('username', (string)$staffId)->exists();
+                $paddedUsername = str_pad((string)$staffId, 4, '0', STR_PAD_LEFT);
+                $userExists = DB::table('users')->where('username', $paddedUsername)->exists();
                 if (!$userExists) {
                     $fullname = trim($surname . ' ' . $firstname . ' ' . ($othernames ?? ''));
                     $userId = DB::table('users')->insertGetId([
                         'name' => strtoupper($fullname),
-                        'username' => (string)$staffId,
-                        'email' => $email ?: ($staffId . '@isalu.gov.ng'),
+                        'username' => $paddedUsername,
+                        'email' => $email ?: ($paddedUsername . '@isalu.gov.ng'),
                         'password' => bcrypt('12345'),
                         'courtID' => 9,
                         'user_type' => 'staff',
@@ -1516,10 +1521,19 @@ class HrStaffApiController extends Controller
     public function serveUploadedFile($path)
     {
         $path = str_replace('..', '', $path);
-        $fullPath = public_path($path);
-        if (!file_exists($fullPath)) {
-            abort(404);
+        
+        // Try storage/app/public first (new uploads)
+        $storagePath = storage_path('app/public/' . $path);
+        if (file_exists($storagePath)) {
+            return response()->file($storagePath);
         }
-        return response()->file($fullPath);
+
+        // Fallback to public_path (backward compatibility for old uploads)
+        $fullPath = public_path($path);
+        if (file_exists($fullPath)) {
+            return response()->file($fullPath);
+        }
+
+        abort(404);
     }
 }
