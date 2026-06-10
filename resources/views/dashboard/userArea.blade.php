@@ -18,10 +18,21 @@
 
                         {{-- Show user's role info --}}
                         @if ($userRoleName)
-                            <div class="text-center">
+                            <div class="text-center" style="margin-bottom: 10px;">
                                 <span class="label label-primary">
                                     <i class="fa fa-user-tag"></i> Role: {{ $userRoleName }}
                                 </span>
+                            </div>
+                        @endif
+
+                        {{-- Show warning if user is using default password --}}
+                        @if (\Illuminate\Support\Facades\Hash::check('12345', Auth::user()->password))
+                            <div class="alert alert-danger alert-dismissible" style="margin: 15px auto; max-width: 800px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center;">
+                                <h4><i class="icon fa fa-lock"></i> Security Warning!</h4>
+                                <p style="font-size: 1.1em; margin-bottom: 15px;">You are currently logged in with the default password (<strong>12345</strong>). For security reasons, please change your password immediately.</p>
+                                <a href="{{ url('user/editAccount') }}" class="btn btn-warning btn-sm" style="color: #000; font-weight: bold; border-radius: 4px; padding: 6px 15px;">
+                                    <i class="fa fa-key"></i> Change Password Now
+                                </a>
                             </div>
                         @endif
 
