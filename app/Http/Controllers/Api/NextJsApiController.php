@@ -18,7 +18,8 @@ class NextJsApiController extends Controller
 
         if (Auth::attempt($credentials)) {
             $user = Auth::user();
-            $mustChangePassword = \Illuminate\Support\Facades\Hash::check('12345', $user->password);
+            // Only enforce default password warning for staff users
+            $mustChangePassword = ($user->user_type === 'staff') && \Illuminate\Support\Facades\Hash::check('12345', $user->password);
             
             $userData = $user->toArray();
             $userData['must_change_password'] = $mustChangePassword;
