@@ -23,6 +23,7 @@ Route::prefix('nextjs')->group(function () {
     Route::get('/uploads/{path}', [\App\Http\Controllers\Api\HrStaffApiController::class, 'serveUploadedFile'])->where('path', '.*');
     Route::get('/sidebar-links', [App\Http\Controllers\Api\NextJsApiController::class, 'getSidebarLinks']);
     Route::post('/login', [\App\Http\Controllers\Api\NextJsApiController::class, 'login']);
+    Route::post('/update-account', [\App\Http\Controllers\Api\NextJsApiController::class, 'updateAccount']);
     Route::get('/dashboard-stats', [\App\Http\Controllers\Api\NextJsApiController::class, 'getDashboardStats']);
     Route::get('/technical-users', [\App\Http\Controllers\Api\NextJsApiController::class, 'getTechnicalUsers']);
     Route::get('/sidebar-links', [\App\Http\Controllers\Api\NextJsApiController::class, 'getSidebarLinks']);

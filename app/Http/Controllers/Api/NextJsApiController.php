@@ -18,11 +18,23 @@ class NextJsApiController extends Controller
 
         if (Auth::attempt($credentials)) {
             $user = Auth::user();
-            // Optional: load roles/modules here
+            $mustChangePassword = \Illuminate\Support\Facades\Hash::check('12345', $user->password);
+            
+            $userData = $user->toArray();
+            $userData['must_change_password'] = $mustChangePassword;
+
+            // Fetch actual role name from database
+            $role = \DB::table('assign_user_role')
+                ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+                ->where('assign_user_role.userID', $user->id)
+                ->first();
+
+            $roleName = $role ? $role->rolename : 'Staff';
+
             return response()->json([
                 'status' => 'success',
-                'user' => $user,
-                'role' => ['name' => 'Super Admin'], // Mocking role for now
+                'user' => $userData,
+                'role' => ['name' => $roleName],
             ]);
         }
 
@@ -165,5 +177,68 @@ class NextJsApiController extends Controller
                 'message' => $th->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Update user account details (username and password).
+     */
+    public function updateAccount(Request $request)
+    {
+        $userId = $request->header('X-User-Id');
+        if (!$userId) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+        }
+
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'userName'              => 'required|string|min:3',
+            'password'              => 'required|confirmed|min:5',
+            'password_confirmation' => 'required'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Prevent reusing default password
+        if ($request->password === '12345') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'You cannot use the default password. Choose a new one.'
+            ], 422);
+        }
+
+        $user = User::find($userId);
+        if (!$user) {
+            return response()->json(['status' => 'error', 'message' => 'User not found'], 404);
+        }
+
+        // Validate uniqueness of username if it changed
+        if ($user->username !== $request->userName) {
+            $usernameExists = User::where('username', $request->userName)->where('id', '!=', $userId)->exists();
+            if ($usernameExists) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'The username has already been taken.'
+                ], 422);
+            }
+        }
+
+        $user->password = bcrypt($request->password);
+        $user->username = $request->userName;
+        $user->first_login = 1;
+        $user->save();
+
+        $userData = $user->toArray();
+        $userData['must_change_password'] = false;
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Your account details were successfully updated!',
+            'user' => $userData
+        ]);
     }
 }
