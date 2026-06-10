@@ -18,17 +18,8 @@ class FileUploadHelper
     {
         $filename = $filename ?? uniqid() . '.' . $file->getClientOriginalExtension();
 
-        // Local upload
-        $path = public_path($folder);
-        if (!file_exists($path)) {
-            try {
-                mkdir($path, 0777, true);
-            } catch (\Throwable $e) {
-                throw new \Exception("mkdir() failed at: " . $path . ". Error: " . $e->getMessage());
-            }
-        }
-
-        $file->move($path, $filename);
+        // Upload using Laravel Storage (stored in storage/app/public/$folder)
+        $file->storeAs($folder, $filename, 'public');
 
         return url("api/nextjs/uploads/$folder/$filename"); // serve via API endpoint
     }
