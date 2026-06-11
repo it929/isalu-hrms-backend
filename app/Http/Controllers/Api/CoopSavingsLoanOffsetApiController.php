@@ -9,42 +9,12 @@ use Illuminate\Support\Facades\Log;
 
 class CoopSavingsLoanOffsetApiController extends Controller
 {
+    use ResolveUserContextTrait;
+
     /**
      * Resolve the current user context from the X-User-Id header.
      */
-    private function getUserContext(Request $request): ?array
-    {
-        $userId = $request->header('X-User-Id');
-
-        if (!$userId) {
-            return null;
-        }
-
-        $isSuperAdmin = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->where('roleID', 1)
-            ->exists();
-
-        $isAdminStaff = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->where('roleID', 48)
-            ->exists();
-
-        $isAuditStaff = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->whereIn('roleID', [34, 35])
-            ->exists();
-
-        $employee = DB::table('tblper')->where('UserID', $userId)->first();
-
-        return [
-            'userId'       => $userId,
-            'isSuperAdmin' => $isSuperAdmin,
-            'isAdminStaff' => $isAdminStaff,
-            'isAuditStaff' => $isAuditStaff,
-            'employee'     => $employee,
-        ];
-    }
+    
 
     /**
      * GET /api/nextjs/payroll/coop-savings-loan-offset/staff-list

@@ -9,37 +9,12 @@ use Carbon\Carbon;
 
 class HrLeaveApiController extends Controller
 {
+    use ResolveUserContextTrait;
+
     /**
      * Resolve the current user context from the X-User-Id header.
      */
-    private function getUserContext(Request $request): ?array
-    {
-        $userId = $request->header('X-User-Id');
-
-        if (!$userId) {
-            return null;
-        }
-
-        $isSuperAdmin = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->where('roleID', 1) // Super Admin
-            ->exists();
-
-        $adminStaff = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->where('roleID', 48) // Admin Staff
-            ->exists();
-
-        $employee = DB::table('tblper')->where('UserID', $userId)->first();
-
-        return [
-            'userId'       => $userId,
-            'isSuperAdmin' => $isSuperAdmin,
-            'isAdminStaff' => $adminStaff,
-            'employee'     => $employee,
-            'isHod'        => $employee && $employee->is_hod == 1,
-        ];
-    }
+    
 
     /**
      * Get the number of annual leave days an employee has used in a given calendar year.

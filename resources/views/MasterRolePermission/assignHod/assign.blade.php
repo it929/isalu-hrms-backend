@@ -174,8 +174,12 @@
                 success: function(data) {
                     $('#staff').html('<option value="">-- Select Staff --</option>');
                     data.forEach(function(staff) {
+                        let staffId = staff.ID || staff.id;
+                        let surname = staff.surname || '';
+                        let firstName = staff.first_name || '';
+                        let othernames = staff.othernames || '';
                         $('#staff').append(
-                            `<option value="${staff.ID}">${staff.surname} ${staff.first_name} ${staff.othernames}</option>`
+                            `<option value="${staffId}">${surname} ${firstName} ${othernames}</option>`
                         );
                     });
                 },

@@ -29,6 +29,8 @@ Route::prefix('nextjs')->group(function () {
     Route::get('/sidebar-links', [\App\Http\Controllers\Api\NextJsApiController::class, 'getSidebarLinks']);
     Route::get('/roles-modules', [\App\Http\Controllers\Api\NextJsApiController::class, 'getRolesAndModules']);
     Route::get('/hod-assignments', [\App\Http\Controllers\Api\NextJsApiController::class, 'getHodAssignments']);
+    Route::get('/staff-by-department/{dept}', [\App\Http\Controllers\Api\NextJsApiController::class, 'getStaffByDepartment']);
+    Route::post('/assign-hod', [\App\Http\Controllers\Api\NextJsApiController::class, 'assignHod']);
 
     // Roles management
     Route::get('/roles', [\App\Http\Controllers\Api\UserRoleApiController::class, 'index']);
@@ -167,6 +169,13 @@ Route::prefix('nextjs')->group(function () {
         Route::get('/lock-active-month', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'index']);
         Route::post('/lock-active-month/lock', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'lock']);
         Route::post('/lock-active-month/unlock', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'unlock']);
+
+        // Bank updates
+        Route::prefix('bank-updates')->group(function () {
+            Route::get('/metadata', [\App\Http\Controllers\Api\BankUpdateApiController::class, 'getMetadata']);
+            Route::post('/individual', [\App\Http\Controllers\Api\BankUpdateApiController::class, 'updateIndividual']);
+            Route::post('/bulk', [\App\Http\Controllers\Api\BankUpdateApiController::class, 'importBulk']);
+        });
 
         // Salary Structures
         Route::prefix('salary-structures')->group(function () {

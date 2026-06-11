@@ -9,50 +9,12 @@ use Illuminate\Support\Facades\Log;
 
 class IouApiController extends Controller
 {
+    use ResolveUserContextTrait;
+
     /**
      * Resolve the current user context from the X-User-Id header.
      */
-    private function getUserContext(Request $request): ?array
-    {
-        $userId = $request->header('X-User-Id');
-
-        if (!$userId) {
-            return null;
-        }
-
-        $isSuperAdmin = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->where('roleID', 1) // Super Admin
-            ->exists();
-
-        $adminStaff = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->where('roleID', 48) // Admin Staff
-            ->exists();
-
-        $isAuditStaff = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->whereIn('roleID', [34, 35]) // Audit Head, Audit Staff
-            ->exists();
-
-        // Finance roles: 36 (Finance Head), 37 (Finance Staff), or any custom role ID for NHF/Collator if needed
-        $isFinanceStaff = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->whereIn('roleID', [36, 37])
-            ->exists();
-
-        $employee = DB::table('tblper')->where('UserID', $userId)->first();
-
-        return [
-            'userId'         => $userId,
-            'isSuperAdmin'   => $isSuperAdmin,
-            'isAdminStaff'   => $adminStaff,
-            'isAuditStaff'   => $isAuditStaff,
-            'isFinanceStaff' => $isFinanceStaff,
-            'employee'       => $employee,
-            'isHod'          => $employee && $employee->is_hod == 1,
-        ];
-    }
+    
 
     /**
      * GET /api/nextjs/payroll/ious/staff

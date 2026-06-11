@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Log;
 
 class NextJsPayrollApiController extends Controller
 {
+    use ResolveUserContextTrait;
+
     // ─── CV IDs mapped to template columns ────────────────────────────────────
     // (based on tblcvSetup rows confirmed from database dump)
     const CVID_MEDICAL_ALLOWANCE  = 19;  // Earning  → MEDICAL column
@@ -23,27 +25,7 @@ class NextJsPayrollApiController extends Controller
     /**
      * Resolve user context from X-User-Id header.
      */
-    private function getUserContext(Request $request): ?array
-    {
-        $userId = $request->header('X-User-Id');
-        if (!$userId) {
-            return null;
-        }
-
-        $isSuperAdmin = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->where('roleID', 1)
-            ->exists();
-
-        $employee = DB::table('tblper')->where('UserID', $userId)->first();
-
-        return [
-            'userId'       => $userId,
-            'isSuperAdmin' => $isSuperAdmin,
-            'employee'     => $employee,
-            'divisionID'   => $employee ? $employee->divisionID : null,
-        ];
-    }
+    
 
     /**
      * GET /api/nextjs/payroll/metadata
