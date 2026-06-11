@@ -76,12 +76,79 @@ class NextJsApiController extends Controller
      */
     public function getHodAssignments()
     {
+        $departments = \DB::table('tbldepartment')->get();
+
+        $hods = \DB::table('tbldepartment as d')
+            ->leftJoin('tblper as p', 'p.departmentID', '=', 'd.id')
+            ->where('p.is_hod', 1)
+            ->select(
+                'd.id as department_id',
+                'd.department as department_name',
+                'p.ID as staff_id',
+                'p.surname',
+                'p.first_name',
+                'p.othernames'
+            )
+            ->get();
+
         return response()->json([
-            'departments' => [
-                ['id' => 1, 'name' => 'Human Resources', 'currentHOD' => 'Jane Smith', 'users' => 15],
-                ['id' => 2, 'name' => 'Information Technology', 'currentHOD' => 'John Doe', 'users' => 42],
-            ]
+            'status' => 'success',
+            'departments' => $departments,
+            'hods' => $hods
         ]);
+    }
+
+    /**
+     * Get staff by department
+     */
+    public function getStaffByDepartment($dept)
+    {
+        $staff = \DB::table('tblper')
+            ->where('departmentID', $dept)
+            ->select('ID', 'surname', 'first_name', 'othernames')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'staff' => $staff
+        ]);
+    }
+
+    /**
+     * Assign HOD
+     */
+    public function assignHod(Request $request)
+    {
+        $request->validate([
+            'department_id' => 'required',
+            'user_id' => 'required'
+        ]);
+
+        \DB::beginTransaction();
+        try {
+            // 1. Remove old HOD for this department
+            \DB::table('tblper')
+                ->where('departmentID', $request->department_id)
+                ->update(['is_hod' => 0]);
+
+            // 2. Assign new HOD
+            \DB::table('tblper')
+                ->where('ID', $request->user_id)
+                ->update(['is_hod' => 1]);
+
+            \DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Head of Department assigned successfully.'
+            ]);
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to assign HOD: ' . $e->getMessage()
+            ], 500);
+        }
     }
     /**
      * Get Dashboard Stats

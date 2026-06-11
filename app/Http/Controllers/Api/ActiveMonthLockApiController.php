@@ -10,29 +10,12 @@ use Carbon\Carbon;
 
 class ActiveMonthLockApiController extends Controller
 {
+    use ResolveUserContextTrait;
+
     /**
      * Resolve the current user context from the X-User-Id header.
      */
-    private function getUserContext(Request $request): ?array
-    {
-        $userId = $request->header('X-User-Id');
-        if (!$userId) {
-            return null;
-        }
-
-        $isSuperAdmin = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->where('roleID', 1) // Super Admin
-            ->exists();
-
-        $employee = DB::table('tblper')->where('UserID', $userId)->first();
-
-        return [
-            'userId'       => $userId,
-            'isSuperAdmin' => $isSuperAdmin,
-            'employee'     => $employee,
-        ];
-    }
+    
 
     /**
      * Add log entry to audit_log table.

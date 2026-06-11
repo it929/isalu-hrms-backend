@@ -74,7 +74,7 @@ class AssignUserRoleController extends MasterRolePermissionController
             ->where('ID', $request->user_id)
             ->update(['is_hod' => 1]);
 
-        return back()->with('success', 'Head of Department assigned successfully.');
+        return back()->with('message', 'Head of Department assigned successfully.');
     }
 
     public function staffByDepartment($dept)

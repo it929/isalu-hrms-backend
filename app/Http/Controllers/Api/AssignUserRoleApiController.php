@@ -9,34 +9,12 @@ use Illuminate\Support\Facades\Log;
 
 class AssignUserRoleApiController extends Controller
 {
+    use ResolveUserContextTrait;
+
     /**
      * Resolve user context from X-User-Id header.
      */
-    private function getUserContext(Request $request): ?array
-    {
-        $userId = $request->header('X-User-Id');
-        if (!$userId) {
-            return null;
-        }
-
-        $isSuperAdmin = DB::table('assign_user_role')
-            ->where('userID', $userId)
-            ->where('roleID', 1)
-            ->exists();
-
-        // Fallback: also treat Technical user_type as super admin
-        if (!$isSuperAdmin) {
-            $isSuperAdmin = DB::table('users')
-                ->where('id', $userId)
-                ->whereRaw('UPPER(user_type) = ?', ['TECHNICAL'])
-                ->exists();
-        }
-
-        return [
-            'userId'       => $userId,
-            'isSuperAdmin' => $isSuperAdmin,
-        ];
-    }
+    
 
     /**
      * Audit log helper mimicking legacy behavior.
