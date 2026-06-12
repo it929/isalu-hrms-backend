@@ -158,6 +158,13 @@ class NextJsApiController extends Controller
         $totalStaff = \DB::table('tblper')->count();
         $maleStaff = \DB::table('tblper')->where('gender', 'Male')->count();
         $femaleStaff = \DB::table('tblper')->where('gender', 'Female')->count();
+
+        // Get count of staff in each department (including departments with 0 staff)
+        $departments = \DB::table('tbldepartment')
+            ->leftJoin('tblper', 'tblper.departmentID', '=', 'tbldepartment.id')
+            ->select('tbldepartment.department as name', \DB::raw('count(tblper.ID) as value'))
+            ->groupBy('tbldepartment.id', 'tbldepartment.department')
+            ->get();
         
         // Mocking other stats for now as they require leave/task tables
         return response()->json([
@@ -166,7 +173,8 @@ class NextJsApiController extends Controller
                 ['label' => 'Male Staff', 'value' => number_format($maleStaff), 'icon' => 'Users', 'color' => '#10b981'],
                 ['label' => 'Female Staff', 'value' => number_format($femaleStaff), 'icon' => '#f59e0b', 'color' => '#f59e0b'],
                 ['label' => 'Open Positions', 'value' => '12', 'icon' => 'Briefcase', 'color' => '#8b5cf6'],
-            ]
+            ],
+            'departments' => $departments
         ]);
     }
 
@@ -307,6 +315,132 @@ class NextJsApiController extends Controller
             'status' => 'success',
             'message' => 'Your account details were successfully updated!',
             'user' => $userData
+        ]);
+    }
+
+    /**
+     * Handle forgot password request from Next.js.
+     */
+    public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'staffId' => 'required|string'
+        ]);
+
+        $username = trim($request->staffId);
+
+        // Check if there is a record in the users table matching the username
+        $user = User::where('username', $username)->first();
+
+        if (!$user) {
+            return response()->json([
+                'status' => 'error',
+                'error' => "$username does not exist"
+            ], 404);
+        }
+
+        $userid = $user->id;
+        $email = $user->email;
+        $staffname = $user->name ?: $user->username;
+
+        // Generate random password token
+        $alphabet = "abcdefghijklmnopqrstuwxyzABCDEFGHIJKLMNOPQRSTUWXYZ0123456789";
+        $pass = [];
+        $alphaLength = strlen($alphabet) - 1;
+        for ($i = 0; $i < 8; $i++) {
+            $n = rand(0, $alphaLength);
+            $pass[] = $alphabet[$n];
+        }
+        $randomPass = implode('', $pass);
+
+        $token = md5($user->username) . md5($randomPass);
+
+        \DB::table('users')->where('id', '=', $userid)->update([
+            'resettoken' => $token,
+            'token_status' => '1'
+        ]);
+
+        $to = $email;
+        $subject = "Password Reset";
+        $sender = "info@mbrcomputers.net";
+
+        $header = "From:" . $sender . "\r\n";
+        $header .= "MIME-Version: 1.0 \r\n";
+        $header .= "Content-type: text/html \r\n";
+
+        // Determine base URL for Next.js frontend dynamically or fallback to configuration
+        $host = $request->getHost();
+        $scheme = $request->isSecure() ? 'https' : 'http';
+        $frontendUrl = env('NEXTJS_FRONTEND_URL', 'http://localhost:3000');
+        
+        if ($host === '127.0.0.1' || $host === 'localhost') {
+            $resetUrl = "$scheme://$host:3000/password-reset/resets/$token";
+        } else {
+            $resetUrl = rtrim($frontendUrl, '/') . "/password-reset/resets/$token";
+        }
+
+        $message = "Dear $staffname, <br> Kindly click on <a href='$resetUrl'>here</a> to change your password.";
+        
+        try {
+            // Send email using Laravel's Mail facade to respect .env mail settings
+            \Illuminate\Support\Facades\Mail::html($message, function ($mail) use ($to, $subject, $sender) {
+                $mail->to($to)
+                     ->subject($subject)
+                     ->from($sender);
+            });
+        } catch (\Throwable $e) {
+            // Log the mail sending failure and details to laravel.log so it can be verified locally
+            \Illuminate\Support\Facades\Log::error("Failed to send password reset email via Mailer: " . $e->getMessage(), [
+                'to' => $to,
+                'subject' => $subject,
+                'message' => $message
+            ]);
+            // Fall back to php mail()
+            @mail($to, $subject, $message, "From:" . $sender . "\r\n" . "MIME-Version: 1.0\r\n" . "Content-type: text/html\r\n");
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'success' => "Dear $staffname, a message has been sent to your email address: $email for password reset. Kindly check your email."
+        ]);
+    }
+
+    /**
+     * Reset user password using token from Next.js.
+     */
+    public function resetPassword(Request $request, $token)
+    {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'password' => 'required|confirmed|min:5',
+            'password_confirmation' => 'required'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'error' => $validator->errors()->first()
+            ], 422);
+        }
+
+        $user = User::where('resettoken', $token)
+            ->where('token_status', '1')
+            ->where('resettoken', '!=', '')
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'status' => 'error',
+                'error' => 'The password reset token is invalid or has expired.'
+            ], 422);
+        }
+
+        $user->password = bcrypt($request->password);
+        $user->token_status = '0';
+        $user->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Your password has been successfully reset!'
         ]);
     }
 }
