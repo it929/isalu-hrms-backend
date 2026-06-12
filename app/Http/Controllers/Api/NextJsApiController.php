@@ -375,16 +375,21 @@ class NextJsApiController extends Controller
         $header .= "MIME-Version: 1.0 \r\n";
         $header .= "Content-type: text/html \r\n";
 
-        // Determine base URL for Next.js frontend dynamically or fallback to configuration
-        $host = $request->getHost();
-        $scheme = $request->isSecure() ? 'https' : 'http';
-        $frontendUrl = env('NEXTJS_FRONTEND_URL', 'http://localhost:3000');
-        
-        if ($host === '127.0.0.1' || $host === 'localhost') {
-            $resetUrl = "$scheme://$host:3000/password-reset/resets/$token";
+        // Determine Next.js frontend URL dynamically from the request's Referer header
+        $referer = $request->headers->get('referer');
+        if ($referer) {
+            $parsedUrl = parse_url($referer);
+            $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'http';
+            $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'localhost';
+            $port = isset($parsedUrl['port']) ? ':' . $parsedUrl['port'] : '';
+            $frontendUrl = "$scheme://$host$port";
         } else {
-            $resetUrl = rtrim($frontendUrl, '/') . "/password-reset/resets/$token";
+            $host = $request->getHost();
+            $scheme = $request->isSecure() ? 'https' : 'http';
+            $frontendUrl = env('NEXTJS_FRONTEND_URL', "$scheme://$host:3000");
         }
+        
+        $resetUrl = rtrim($frontendUrl, '/') . "/password-reset/resets/$token";
 
         $message = "Dear $staffname, <br> Kindly click on <a href='$resetUrl'>here</a> to change your password.";
         
