@@ -355,10 +355,17 @@ class NextJsApiController extends Controller
 
         $token = md5($user->username) . md5($randomPass);
 
-        \DB::table('users')->where('id', '=', $userid)->update([
-            'resettoken' => $token,
-            'token_status' => '1'
-        ]);
+        try {
+            \DB::table('users')->where('id', '=', $userid)->update([
+                'resettoken' => $token,
+                'token_status' => '1'
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => 'Database error: ' . $e->getMessage() . '. Please ensure you have run "php artisan migrate" on the live server.'
+            ], 500);
+        }
 
         $to = $email;
         $subject = "Password Reset";
@@ -395,8 +402,11 @@ class NextJsApiController extends Controller
                 'subject' => $subject,
                 'message' => $message
             ]);
-            // Fall back to php mail()
-            @mail($to, $subject, $message, "From:" . $sender . "\r\n" . "MIME-Version: 1.0\r\n" . "Content-type: text/html\r\n");
+            
+            return response()->json([
+                'status' => 'error',
+                'error' => 'Failed to send email via SMTP: ' . $e->getMessage() . '. Please verify your live MAIL_host, port, username, password and encryption in .env, and make sure to clear the config cache.'
+            ], 500);
         }
 
         return response()->json([
@@ -422,10 +432,17 @@ class NextJsApiController extends Controller
             ], 422);
         }
 
-        $user = User::where('resettoken', $token)
-            ->where('token_status', '1')
-            ->where('resettoken', '!=', '')
-            ->first();
+        try {
+            $user = User::where('resettoken', $token)
+                ->where('token_status', '1')
+                ->where('resettoken', '!=', '')
+                ->first();
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => 'Database error: ' . $e->getMessage() . '. Please ensure you have run "php artisan migrate" on the live server.'
+            ], 500);
+        }
 
         if (!$user) {
             return response()->json([
@@ -434,9 +451,16 @@ class NextJsApiController extends Controller
             ], 422);
         }
 
-        $user->password = bcrypt($request->password);
-        $user->token_status = '0';
-        $user->save();
+        try {
+            $user->password = bcrypt($request->password);
+            $user->token_status = '0';
+            $user->save();
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => 'Failed to save new password: ' . $e->getMessage()
+            ], 500);
+        }
 
         return response()->json([
             'status' => 'success',
