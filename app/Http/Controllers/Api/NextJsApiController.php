@@ -362,7 +362,7 @@ class NextJsApiController extends Controller
 
         $to = $email;
         $subject = "Password Reset";
-        $sender = "info@mbrcomputers.net";
+        $sender = config('mail.from.address') ?: "info@mbrcomputers.net";
 
         $header = "From:" . $sender . "\r\n";
         $header .= "MIME-Version: 1.0 \r\n";
