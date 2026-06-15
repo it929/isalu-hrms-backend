@@ -758,14 +758,19 @@ class HrStaffApiController extends Controller
             }
 
             // Ensure role is assigned
+            $staffRole = DB::table('user_role')
+                ->whereRaw('LOWER(rolename) = ?', ['staff'])
+                ->first();
+            $staffRoleId = $staffRole ? $staffRole->roleID : 2;
+
             $roleExists = DB::table('assign_user_role')
                 ->where('userID', $userId)
-                ->where('roleID', 2)
+                ->where('roleID', $staffRoleId)
                 ->exists();
             if (!$roleExists) {
                 DB::table('assign_user_role')->insert([
                     'userID' => $userId,
-                    'roleID' => 2,
+                    'roleID' => $staffRoleId,
                     'created_at' => now()
                 ]);
             }
@@ -1426,14 +1431,19 @@ class HrStaffApiController extends Controller
                     DB::table('tblper')->where('ID', $staffId)->update(['UserID' => $userId]);
 
                     // Assign default role mapping
+                    $staffRole = DB::table('user_role')
+                        ->whereRaw('LOWER(rolename) = ?', ['staff'])
+                        ->first();
+                    $staffRoleId = $staffRole ? $staffRole->roleID : 2;
+
                     $roleExists = DB::table('assign_user_role')
                         ->where('userID', $userId)
-                        ->where('roleID', 2)
+                        ->where('roleID', $staffRoleId)
                         ->exists();
                     if (!$roleExists) {
                         DB::table('assign_user_role')->insert([
                             'userID' => $userId,
-                            'roleID' => 2,
+                            'roleID' => $staffRoleId,
                             'created_at' => now()
                         ]);
                     }
