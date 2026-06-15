@@ -88,7 +88,7 @@ class HrStaffApiController extends Controller
             'surname'        => 'required|string',
             'firstname'      => 'required|string',
             'othernames'     => 'nullable|string',
-            'email'          => 'nullable|email',
+            'email'          => 'nullable|email|unique:tblper,email',
             'phoneNo'        => 'nullable|string',
             'sex'            => 'required|string',
             'maritalStatus'  => 'required|string',
@@ -312,6 +312,18 @@ class HrStaffApiController extends Controller
      */
     public function saveContact(Request $request, $id)
     {
+        $validator = Validator::make($request->all(), [
+            'email' => 'nullable|email|unique:tblper,email,' . $id . ',ID',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
         try {
             $currentProgress = DB::table('tblper')->where('ID', $id)->value('progress_regID') ?? 0;
 
@@ -323,6 +335,23 @@ class HrStaffApiController extends Controller
                 'home_address' => $request->home_address,
                 'progress_regID' => max(8, $currentProgress)
             ]);
+
+            // Synchronize email update to the users table
+            $userId = DB::table('tblper')->where('ID', $id)->value('UserID');
+            if ($userId) {
+                DB::table('users')->where('id', $userId)->update([
+                    'email' => $request->email,
+                    'updated_at' => now()
+                ]);
+            } else {
+                DB::table('users')
+                    ->where('username', (string)$id)
+                    ->update([
+                        'email' => $request->email,
+                        'updated_at' => now()
+                    ]);
+            }
+
             return response()->json(['status' => 'success']);
         } catch (\Throwable $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
@@ -719,24 +748,25 @@ class HrStaffApiController extends Controller
 
             // Check if user already exists
             $fullname = trim($staff->surname . ' ' . $staff->first_name . ' ' . ($staff->othernames ?? ''));
-            $paddedUsername = str_pad((string)$staff->ID, 4, '0', STR_PAD_LEFT);
+            $rawUsername = (string)$staff->ID;
             $user = null;
             if ($staff->UserID) {
                 $user = DB::table('users')->where('id', $staff->UserID)->first();
             }
             if (!$user) {
+                $paddedUsername = str_pad($rawUsername, 4, '0', STR_PAD_LEFT);
                 $user = DB::table('users')->where('username', $paddedUsername)->first();
             }
             if (!$user) {
-                $user = DB::table('users')->where('username', (string)$staff->ID)->first();
+                $user = DB::table('users')->where('username', $rawUsername)->first();
             }
 
             if ($user) {
                 // Update existing user
                 DB::table('users')->where('id', $user->id)->update([
                     'name' => strtoupper($fullname),
-                    'username' => $paddedUsername,
-                    'email' => $staff->email ?: ($paddedUsername . '@isalu.gov.ng'),
+                    'username' => $rawUsername,
+                    'email' => $staff->email ?: ($rawUsername . '@isalu.gov.ng'),
                     'user_type' => 'staff',
                     'updated_at' => now()
                 ]);
@@ -746,8 +776,8 @@ class HrStaffApiController extends Controller
                 // Create new user
                 $userId = DB::table('users')->insertGetId([
                     'name' => strtoupper($fullname),
-                    'username' => $paddedUsername,
-                    'email' => $staff->email ?: ($paddedUsername . '@isalu.gov.ng'),
+                    'username' => $rawUsername,
+                    'email' => $staff->email ?: ($rawUsername . '@isalu.gov.ng'),
                     'password' => bcrypt('12345'),
                     'courtID' => 9,
                     'user_type' => 'staff',
@@ -1359,6 +1389,14 @@ class HrStaffApiController extends Controller
                 $email = $getValue($row, 'email');
                 $othernames = $getValue($row, 'othernames');
 
+                if (!empty($email)) {
+                    $emailExists = DB::table('tblper')->where('email', $email)->exists();
+                    if ($emailExists) {
+                        $warnings[] = "Row " . ($r + 1) . ": Email '{$email}' is already taken. Skipping row.";
+                        continue;
+                    }
+                }
+
                 // IOU
                 $iouVal = $getValue($row, 'iou');
                 $iou = is_numeric($iouVal) ? floatval($iouVal) : 0.00;
@@ -1414,14 +1452,14 @@ class HrStaffApiController extends Controller
 
                 // Create user account in the users table if not exists
                 // Save tblper ID of the staff for the username column in users table, user_type column should be staff
-                $paddedUsername = str_pad((string)$staffId, 4, '0', STR_PAD_LEFT);
-                $userExists = DB::table('users')->where('username', $paddedUsername)->exists();
+                $rawUsername = (string)$staffId;
+                $userExists = DB::table('users')->where('username', $rawUsername)->exists();
                 if (!$userExists) {
                     $fullname = trim($surname . ' ' . $firstname . ' ' . ($othernames ?? ''));
                     $userId = DB::table('users')->insertGetId([
                         'name' => strtoupper($fullname),
-                        'username' => $paddedUsername,
-                        'email' => $email ?: ($paddedUsername . '@isalu.gov.ng'),
+                        'username' => $rawUsername,
+                        'email' => $email ?: ($rawUsername . '@isalu.gov.ng'),
                         'password' => bcrypt('12345'),
                         'courtID' => 9,
                         'user_type' => 'staff',
