@@ -21,6 +21,19 @@ class HrStaffImportTest extends TestCase
      */
     public function test_staff_import_creates_users_successfully()
     {
+        // Get or seed a custom staff role to verify dynamic lookup (and not hardcoded ID 2)
+        $staffRole = DB::table('user_role')
+            ->whereRaw('LOWER(rolename) = ?', ['staff'])
+            ->first();
+        if ($staffRole) {
+            $customRoleId = $staffRole->roleID;
+        } else {
+            $customRoleId = DB::table('user_role')->insertGetId([
+                'rolename' => 'sTaFf',
+                'created_at' => now(),
+            ]);
+        }
+
         // 1. Set up required lookup values (department, unit, designation)
         $deptId = DB::table('tbldepartment')->insertGetId([
             'department' => 'HR Import Test Department'
@@ -77,10 +90,10 @@ class HrStaffImportTest extends TestCase
         $user = DB::table('users')->where('username', '9899')->first();
         $this->assertEquals($user->id, $staff->UserID);
 
-        // 6. Verify role ID 2 is assigned in assign_user_role
+        // 6. Verify dynamic role ID is assigned in assign_user_role
         $this->assertDatabaseHas('assign_user_role', [
             'userID' => $user->id,
-            'roleID' => 2
+            'roleID' => $customRoleId
         ]);
 
         unlink($tempFile);
@@ -92,6 +105,19 @@ class HrStaffImportTest extends TestCase
      */
     public function test_submit_documentation_creates_or_updates_user()
     {
+        // Get or seed a custom staff role to verify dynamic lookup (and not hardcoded ID 2)
+        $staffRole = DB::table('user_role')
+            ->whereRaw('LOWER(rolename) = ?', ['staff'])
+            ->first();
+        if ($staffRole) {
+            $customRoleId = $staffRole->roleID;
+        } else {
+            $customRoleId = DB::table('user_role')->insertGetId([
+                'rolename' => 'sTaFf',
+                'created_at' => now(),
+            ]);
+        }
+
         $deptId = DB::table('tbldepartment')->insertGetId([
             'department' => 'HR Doc Dept'
         ]);
@@ -115,6 +141,12 @@ class HrStaffImportTest extends TestCase
             'username' => (string)$staff1Id,
             'email' => 'unsynced@test.com',
             'user_type' => 'staff'
+        ]);
+
+        $user1 = DB::table('users')->where('username', (string)$staff1Id)->first();
+        $this->assertDatabaseHas('assign_user_role', [
+            'userID' => $user1->id,
+            'roleID' => $customRoleId
         ]);
 
         // Scenario B: User already exists, submit documentation updates it
@@ -151,6 +183,11 @@ class HrStaffImportTest extends TestCase
             'email' => 'new@test.com',
             'username' => (string)$staff2Id,
             'user_type' => 'staff'
+        ]);
+
+        $this->assertDatabaseHas('assign_user_role', [
+            'userID' => $userId,
+            'roleID' => $customRoleId
         ]);
     }
 }
