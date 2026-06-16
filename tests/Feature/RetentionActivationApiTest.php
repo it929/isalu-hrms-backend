@@ -11,26 +11,47 @@ class RetentionActivationApiTest extends TestCase
 {
     use DatabaseTransactions;
 
+    private $testEmployeeId = null;
+
     protected function setUp(): void
     {
         parent::setUp();
+        
+        // Create dedicated test employee
+        $this->testEmployeeId = DB::table('tblper')->insertGetId([
+            'title' => 'MR.',
+            'surname' => 'TEST_PHPUNIT_SURNAME',
+            'first_name' => 'TEST_FIRST_NAME',
+            'othernames' => 'TEST_OTHER_NAMES',
+            'rank' => 0,
+            'staff_status' => 1,
+            'fileNo' => 'TEST9999',
+            'courtID' => 9,
+            'divisionID' => 1,
+            'departmentID' => 79,
+            'unitID' => 21,
+            'designationID' => 5,
+        ]);
+        
         $this->cleanUpTestData();
     }
 
     protected function tearDown(): void
     {
         $this->cleanUpTestData();
+        if ($this->testEmployeeId) {
+            DB::table('tblper')->where('ID', $this->testEmployeeId)->delete();
+        }
         parent::tearDown();
     }
 
     private function cleanUpTestData()
     {
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        if ($employee) {
-            DB::table('staffEarningAndDeduction')->where('staffId', $employee->ID)->delete();
-            DB::table('salary_structures')->where('staffId', $employee->ID)->delete();
-            DB::table('first_salary_structure')->where('staffId', $employee->ID)->delete();
-            DB::table('payroll_conpt')->where('staffID', $employee->ID)->delete();
+        if ($this->testEmployeeId) {
+            DB::table('staffEarningAndDeduction')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('salary_structures')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('first_salary_structure')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('payroll_conpt')->where('staffID', $this->testEmployeeId)->delete();
         }
         
         DB::table('payroll_runs')->where('month', 5)->where('year', 2026)->delete();
@@ -90,12 +111,9 @@ class RetentionActivationApiTest extends TestCase
 
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        $this->assertNotNull($employee, 'Require active employee');
-
         // Toggle on
         $response = $this->postJson('/api/nextjs/payroll/retention-activation/toggle', [
-            'staff_id' => $employee->ID,
+            'staff_id' => $this->testEmployeeId,
             'reten_act' => 1
         ], $headers);
 
@@ -106,20 +124,20 @@ class RetentionActivationApiTest extends TestCase
             ]);
 
         $this->assertDatabaseHas('first_salary_structure', [
-            'staffId' => $employee->ID,
+            'staffId' => $this->testEmployeeId,
             'reten_act' => 1
         ]);
 
         // Toggle off
         $response = $this->postJson('/api/nextjs/payroll/retention-activation/toggle', [
-            'staff_id' => $employee->ID,
+            'staff_id' => $this->testEmployeeId,
             'reten_act' => 0
         ], $headers);
 
         $response->assertStatus(200);
 
         $this->assertDatabaseHas('first_salary_structure', [
-            'staffId' => $employee->ID,
+            'staffId' => $this->testEmployeeId,
             'reten_act' => 0
         ]);
     }
@@ -137,17 +155,14 @@ class RetentionActivationApiTest extends TestCase
 
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        $employee1 = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        $this->assertNotNull($employee1);
-
         // Reset status to 0 first
         DB::table('first_salary_structure')->updateOrInsert(
-            ['staffId' => $employee1->ID],
+            ['staffId' => $this->testEmployeeId],
             ['reten_act' => 0]
         );
 
         // Create temporary CSV content
-        $csvContent = "staffId\n{$employee1->ID}\n";
+        $csvContent = "staffId\n{$this->testEmployeeId}\n";
         $tempFile = tempnam(sys_get_temp_dir(), 'test_csv');
         file_put_contents($tempFile, $csvContent);
 
@@ -170,7 +185,7 @@ class RetentionActivationApiTest extends TestCase
             ]);
 
         $this->assertDatabaseHas('first_salary_structure', [
-            'staffId' => $employee1->ID,
+            'staffId' => $this->testEmployeeId,
             'reten_act' => 1
         ]);
 
@@ -192,12 +207,9 @@ class RetentionActivationApiTest extends TestCase
 
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        $this->assertNotNull($employee);
-
         // Configure First Salary Structure (Total: 160,000.00)
         DB::table('first_salary_structure')->updateOrInsert(
-            ['staffId' => $employee->ID],
+            ['staffId' => $this->testEmployeeId],
             [
                 'basic_salary' => 100000.00,
                 'housing_allowance' => 20000.00,
@@ -207,6 +219,20 @@ class RetentionActivationApiTest extends TestCase
                 'meal_allowance' => 10000.00,
                 'reten_act' => 0,
                 'num_rente_months' => 0,
+                'created_at' => now()
+            ]
+        );
+
+        // Configure salary structure as well so it's active in payroll_runs
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $this->testEmployeeId],
+            [
+                'basic_salary' => 100000.00,
+                'housing_allowance' => 20000.00,
+                'transport_allowance' => 10000.00,
+                'medical_allowance' => 10000.00,
+                'utility_allowance' => 10000.00,
+                'meal_allowance' => 10000.00,
                 'created_at' => now()
             ]
         );
@@ -221,12 +247,12 @@ class RetentionActivationApiTest extends TestCase
 
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $runId,
-            'staffID' => $employee->ID,
+            'staffID' => $this->testEmployeeId,
             'retention' => 0.00 // Retention is 0.00 because reten_act is 0
         ]);
 
         // Scenario B: reten_act = 1
-        DB::table('first_salary_structure')->where('staffId', $employee->ID)->update([
+        DB::table('first_salary_structure')->where('staffId', $this->testEmployeeId)->update([
             'reten_act' => 1
         ]);
 
@@ -240,12 +266,12 @@ class RetentionActivationApiTest extends TestCase
 
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $newRunId,
-            'staffID' => $employee->ID,
+            'staffID' => $this->testEmployeeId,
             'retention' => 8000.00 // Retention is applied because reten_act is 1 (5% of 160000.00)
         ]);
 
         $this->assertDatabaseHas('first_salary_structure', [
-            'staffId' => $employee->ID,
+            'staffId' => $this->testEmployeeId,
             'num_rente_months' => 1 // Incremented!
         ]);
     }
@@ -263,12 +289,9 @@ class RetentionActivationApiTest extends TestCase
 
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        $this->assertNotNull($employee);
-
         // Configure First Salary Structure (Total: 160,000.00) with 19 months already deducted
         DB::table('first_salary_structure')->updateOrInsert(
-            ['staffId' => $employee->ID],
+            ['staffId' => $this->testEmployeeId],
             [
                 'basic_salary' => 100000.00,
                 'housing_allowance' => 20000.00,
@@ -278,6 +301,20 @@ class RetentionActivationApiTest extends TestCase
                 'meal_allowance' => 10000.00,
                 'reten_act' => 1,
                 'num_rente_months' => 19,
+                'created_at' => now()
+            ]
+        );
+
+        // Configure salary structure as well so it's active in payroll_runs
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $this->testEmployeeId],
+            [
+                'basic_salary' => 100000.00,
+                'housing_allowance' => 20000.00,
+                'transport_allowance' => 10000.00,
+                'medical_allowance' => 10000.00,
+                'utility_allowance' => 10000.00,
+                'meal_allowance' => 10000.00,
                 'created_at' => now()
             ]
         );
@@ -294,12 +331,12 @@ class RetentionActivationApiTest extends TestCase
 
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $newRunId,
-            'staffID' => $employee->ID,
+            'staffID' => $this->testEmployeeId,
             'retention' => 8000.00
         ]);
 
         $this->assertDatabaseHas('first_salary_structure', [
-            'staffId' => $employee->ID,
+            'staffId' => $this->testEmployeeId,
             'num_rente_months' => 20
         ]);
 
@@ -315,7 +352,7 @@ class RetentionActivationApiTest extends TestCase
 
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $finalRunId,
-            'staffID' => $employee->ID,
+            'staffID' => $this->testEmployeeId,
             'retention' => 0.00 // Capped!
         ]);
     }
@@ -334,15 +371,12 @@ class RetentionActivationApiTest extends TestCase
 
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        $this->assertNotNull($employee);
-
         // Delete any existing conpt records for this employee to start fresh
-        DB::table('payroll_conpt')->where('staffID', $employee->ID)->delete();
+        DB::table('payroll_conpt')->where('staffID', $this->testEmployeeId)->delete();
 
         // 1. Configure first salary structure (Total: 160,000.00)
         DB::table('first_salary_structure')->updateOrInsert(
-            ['staffId' => $employee->ID],
+            ['staffId' => $this->testEmployeeId],
             [
                 'basic_salary' => 100000.00,
                 'housing_allowance' => 20000.00,
@@ -358,7 +392,7 @@ class RetentionActivationApiTest extends TestCase
 
         // 2. Configure salary structure (Total: 160,000.00 initially)
         DB::table('salary_structures')->updateOrInsert(
-            ['staffId' => $employee->ID],
+            ['staffId' => $this->testEmployeeId],
             [
                 'basic_salary' => 100000.00,
                 'housing_allowance' => 20000.00,
@@ -382,17 +416,15 @@ class RetentionActivationApiTest extends TestCase
         $response->assertStatus(200);
         $runIdMay = $response->json('payroll_run_id');
 
-        $conptRow = DB::table('payroll_conpt')->where('payroll_run_id', $runIdMay)->where('staffID', $employee->ID)->first();
-        dd($conptRow);
         // Verify the first retention is 5% of 160,000.00 = 8,000.00
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $runIdMay,
-            'staffID' => $employee->ID,
+            'staffID' => $this->testEmployeeId,
             'retention' => 8000.00
         ]);
 
         // 3. Increase salary structure (Total: 300,000.00)
-        DB::table('salary_structures')->where('staffId', $employee->ID)->update([
+        DB::table('salary_structures')->where('staffId', $this->testEmployeeId)->update([
             'basic_salary' => 200000.00,
             'housing_allowance' => 40000.00,
             'transport_allowance' => 20000.00,
@@ -414,7 +446,7 @@ class RetentionActivationApiTest extends TestCase
         // instead of 5% of 300,000.00 (which would be 15,000.00)
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $runIdJune,
-            'staffID' => $employee->ID,
+            'staffID' => $this->testEmployeeId,
             'retention' => 8000.00
         ]);
     }
