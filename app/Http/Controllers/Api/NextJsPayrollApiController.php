@@ -357,7 +357,7 @@ class NextJsPayrollApiController extends Controller
 
             $mapped = $allRows->map(function ($row) use ($revolvingLoanBalances, $coopLoanBalances, $coopSavingsBalances, $medicalLoanBalances, $coopAssetFinanceBalances, $loanSetupDeductions) {
                 return [
-                    'IDNO'               => $row->fileNo ?? '',
+                    'IDNO'               => $row->staffID ?? '',
                     'NAME'               => $row->name   ?? '',
                     'DEPERTMENT'         => $row->department ?? '',
                     'BASIC'              => number_format((float)$row->basic,    2, '.', ''),
@@ -507,7 +507,7 @@ class NextJsPayrollApiController extends Controller
             $otherDeduction     = max(0, $totalDedn - $explicitDeductions);
 
             return [
-                'IDNO'               => $row->fileNo ?? '',
+                'IDNO'               => $row->staffid ?? '',
                 'NAME'               => $row->name   ?? '',
                 'DEPERTMENT'         => $row->department ?? '',
                 'BASIC'              => number_format($basic,    2, '.', ''),

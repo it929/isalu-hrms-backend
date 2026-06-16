@@ -10,35 +10,57 @@ class SalaryComputeApiTest extends TestCase
 {
     use DatabaseTransactions;
 
+    private $testEmployeeId = null;
+
     protected function setUp(): void
     {
         parent::setUp();
+        
+        // Create dedicated test employee
+        $this->testEmployeeId = DB::table('tblper')->insertGetId([
+            'title' => 'MR.',
+            'surname' => 'TEST_PHPUNIT_SURNAME',
+            'first_name' => 'TEST_FIRST_NAME',
+            'othernames' => 'TEST_OTHER_NAMES',
+            'rank' => 0,
+            'staff_status' => 1,
+            'fileNo' => 'TEST9999',
+            'courtID' => 9,
+            'divisionID' => 1,
+            'departmentID' => 79,
+            'unitID' => 21,
+            'designationID' => 5,
+        ]);
+        
         $this->cleanUpTestData();
     }
 
     protected function tearDown(): void
     {
         $this->cleanUpTestData();
+        if ($this->testEmployeeId) {
+            DB::table('tblper')->where('ID', $this->testEmployeeId)->delete();
+        }
         parent::tearDown();
     }
 
     private function cleanUpTestData()
     {
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        if ($employee) {
-            DB::table('staffEarningAndDeduction')->where('staffId', $employee->ID)->delete();
-            DB::table('salary_structures')->where('staffId', $employee->ID)->delete();
-            DB::table('first_salary_structure')->where('staffId', $employee->ID)->delete();
-            DB::table('leave_of_absent')->where('staffId', $employee->ID)->delete();
-            DB::table('payroll_conpt')->where('staffID', $employee->ID)->delete();
-            DB::table('coop_loan_deduction_setups')->where('staffId', $employee->ID)->delete();
-            DB::table('coop_savings_setups')->where('staffId', $employee->ID)->delete();
-            DB::table('medical_loan_deduction_setups')->where('staffId', $employee->ID)->delete();
-            DB::table('surcharge_deduction_setups')->where('staffId', $employee->ID)->delete();
-            DB::table('absence_penalty_deduction_setups')->where('staffId', $employee->ID)->delete();
-            DB::table('other_deduction_setups')->where('staffId', $employee->ID)->delete();
-            DB::table('employee_loans')->where('staffId', $employee->ID)->delete();
-            DB::table('loan_deduction_setups')->where('staffId', $employee->ID)->delete();
+        if ($this->testEmployeeId) {
+            DB::table('staffEarningAndDeduction')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('salary_structures')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('first_salary_structure')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('leave_of_absent')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('payroll_conpt')->where('staffID', $this->testEmployeeId)->delete();
+            DB::table('coop_loan_deduction_setups')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('coop_savings_setups')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('medical_loan_deduction_setups')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('surcharge_deduction_setups')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('absence_penalty_deduction_setups')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('other_deduction_setups')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('employee_loans')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('loan_deduction_setups')->where('staffId', $this->testEmployeeId)->delete();
+            DB::table('coop_asset_finance_deduction_setups')->where('staffId', $this->testEmployeeId)->delete();
         }
         
         DB::table('payroll_runs')->where('month', 5)->where('year', 2026)->delete();
@@ -99,12 +121,8 @@ class SalaryComputeApiTest extends TestCase
 
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        // Check if there is at least one active employee (rank != 2, staff_status = 1)
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        if (!$employee) {
-            $this->markTestSkipped('No active employee records to run salary computation.');
-            return;
-        }
+        $employee = DB::table('tblper')->where('ID', $this->testEmployeeId)->first();
+        $this->assertNotNull($employee);
 
         // Clear existing staff earning/deductions for this employee to ensure clean run
         DB::table('staffEarningAndDeduction')->where('staffId', $employee->ID)->delete();
@@ -112,7 +130,7 @@ class SalaryComputeApiTest extends TestCase
         // Ensure retention activation is deactivated for the baseline success run
         DB::table('salary_structures')->updateOrInsert(
             ['staffId' => $employee->ID],
-            ['reten_act' => 0]
+            ['basic_salary' => 100000, 'reten_act' => 0]
         );
 
         // Run computation
@@ -167,9 +185,8 @@ class SalaryComputeApiTest extends TestCase
 
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        // Find or create active employee
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        $this->assertNotNull($employee, 'Require at least one active employee');
+        $employee = DB::table('tblper')->where('ID', $this->testEmployeeId)->first();
+        $this->assertNotNull($employee);
 
         // Create a pension setup CV Setup if it doesn't exist
         $cvSetup = DB::table('tblcvSetup')
@@ -209,6 +226,7 @@ class SalaryComputeApiTest extends TestCase
                 'basic_salary' => 100000.00,
                 'housing_allowance' => 20000.00,
                 'transport_allowance' => 10000.00,
+                'medical_allowance' => 10000.00,
                 'pension_rate' => 8.00, // 8% pension
                 'pen_act' => 0,
                 'created_at' => now()
@@ -234,7 +252,7 @@ class SalaryComputeApiTest extends TestCase
             'pen_act' => 1
         ]);
 
-        // Run compute again (it deletes previous conpt records inside the route)
+        // Run compute again
         $response = $this->postJson('/api/nextjs/payroll/compute', [
             'month' => 'MAY',
             'year' => '2026'
@@ -245,13 +263,14 @@ class SalaryComputeApiTest extends TestCase
         $row = DB::table('payroll_conpt')->where('payroll_run_id', $runId)->where('staffID', $employee->ID)->first();
         $this->assertNotNull($row);
 
-        // Pension calculation: grossPay * (pension_rate / 100.0)
-        $expectedPension = round((float)$row->gross_pay * 0.08, 2);
+        // Pension calculation: (basic + housing + transport + medical) * (pension_rate / 100.0)
+        $pensionBase = (float)$row->basic + (float)$row->housing + (float)$row->transport + (float)$row->medical;
+        $expectedPension = round($pensionBase * 0.08, 2);
         
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $runId,
             'staffID' => $employee->ID,
-            'pension' => $expectedPension // Pension should be calculated dynamically when pen_act is 1
+            'pension' => $expectedPension
         ]);
     }
 
@@ -269,9 +288,8 @@ class SalaryComputeApiTest extends TestCase
 
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        // Find or create active employee
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        $this->assertNotNull($employee, 'Require at least one active employee');
+        $employee = DB::table('tblper')->where('ID', $this->testEmployeeId)->first();
+        $this->assertNotNull($employee);
 
         // Delete any existing setups for this employee
         DB::table('staffEarningAndDeduction')->where('staffId', $employee->ID)->delete();
@@ -373,6 +391,7 @@ class SalaryComputeApiTest extends TestCase
 
         $response->assertStatus(200);
         $runId = $response->json('payroll_run_id');
+        
         // Assert database values
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $runId,
@@ -407,7 +426,7 @@ class SalaryComputeApiTest extends TestCase
         $listResponse->assertStatus(200);
 
         $data = $listResponse->json('data');
-        $employeeRow = collect($data)->firstWhere('IDNO', $employee->fileNo);
+        $employeeRow = collect($data)->firstWhere('IDNO', $employee->ID);
         $this->assertNotNull($employeeRow);
 
         $this->assertEquals('6500.00', $employeeRow['RETENTION']);
@@ -431,7 +450,7 @@ class SalaryComputeApiTest extends TestCase
 
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
+        $employee = DB::table('tblper')->where('ID', $this->testEmployeeId)->first();
         $this->assertNotNull($employee);
 
         // Delete any existing staff earning/deductions/loans/LOA for this employee
@@ -513,7 +532,7 @@ class SalaryComputeApiTest extends TestCase
         $listResponse->assertStatus(200);
 
         $data = $listResponse->json('data');
-        $employeeRow = collect($data)->firstWhere('IDNO', $employee->fileNo);
+        $employeeRow = collect($data)->firstWhere('IDNO', $employee->ID);
         $this->assertNotNull($employeeRow);
 
         $this->assertEquals(24, $employeeRow['PAID DAYS']);
@@ -532,10 +551,8 @@ class SalaryComputeApiTest extends TestCase
         }
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        if (!$employee) {
-            $this->markTestSkipped('No active employee');
-        }
+        $employee = DB::table('tblper')->where('ID', $this->testEmployeeId)->first();
+        $this->assertNotNull($employee);
 
         // Setup a basic structure for this employee
         DB::table('salary_structures')->updateOrInsert(
@@ -597,7 +614,7 @@ class SalaryComputeApiTest extends TestCase
         $listResponse->assertStatus(200);
 
         $data = $listResponse->json('data');
-        $employeeRow = collect($data)->firstWhere('IDNO', $employee->fileNo);
+        $employeeRow = collect($data)->firstWhere('IDNO', $employee->ID);
         $this->assertNotNull($employeeRow);
         $this->assertEquals('40000.00', $employeeRow['REVOLVING LOAN BAL']);
         $this->assertEquals('20000.00', $employeeRow['COP. LONE BAL']);
@@ -614,10 +631,8 @@ class SalaryComputeApiTest extends TestCase
         }
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        if (!$employee) {
-            $this->markTestSkipped('No active employee');
-        }
+        $employee = DB::table('tblper')->where('ID', $this->testEmployeeId)->first();
+        $this->assertNotNull($employee);
 
         // Setup a basic structure for this employee
         DB::table('salary_structures')->updateOrInsert(
@@ -671,7 +686,7 @@ class SalaryComputeApiTest extends TestCase
         $listResponse->assertStatus(200);
 
         $data = $listResponse->json('data');
-        $employeeRow = collect($data)->firstWhere('IDNO', $employee->fileNo);
+        $employeeRow = collect($data)->firstWhere('IDNO', $employee->ID);
         $this->assertNotNull($employeeRow);
         $this->assertEquals('20000.00', $employeeRow['COP. LONE BAL']);
     }
@@ -689,11 +704,8 @@ class SalaryComputeApiTest extends TestCase
 
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
-        $employee = DB::table('tblper')->where('rank', '!=', 2)->where('staff_status', 1)->first();
-        if (!$employee) {
-            $this->markTestSkipped('No active employee');
-            return;
-        }
+        $employee = DB::table('tblper')->where('ID', $this->testEmployeeId)->first();
+        $this->assertNotNull($employee);
 
         // Setup a basic structure for this employee
         DB::table('salary_structures')->updateOrInsert(
