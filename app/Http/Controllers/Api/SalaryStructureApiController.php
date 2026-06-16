@@ -18,7 +18,7 @@ class SalaryStructureApiController extends Controller
     {
         try {
             $staff = DB::table('tblper')
-                ->where('rank', '!=', 2) // Exclude terminated/retired if applicable (rank 2 is inactive in NextJsPayrollApiController)
+                // ->where('rank', '!=', 2) // Exclude terminated/retired if applicable (rank 2 is inactive in NextJsPayrollApiController)
                 ->where('staff_status', 1)
                 ->select('ID as id', 'fileNo', 'surname', 'first_name', 'othernames')
                 ->orderBy('surname', 'asc')
