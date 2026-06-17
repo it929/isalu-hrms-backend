@@ -812,10 +812,14 @@ class HrStaffApiController extends Controller
                 ]);
             }
 
-            // Set final progress to 19 (complete)
+            // Set final progress to 19 (complete) and activate staff status
             $currentProgress = DB::table('tblper')->where('ID', $id)->value('progress_regID') ?? 0;
             DB::table('tblper')->where('ID', $id)->update([
-                'progress_regID' => max(19, $currentProgress)
+                'progress_regID' => max(19, $currentProgress),
+                'staff_status'   => 1,
+                'status_value'   => 'active service',
+                'isClaimed'      => 1,
+                'isAdmin'        => 1
             ]);
 
             return response()->json(['status' => 'success']);
