@@ -162,6 +162,8 @@ Route::prefix('nextjs')->group(function () {
         Route::get('/',         [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getPayrollList']);
         Route::get('/export',   [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'exportPayroll']);
         Route::post('/compute', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'computeSalary']);
+        Route::get('/payslip/init', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getPayslipInit']);
+        Route::get('/payslip',  [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getPayslip']);
 
         // Active Month Setup
         Route::get('/active-month', [\App\Http\Controllers\Api\ActiveMonthApiController::class, 'index']);
