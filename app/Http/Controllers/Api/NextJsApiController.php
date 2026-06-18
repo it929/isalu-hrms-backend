@@ -14,10 +14,30 @@ class NextJsApiController extends Controller
      */
     public function login(Request $request)
     {
-        $credentials = $request->only('username', 'password');
+        $username = trim($request->input('username'));
+        $password = $request->input('password');
 
-        if (Auth::attempt($credentials)) {
-            $user = Auth::user();
+        // 1. Try finding user by username directly
+        $user = \App\Models\User::where('username', $username)->first();
+
+        // 2. If not found, look up the staff by fileNo (PF Number) in tblper
+        if (!$user) {
+            $staff = \DB::table('tblper')->where('fileNo', $username)->first();
+            if ($staff && $staff->UserID) {
+                $user = \App\Models\User::find($staff->UserID);
+            }
+        }
+
+        // 3. If still not found, try to look up by ID
+        if (!$user && is_numeric($username)) {
+            $staff = \DB::table('tblper')->where('ID', (int)$username)->first();
+            if ($staff && $staff->UserID) {
+                $user = \App\Models\User::find($staff->UserID);
+            }
+        }
+
+        // 4. If a user is found, attempt authentication with their actual username and password
+        if ($user && Auth::attempt(['username' => $user->username, 'password' => $password])) {
             // Only enforce default password warning for staff users
             $mustChangePassword = ($user->user_type === 'staff') && \Illuminate\Support\Facades\Hash::check('12345', $user->password);
             
