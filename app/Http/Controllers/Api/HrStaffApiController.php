@@ -109,7 +109,18 @@ class HrStaffApiController extends Controller
         }
 
         try {
-            DB::table('tblper')->insert([
+            // Generate next staff file number
+            $records = DB::table('tblper')->pluck('fileNo');
+            $numbers = $records->map(function ($fNo) {
+                preg_match('/(\d+)$/', $fNo, $matches);
+                return isset($matches[1]) ? (int) $matches[1] : 0;
+            });
+            $maxNumber = $numbers->max();
+            $nextNumber = $maxNumber + 1;
+            $fileNox = str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+
+            $staffId = DB::table('tblper')->insertGetId([
+                'fileNo'        => $fileNox,
                 'title'         => strtoupper($request->title),
                 'surname'       => strtoupper($request->surname),
                 'first_name'    => strtoupper($request->firstname),
@@ -123,20 +134,54 @@ class HrStaffApiController extends Controller
                 'email'         => $request->email,
                 'dob'           => $request->date_of_birth,
                 'doj'           => $request->date_of_joining,
-                'staff_status'  => 0,
+                'staff_status'  => 1,
                 'status_value'  => 'active service',
                 'gender'        => $request->sex,
                 'maritalstatus' => $request->maritalStatus,
                 'departmentID'  => $request->department_id,
                 'unitID'        => $request->unit_id,
                 'designationID' => $request->designation_id,
-                'dob'           => $request->date_of_birth,
-                'doj'           => $request->date_of_joining,
                 'home_address'  => $request->address,
                 'iou_cap'       => $request->iou,
                 'isClaimed'     => 1,
                 'isAdmin'       => 1,
+                'progress_regID'=> 19,
             ]);
+
+            // Create user account in the users table
+            $fullname = trim($request->surname . ' ' . $request->firstname . ' ' . ($request->othernames ?? ''));
+            $rawUsername = (string)$staffId;
+            
+            $userId = DB::table('users')->insertGetId([
+                'name' => strtoupper($fullname),
+                'username' => $rawUsername,
+                'email' => $request->email ?: ($rawUsername . '@isalu.gov.ng'),
+                'password' => bcrypt('12345'),
+                'courtID' => 9,
+                'user_type' => 'staff',
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            DB::table('tblper')->where('ID', $staffId)->update(['UserID' => $userId]);
+
+            // Assign default role mapping
+            $staffRole = DB::table('user_role')
+                ->whereRaw('LOWER(rolename) = ?', ['staff'])
+                ->first();
+            $staffRoleId = $staffRole ? $staffRole->roleID : 2;
+
+            $roleExists = DB::table('assign_user_role')
+                ->where('userID', $userId)
+                ->where('roleID', $staffRoleId)
+                ->exists();
+            if (!$roleExists) {
+                DB::table('assign_user_role')->insert([
+                    'userID' => $userId,
+                    'roleID' => $staffRoleId,
+                    'created_at' => now()
+                ]);
+            }
 
             return response()->json([
                 'status'  => 'success',
