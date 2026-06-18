@@ -1253,4 +1253,142 @@ class NextJsPayrollApiController extends Controller
         }
         return (int)$totalDays;
     }
+
+    /**
+     * GET /api/nextjs/payroll/payslip/init
+     * Fetch initialization data for payslip printing page.
+     */
+    public function getPayslipInit(Request $request)
+    {
+        $userCtx = $this->getUserContext($request);
+        if (!$userCtx) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+        }
+
+        $isSuperAdmin = $userCtx['isSuperAdmin'] ?? false;
+        
+        $userId = $request->header('X-User-Id');
+        if ($userId) {
+            $user = DB::table('users')->where('id', $userId)->first();
+            if ($user && strtolower($user->user_type ?? '') === 'technical') {
+                $isSuperAdmin = true;
+            }
+        }
+
+        $myStaff = null;
+        if (isset($userCtx['employee']) && $userCtx['employee']) {
+            $myStaff = [
+                'id' => $userCtx['employee']->ID,
+                'fileNo' => $userCtx['employee']->fileNo,
+                'name' => trim($userCtx['employee']->surname . ' ' . $userCtx['employee']->first_name . ' ' . ($userCtx['employee']->othernames ?? '')),
+            ];
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'is_admin' => $isSuperAdmin,
+            'my_staff' => $myStaff
+        ]);
+    }
+
+    /**
+     * GET /api/nextjs/payroll/payslip
+     * Fetch payslip details for a staff member, month, and year.
+     */
+    public function getPayslip(Request $request)
+    {
+        $staffId = $request->input('staff_id');
+        $month = $request->input('month');
+        $year = $request->input('year');
+
+        if (!$staffId || !$month || !$year) {
+            return response()->json(['status' => 'error', 'message' => 'Staff ID, Month, and Year are required.'], 422);
+        }
+
+        // 1. Fetch the staff information
+        $personData = DB::table('tblper')
+            ->where('ID', $staffId)
+            ->orWhere('fileNo', $staffId)
+            ->first();
+
+        if (!$personData) {
+            return response()->json(['status' => 'error', 'message' => 'Staff record not found.'], 404);
+        }
+
+        // 2. Fetch all payroll records for this month & year using our unified fetchPayrollData
+        try {
+            [$payrollRows] = $this->fetchPayrollData($month, $year, '', '', PHP_INT_MAX, 1);
+        } catch (\Throwable $th) {
+            return response()->json(['status' => 'error', 'message' => 'Error fetching payroll data: ' . $th->getMessage()], 500);
+        }
+
+        // 3. Find the specific staff member's payroll record
+        $matchedRow = null;
+        foreach ($payrollRows as $row) {
+            if ($row['IDNO'] == $personData->ID || $row['IDNO'] == $personData->fileNo) {
+                $matchedRow = $row;
+                break;
+            }
+        }
+
+        if (!$matchedRow) {
+            return response()->json(['status' => 'error', 'message' => "No payslip record found for the selected month and year."], 404);
+        }
+
+        // 4. Resolve bank name
+        $bankName = $matchedRow['BANK'] ?: 'N/A';
+
+        $response = [
+            'staff' => [
+                'id' => $personData->ID,
+                'file_no' => $personData->fileNo,
+                'name' => trim($personData->surname . ' ' . $personData->first_name . ' ' . ($personData->othernames ?? '')),
+                'department' => DB::table('tbldepartment')->where('id', $personData->departmentID)->value('department') ?: 'N/A',
+                'designation' => DB::table('tbldesignation')->where('id', $personData->designationID)->value('designation') ?: 'N/A',
+                'bank_name' => $bankName,
+                'bank_account' => $matchedRow['ACC. NO'] ?: ($personData->AccNo ?: 'N/A'),
+            ],
+            'payslip' => [
+                'month' => $month,
+                'year' => $year,
+                'basic' => (float)$matchedRow['BASIC'],
+                'housing' => (float)$matchedRow['HOUSING'],
+                'transport' => (float)$matchedRow['TRANSPORT'],
+                'medical' => (float)$matchedRow['MEDICAL'],
+                'utility' => (float)$matchedRow['UTILITY'],
+                'meal' => (float)$matchedRow['MEAL'],
+                'gross_pay' => (float)$matchedRow['TOTAL INCOME'],
+                
+                // Deductions
+                'tax' => (float)$matchedRow['P.TAX'],
+                'pension' => (float)$matchedRow['PENSION'],
+                'loan' => (float)$matchedRow['LOAN'],
+                'coop_savings' => (float)$matchedRow['COOP. SAVING'],
+                'coop_loan' => (float)$matchedRow['COOP. LOAN RPYT'],
+                'iou' => (float)$matchedRow['IOU'],
+                'retention' => (float)$matchedRow['RETENTION'],
+                'surcharges' => (float)$matchedRow['SURGHARGES'],
+                'medical_loan' => (float)$matchedRow['MEDICAL LOAN'],
+                'absence_penalty' => (float)$matchedRow['ABSENCE PENALTY'],
+                'coop_asset_finance' => (float)$matchedRow['COOP.ASSET.'],
+                'leave_absence_deduction' => (float)$matchedRow['LEAVE OF ABSENCE DEDUCTION'],
+                'other_deductions' => (float)$matchedRow['OTHER DEDUCTION'],
+                'total_deductions' => (float)$matchedRow['TOTAL DEDUCTION'],
+                'net_pay' => (float)$matchedRow['NETPAY'],
+
+                // Additional balances / metadata to display on payslip
+                'paid_days' => $matchedRow['PAID DAYS'],
+                'revolving_loan_balance' => (float)$matchedRow['REVOLVING LOAN BAL'],
+                'coop_savings_balance' => (float)$matchedRow['COP.CONTR'],
+                'coop_loan_balance' => (float)$matchedRow['COP. LONE BAL'],
+                'coop_asset_finance_balance' => (float)$matchedRow['COP. ASSET FIN'],
+                'medical_loan_balance' => (float)$matchedRow['MEDICAL DEBT'],
+            ]
+        ];
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $response
+        ]);
+    }
 }
