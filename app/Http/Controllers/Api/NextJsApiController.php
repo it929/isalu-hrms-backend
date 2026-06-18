@@ -23,16 +23,26 @@ class NextJsApiController extends Controller
         // 2. If not found, look up the staff by fileNo (PF Number) in tblper
         if (!$user) {
             $staff = \DB::table('tblper')->where('fileNo', $username)->first();
-            if ($staff && $staff->UserID) {
-                $user = \App\Models\User::find($staff->UserID);
+            if ($staff) {
+                if ($staff->UserID) {
+                    $user = \App\Models\User::find($staff->UserID);
+                }
+                if (!$user) {
+                    $user = $this->autoCreateUserForStaff($staff);
+                }
             }
         }
 
         // 3. If still not found, try to look up by ID
         if (!$user && is_numeric($username)) {
             $staff = \DB::table('tblper')->where('ID', (int)$username)->first();
-            if ($staff && $staff->UserID) {
-                $user = \App\Models\User::find($staff->UserID);
+            if ($staff) {
+                if ($staff->UserID) {
+                    $user = \App\Models\User::find($staff->UserID);
+                }
+                if (!$user) {
+                    $user = $this->autoCreateUserForStaff($staff);
+                }
             }
         }
 
@@ -63,6 +73,55 @@ class NextJsApiController extends Controller
             'status' => 'error',
             'message' => 'Invalid credentials'
         ], 401);
+    }
+
+    /**
+     * Helper to auto-create user credentials for staff records missing user mappings.
+     */
+    private function autoCreateUserForStaff($staff)
+    {
+        $fullname = trim($staff->surname . ' ' . $staff->first_name . ' ' . ($staff->othernames ?? ''));
+        $rawUsername = (string)$staff->ID;
+
+        // Double check if user already exists with this username
+        $userObj = \App\Models\User::where('username', $rawUsername)->first();
+        if ($userObj) {
+            \DB::table('tblper')->where('ID', $staff->ID)->update(['UserID' => $userObj->id]);
+            return $userObj;
+        }
+
+        $userId = \DB::table('users')->insertGetId([
+            'name' => strtoupper($fullname),
+            'username' => $rawUsername,
+            'email' => $staff->email ?: ($rawUsername . '@isalu.gov.ng'),
+            'password' => bcrypt('12345'),
+            'courtID' => 9,
+            'user_type' => 'staff',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        \DB::table('tblper')->where('ID', $staff->ID)->update(['UserID' => $userId]);
+
+        // Ensure role is assigned
+        $staffRole = \DB::table('user_role')
+            ->whereRaw('LOWER(rolename) = ?', ['staff'])
+            ->first();
+        $staffRoleId = $staffRole ? $staffRole->roleID : 2;
+
+        $roleExists = \DB::table('assign_user_role')
+            ->where('userID', $userId)
+            ->where('roleID', $staffRoleId)
+            ->exists();
+        if (!$roleExists) {
+            \DB::table('assign_user_role')->insert([
+                'userID' => $userId,
+                'roleID' => $staffRoleId,
+                'created_at' => now()
+            ]);
+        }
+
+        return \App\Models\User::find($userId);
     }
 
     /**
