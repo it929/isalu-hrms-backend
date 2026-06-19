@@ -1128,7 +1128,7 @@ class NextJsPayrollApiController extends Controller
                 $payeTax = $declareIncome * ($taxRate / 100.0);
                 $pension = 0.00;
                 if ($struct && $struct->pen_act == 1) {
-                    $pension = $grossPay * ($pensionRate / 100.0);
+                    $pension = ($grossPay * 0.5) * ($pensionRate / 100.0);
                 }
 
                 // Fetch monthly IOU taken from iou_records table
