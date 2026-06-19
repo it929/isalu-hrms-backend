@@ -43,7 +43,9 @@ class IouApiController extends Controller
                     'ss.transport_allowance',
                     'ss.medical_allowance',
                     'ss.utility_allowance',
-                    'ss.meal_allowance'
+                    'ss.meal_allowance',
+                    'ss.can_take_iou',
+                    'ss.max_iou_amount'
                 )
                 ->orderBy('p.surname', 'asc');
 
@@ -66,13 +68,19 @@ class IouApiController extends Controller
                                (float)($row->utility_allowance ?? 0.00) +
                                (float)($row->meal_allowance ?? 0.00);
 
+                $canTakeIou = (int)($row->can_take_iou ?? 1);
+                $maxIouAmount = (float)($row->max_iou_amount ?? 0.00);
+                $maxIou = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.50);
+
                 return [
-                    'id'       => $row->id,
-                    'fileNo'   => $row->fileNo ?? '',
-                    'name'     => $fullName,
-                    'label'    => $fullName,
-                    'salary'   => $grossSalary,
-                    'max_iou'  => $grossSalary * 0.50,
+                    'id'             => $row->id,
+                    'fileNo'         => $row->fileNo ?? '',
+                    'name'           => $fullName,
+                    'label'          => $fullName,
+                    'salary'         => $grossSalary,
+                    'max_iou'        => $maxIou,
+                    'can_take_iou'   => $canTakeIou,
+                    'max_iou_amount' => $maxIouAmount,
                 ];
             });
 
@@ -129,6 +137,9 @@ class IouApiController extends Controller
                 ->first();
 
             $grossSalary = 0.00;
+            $canTakeIou = 1;
+            $maxIouAmount = 0.00;
+
             if ($struct) {
                 $grossSalary = (float)$struct->basic_salary +
                                (float)$struct->housing_allowance +
@@ -136,9 +147,11 @@ class IouApiController extends Controller
                                (float)$struct->medical_allowance +
                                (float)$struct->utility_allowance +
                                (float)$struct->meal_allowance;
+                $canTakeIou = (int)($struct->can_take_iou ?? 1);
+                $maxIouAmount = (float)($struct->max_iou_amount ?? 0.00);
             }
 
-            $maxLimit = $grossSalary * 0.50;
+            $maxLimit = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.50);
 
             // Sum already used amount for this month and year where finance approval is done (finance_status = 1)
             $query = DB::table('iou_records')
@@ -162,6 +175,8 @@ class IouApiController extends Controller
                     'used_amount' => $usedAmount,
                     'remaining_limit' => $remainingLimit,
                     'month_name' => date('F Y', $time),
+                    'can_take_iou' => $canTakeIou,
+                    'max_iou_amount' => $maxIouAmount,
                 ]
             ]);
         } catch (\Throwable $th) {
@@ -305,6 +320,9 @@ class IouApiController extends Controller
                 ->first();
 
             $grossSalary = 0.00;
+            $canTakeIou = 1;
+            $maxIouAmount = 0.00;
+
             if ($struct) {
                 $grossSalary = (float)$struct->basic_salary +
                                (float)$struct->housing_allowance +
@@ -312,9 +330,18 @@ class IouApiController extends Controller
                                (float)$struct->medical_allowance +
                                (float)$struct->utility_allowance +
                                (float)$struct->meal_allowance;
+                $canTakeIou = (int)($struct->can_take_iou ?? 1);
+                $maxIouAmount = (float)($struct->max_iou_amount ?? 0.00);
             }
 
-            $maxAllowed = $grossSalary * 0.50;
+            if ($canTakeIou === 0) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'This employee is not eligible to take IOU.'
+                ], 422);
+            }
+
+            $maxAllowed = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.50);
             $amount = (float) $validated['amount'];
             $id = $validated['id'] ?? null;
 
@@ -339,15 +366,15 @@ class IouApiController extends Controller
 
             if ($totalPlanned > $maxAllowed) {
                 $formattedMax = number_format($maxAllowed, 2);
-                $formattedSalary = number_format($grossSalary, 2);
                 $formattedAlready = number_format($alreadyUsed, 2);
                 $formattedRequested = number_format($amount, 2);
                 $monthName = date('F Y', $time);
                 
+                $limitReason = $maxIouAmount > 0.00 ? "custom allowed limit" : "maximum allowed limit of 50% of the employee's salary";
                 if ($alreadyUsed > 0) {
-                    $msg = "The IOU amount (₦{$formattedRequested}) plus already applied IOUs for {$monthName} (₦{$formattedAlready}) exceeds the maximum allowed limit of 50% of the employee's salary (₦{$formattedMax}).";
+                    $msg = "The IOU amount (₦{$formattedRequested}) plus already applied IOUs for {$monthName} (₦{$formattedAlready}) exceeds the {$limitReason} (₦{$formattedMax}).";
                 } else {
-                    $msg = "The IOU amount (₦{$formattedRequested}) exceeds the maximum allowed limit of 50% of the employee's salary (₦{$formattedMax}).";
+                    $msg = "The IOU amount (₦{$formattedRequested}) exceeds the {$limitReason} (₦{$formattedMax}).";
                 }
 
                 return response()->json([
@@ -740,6 +767,171 @@ class IouApiController extends Controller
             return response()->json(['status' => 'success', 'message' => 'IOU rejected by HR.']);
         } catch (\Throwable $th) {
             Log::error('IouApiController hrReject: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/nextjs/payroll/ious/limit-config
+     */
+    public function getLimitConfig(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'])) {
+                return response()->json(['status' => 'error', 'message' => 'Administrative privileges required.'], 401);
+            }
+
+            $staff = DB::table('tblper as p')
+                ->leftJoin('salary_structures as ss', 'ss.staffId', '=', 'p.ID')
+                ->where('p.rank', '!=', 2)
+                ->where('p.staff_status', 1)
+                ->select(
+                    'p.ID as id',
+                    'p.fileNo',
+                    'p.surname',
+                    'p.first_name',
+                    'p.othernames',
+                    DB::raw('COALESCE(ss.can_take_iou, 1) as can_take_iou'),
+                    DB::raw('COALESCE(ss.max_iou_amount, 0.00) as max_iou_amount'),
+                    'ss.basic_salary',
+                    'ss.housing_allowance',
+                    'ss.transport_allowance',
+                    'ss.medical_allowance',
+                    'ss.utility_allowance',
+                    'ss.meal_allowance'
+                )
+                ->orderBy('p.surname', 'asc')
+                ->get()
+                ->map(function ($row) {
+                    $grossSalary = (float)($row->basic_salary ?? 0.00) +
+                                   (float)($row->housing_allowance ?? 0.00) +
+                                   (float)($row->transport_allowance ?? 0.00) +
+                                   (float)($row->medical_allowance ?? 0.00) +
+                                   (float)($row->utility_allowance ?? 0.00) +
+                                   (float)($row->meal_allowance ?? 0.00);
+
+                    return [
+                        'id' => $row->id,
+                        'fileNo' => $row->fileNo ?? '',
+                        'name' => trim("{$row->surname} {$row->first_name} {$row->othernames}"),
+                        'can_take_iou' => (int) $row->can_take_iou,
+                        'max_iou_amount' => (float) $row->max_iou_amount,
+                        'gross_salary' => $grossSalary,
+                    ];
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $staff
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('IouApiController getLimitConfig: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/nextjs/payroll/ious/limit-config/{staffId}
+     */
+    public function getStaffLimitConfig(Request $request, $staffId)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'])) {
+                return response()->json(['status' => 'error', 'message' => 'Administrative privileges required.'], 401);
+            }
+
+            $person = DB::table('tblper')->where('ID', $staffId)->first();
+            if (!$person) {
+                return response()->json(['status' => 'error', 'message' => 'Staff record not found.'], 404);
+            }
+
+            $struct = DB::table('salary_structures')->where('staffId', $staffId)->first();
+
+            $grossSalary = 0.00;
+            $canTakeIou = 1;
+            $maxIouAmount = 0.00;
+
+            if ($struct) {
+                $grossSalary = (float)$struct->basic_salary +
+                               (float)$struct->housing_allowance +
+                               (float)$struct->transport_allowance +
+                               (float)$struct->medical_allowance +
+                               (float)$struct->utility_allowance +
+                               (float)$struct->meal_allowance;
+                $canTakeIou = (int)($struct->can_take_iou ?? 1);
+                $maxIouAmount = (float)($struct->max_iou_amount ?? 0.00);
+            }
+
+            $remainingCoopLoan = (float) DB::table('coop_loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->sum('balance_remaining');
+
+            $remainingMedicalLoan = (float) DB::table('medical_loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->sum('balance_remaining');
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'id' => $person->ID,
+                    'fileNo' => $person->fileNo,
+                    'name' => trim("{$person->surname} {$person->first_name} {$person->othernames}"),
+                    'gross_salary' => $grossSalary,
+                    'can_take_iou' => $canTakeIou,
+                    'max_iou_amount' => $maxIouAmount,
+                    'remaining_coop_loan' => $remainingCoopLoan,
+                    'remaining_medical_loan' => $remainingMedicalLoan,
+                ]
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('IouApiController getStaffLimitConfig: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/nextjs/payroll/ious/limit-config
+     */
+    public function saveLimitConfig(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'])) {
+                return response()->json(['status' => 'error', 'message' => 'Administrative privileges required.'], 401);
+            }
+
+            $validated = $request->validate([
+                'staff_id' => 'required|integer',
+                'can_take_iou' => 'required|integer|in:0,1',
+                'max_iou_amount' => 'required|numeric|min:0',
+            ]);
+
+            $staffId = $validated['staff_id'];
+
+            $exists = DB::table('salary_structures')->where('staffId', $staffId)->exists();
+            if ($exists) {
+                DB::table('salary_structures')->where('staffId', $staffId)->update([
+                    'can_take_iou' => $validated['can_take_iou'],
+                    'max_iou_amount' => $validated['max_iou_amount']
+                ]);
+            } else {
+                DB::table('salary_structures')->insert([
+                    'staffId' => $staffId,
+                    'can_take_iou' => $validated['can_take_iou'],
+                    'max_iou_amount' => $validated['max_iou_amount']
+                ]);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'IOU limits and configuration updated successfully.'
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('IouApiController saveLimitConfig: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
     }

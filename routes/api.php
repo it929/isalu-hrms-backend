@@ -329,6 +329,9 @@ Route::prefix('nextjs')->group(function () {
 
         // Employee IOUs
         Route::prefix('ious')->group(function () {
+            Route::get('/limit-config', [\App\Http\Controllers\Api\IouApiController::class, 'getLimitConfig']);
+            Route::get('/limit-config/{staffId}', [\App\Http\Controllers\Api\IouApiController::class, 'getStaffLimitConfig']);
+            Route::post('/limit-config', [\App\Http\Controllers\Api\IouApiController::class, 'saveLimitConfig']);
             Route::get('/staff', [\App\Http\Controllers\Api\IouApiController::class, 'getStaffList']);
             Route::get('/used-limit', [\App\Http\Controllers\Api\IouApiController::class, 'getUsedLimit']);
             Route::get('/', [\App\Http\Controllers\Api\IouApiController::class, 'index']);
@@ -340,6 +343,34 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/finance-reject/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'financeReject']);
             Route::get('/hr-approve/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'hrApprove']);
             Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'hrReject']);
+        });
+
+        // Staff Refunds
+        Route::prefix('refunds')->group(function () {
+            Route::get('/staff', [\App\Http\Controllers\Api\RefundApiController::class, 'getStaffList']);
+            Route::get('/', [\App\Http\Controllers\Api\RefundApiController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\RefundApiController::class, 'store']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'destroy']);
+            Route::get('/hod-approve/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'hodApprove']);
+            Route::get('/hod-reject/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'hodReject']);
+            Route::get('/finance-approve/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'financeApprove']);
+            Route::get('/finance-reject/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'financeReject']);
+            Route::get('/hr-approve/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'hrApprove']);
+            Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'hrReject']);
+        });
+
+        // Staff Resignations
+        Route::prefix('resignations')->group(function () {
+            Route::get('/staff', [\App\Http\Controllers\Api\ResignationApiController::class, 'getStaffList']);
+            Route::get('/', [\App\Http\Controllers\Api\ResignationApiController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\ResignationApiController::class, 'store']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'destroy']);
+            Route::get('/hod-approve/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hodApprove']);
+            Route::get('/hod-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hodReject']);
+            Route::get('/finance-approve/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'financeApprove']);
+            Route::get('/finance-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'financeReject']);
+            Route::get('/hr-approve/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hrApprove']);
+            Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hrReject']);
         });
 
         // Pension Activation
