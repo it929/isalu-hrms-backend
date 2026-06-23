@@ -162,10 +162,10 @@ class RetentionActivationApiTest extends TestCase
         );
 
         // Create temporary CSV content
-        $csvContent = "staffId\n{$this->testEmployeeId}\n";
+        $csvContent = "staffId,gross_salary,num_reten_months,reten_act\n{$this->testEmployeeId},200000.00,0,1\n";
         $tempFile = tempnam(sys_get_temp_dir(), 'test_csv');
         file_put_contents($tempFile, $csvContent);
-
+ 
         $uploadedFile = new UploadedFile(
             $tempFile,
             'import_retention.csv',
@@ -173,22 +173,29 @@ class RetentionActivationApiTest extends TestCase
             null,
             true
         );
-
+ 
         $response = $this->postJson('/api/nextjs/payroll/retention-activation/import', [
             'excel_file' => $uploadedFile
         ], $headers);
-
+ 
         $response->assertStatus(200)
             ->assertJson([
                 'status' => 'success',
                 'activated_count' => 1
             ]);
-
+ 
         $this->assertDatabaseHas('first_salary_structure', [
             'staffId' => $this->testEmployeeId,
-            'reten_act' => 1
+            'basic_salary' => 40000.00,
+            'housing_allowance' => 40000.00,
+            'transport_allowance' => 20000.00,
+            'medical_allowance' => 20000.00,
+            'utility_allowance' => 40000.00,
+            'meal_allowance' => 40000.00,
+            'reten_act' => 1,
+            'num_rente_months' => 0
         ]);
-
+ 
         unlink($tempFile);
     }
 

@@ -189,6 +189,13 @@ Route::prefix('nextjs')->group(function () {
             Route::post('/upload', [\App\Http\Controllers\Api\SalaryStructureApiController::class, 'upload']);
         });
 
+        // Declare Salary
+        Route::prefix('declare-salary')->group(function () {
+            Route::get('/',        [\App\Http\Controllers\Api\DeclareSalaryApiController::class, 'index']);
+            Route::post('/',       [\App\Http\Controllers\Api\DeclareSalaryApiController::class, 'store']);
+            Route::post('/import', [\App\Http\Controllers\Api\DeclareSalaryApiController::class, 'import']);
+        });
+
         // Employee Loans
         Route::prefix('loans')->group(function () {
             Route::get('/staff',   [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'getStaffList']);
