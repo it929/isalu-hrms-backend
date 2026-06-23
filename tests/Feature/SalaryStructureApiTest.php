@@ -58,22 +58,18 @@ class SalaryStructureApiTest extends TestCase
 
         $response = $this->postJson('/api/nextjs/payroll/salary-structures', [
             'staffId' => $this->testEmployeeId,
-            'basic_salary' => 120000.00,
-            'housing_allowance' => 30000.00,
-            'transport_allowance' => 15000.00,
-            'medical_allowance' => 10000.00,
-            'utility_allowance' => 10000.00,
-            'meal_allowance' => 10000.00,
-            'pension_rate' => 8.00,
-            'tax_rate' => 5.00
+            'gross_salary' => 200000.00,
+            'structure_type' => 'current'
         ], $headers);
 
         $response->assertStatus(200);
 
-        // Verify salary structure exists
+        // Verify salary structure exists with 20% of gross (40000) for basic_salary
         $this->assertDatabaseHas('salary_structures', [
             'staffId' => $this->testEmployeeId,
-            'basic_salary' => 120000.00
+            'basic_salary' => 40000.00,
+            'pension_rate' => 8.00,
+            'tax_rate' => null
         ]);
 
         // Verify staff_status is updated to 1
@@ -97,8 +93,8 @@ class SalaryStructureApiTest extends TestCase
         $headers = ['X-User-Id' => $superAdminRole->userID];
 
         // Create temporary CSV file
-        $csvContent = "staffId,basic_salary,housing_allowance,transport_allowance,medical_allowance,utility_allowance,meal_allowance,pension_rate,tax_rate\n";
-        $csvContent .= "{$this->testEmployeeId},140000.00,35000.00,20000.00,12000.00,12000.00,12000.00,8.00,5.00\n";
+        $csvContent = "staffId,gross_salary\n";
+        $csvContent .= "{$this->testEmployeeId},300000.00\n";
         
         $tempFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . uniqid('test_csv_', true) . '.csv';
         file_put_contents($tempFile, $csvContent);
@@ -117,10 +113,12 @@ class SalaryStructureApiTest extends TestCase
 
         $response->assertStatus(200);
 
-        // Verify salary structure exists
+        // Verify salary structure exists with 20% of gross (60000) for basic_salary
         $this->assertDatabaseHas('salary_structures', [
             'staffId' => $this->testEmployeeId,
-            'basic_salary' => 140000.00
+            'basic_salary' => 60000.00,
+            'pension_rate' => 8.00,
+            'tax_rate' => null
         ]);
 
         // Verify staff_status is updated to 1

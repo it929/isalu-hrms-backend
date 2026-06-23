@@ -179,13 +179,7 @@ class RetentionActivationApiController extends Controller
             }, $rows[0]);
 
             $staffIdIndex = -1;
-            $basicSalaryIndex = -1;
-            $declareSalaryIndex = -1;
-            $housingAllowanceIndex = -1;
-            $transportAllowanceIndex = -1;
-            $medicalAllowanceIndex = -1;
-            $utilityAllowanceIndex = -1;
-            $mealAllowanceIndex = -1;
+            $grossSalaryIndex = -1;
             $numRetenMonthsIndex = -1;
             $retenActIndex = -1;
 
@@ -193,20 +187,8 @@ class RetentionActivationApiController extends Controller
                 $h = str_replace(['_', ' '], '', $header);
                 if ($h === 'staffid' || $h === 'id') {
                     $staffIdIndex = $index;
-                } elseif ($h === 'basicsalary') {
-                    $basicSalaryIndex = $index;
-                } elseif ($h === 'declaresalary') {
-                    $declareSalaryIndex = $index;
-                } elseif ($h === 'housingallowance') {
-                    $housingAllowanceIndex = $index;
-                } elseif ($h === 'transportallowance') {
-                    $transportAllowanceIndex = $index;
-                } elseif ($h === 'medicalallowance') {
-                    $medicalAllowanceIndex = $index;
-                } elseif ($h === 'utilityallowance') {
-                    $utilityAllowanceIndex = $index;
-                } elseif ($h === 'mealallowance') {
-                    $mealAllowanceIndex = $index;
+                } elseif ($h === 'grosssalary' || $h === 'grosssalry' || $h === 'gross') {
+                    $grossSalaryIndex = $index;
                 } elseif ($h === 'numretenmonths' || $h === 'numrentemonths') {
                     $numRetenMonthsIndex = $index;
                 } elseif ($h === 'retenact') {
@@ -217,6 +199,15 @@ class RetentionActivationApiController extends Controller
             // Fallback if header name is not found
             if ($staffIdIndex === -1) {
                 $staffIdIndex = 0;
+            }
+            if ($grossSalaryIndex === -1) {
+                $grossSalaryIndex = 1;
+            }
+            if ($numRetenMonthsIndex === -1) {
+                $numRetenMonthsIndex = 2;
+            }
+            if ($retenActIndex === -1) {
+                $retenActIndex = 3;
             }
 
             $activatedCount = 0;
@@ -239,31 +230,29 @@ class RetentionActivationApiController extends Controller
 
                 $staff = null;
 
-                // Try matching by Staff ID (Excel column)
+                // Match by Staff ID (Excel column) in tblper
                 if ($staffIdIndex !== -1 && isset($row[$staffIdIndex]) && trim($row[$staffIdIndex]) !== '') {
                     $staffVal = trim($row[$staffIdIndex]);
                     if (is_numeric($staffVal)) {
                         $staff = DB::table('tblper')->where('ID', intval($staffVal))->first();
-                    } else {
-                        // Fallback: search by fileNo if it's alphanumeric
-                        $staff = DB::table('tblper')->where('fileNo', $staffVal)->first();
                     }
                 }
 
                 if (!$staff) {
                     $searchVal = isset($row[$staffIdIndex]) ? trim($row[$staffIdIndex]) : "Row " . ($r + 1);
-                    $warnings[] = "Row " . ($r + 1) . ": Staff with identifier '{$searchVal}' not found in database.";
+                    $warnings[] = "Row " . ($r + 1) . ": Staff with identifier '{$searchVal}' does not exist.";
                     continue;
                 }
 
-                // Extract values from Excel row
-                $basic = $basicSalaryIndex !== -1 && isset($row[$basicSalaryIndex]) && trim((string)$row[$basicSalaryIndex]) !== '' ? (float)$row[$basicSalaryIndex] : 0.00;
-                $declare = $declareSalaryIndex !== -1 && isset($row[$declareSalaryIndex]) && trim((string)$row[$declareSalaryIndex]) !== '' ? (float)$row[$declareSalaryIndex] : 0.00;
-                $housing = $housingAllowanceIndex !== -1 && isset($row[$housingAllowanceIndex]) && trim((string)$row[$housingAllowanceIndex]) !== '' ? (float)$row[$housingAllowanceIndex] : 0.00;
-                $transport = $transportAllowanceIndex !== -1 && isset($row[$transportAllowanceIndex]) && trim((string)$row[$transportAllowanceIndex]) !== '' ? (float)$row[$transportAllowanceIndex] : 0.00;
-                $medical = $medicalAllowanceIndex !== -1 && isset($row[$medicalAllowanceIndex]) && trim((string)$row[$medicalAllowanceIndex]) !== '' ? (float)$row[$medicalAllowanceIndex] : 0.00;
-                $utility = $utilityAllowanceIndex !== -1 && isset($row[$utilityAllowanceIndex]) && trim((string)$row[$utilityAllowanceIndex]) !== '' ? (float)$row[$utilityAllowanceIndex] : 0.00;
-                $meal = $mealAllowanceIndex !== -1 && isset($row[$mealAllowanceIndex]) && trim((string)$row[$mealAllowanceIndex]) !== '' ? (float)$row[$mealAllowanceIndex] : 0.00;
+                // Extract values from Excel row and compute allowances
+                $grossVal = $grossSalaryIndex !== -1 && isset($row[$grossSalaryIndex]) && trim((string)$row[$grossSalaryIndex]) !== '' ? (float)$row[$grossSalaryIndex] : 0.00;
+                $basic = round($grossVal * 0.20, 2);
+                $housing = round($grossVal * 0.20, 2);
+                $transport = round($grossVal * 0.10, 2);
+                $medical = round($grossVal * 0.10, 2);
+                $utility = round($grossVal * 0.20, 2);
+                $meal = round($grossVal * 0.20, 2);
+
                 $numRetenMonths = $numRetenMonthsIndex !== -1 && isset($row[$numRetenMonthsIndex]) && trim((string)$row[$numRetenMonthsIndex]) !== '' ? (int)$row[$numRetenMonthsIndex] : 0;
                 $retenAct = $retenActIndex !== -1 && isset($row[$retenActIndex]) && trim((string)$row[$retenActIndex]) !== '' ? (int)$row[$retenActIndex] : 1;
 
@@ -273,7 +262,7 @@ class RetentionActivationApiController extends Controller
                 $saveData = [
                     'staffId' => $staff->ID,
                     'basic_salary' => $basic,
-                    'declare_salary' => $declare,
+                    'declare_salary' => null,
                     'housing_allowance' => $housing,
                     'transport_allowance' => $transport,
                     'medical_allowance' => $medical,

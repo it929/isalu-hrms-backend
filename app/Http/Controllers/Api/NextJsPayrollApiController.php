@@ -1124,11 +1124,55 @@ class NextJsPayrollApiController extends Controller
                 $grossPay = $totalIncome + $totalEarningVars;
                 $declareIncome = $declareSalary;
 
-                // PAYE and Pension calculated as percentage of computed incomes
-                $payeTax = $declareIncome * ($taxRate / 100.0);
+                // PAYE and Pension calculated using Nigeria Tax Act 2025/2026 progressive bands with standard 8% pension deduction (on declare income)
+                $annualGross = $declareIncome * 12.0;
+                $annualPension = 0.00;
+                if ($struct && $struct->pen_act == 1) {
+                    $annualPension = $annualGross * ($pensionRate / 100.0);
+                }
+                $annualTaxable = max(0.00, $annualGross - $annualPension);
+
+                $annualTax = 0.00;
+                if ($annualTaxable > 800000.00) {
+                    $taxableRemaining = $annualTaxable - 800000.00;
+                    
+                    // Next ₦2,200,000 @ 15%
+                    $band1 = min(2200000.00, $taxableRemaining);
+                    $annualTax += $band1 * 0.15;
+                    $taxableRemaining -= $band1;
+                    
+                    if ($taxableRemaining > 0) {
+                        // Next ₦9,000,000 @ 18%
+                        $band2 = min(9000000.00, $taxableRemaining);
+                        $annualTax += $band2 * 0.18;
+                        $taxableRemaining -= $band2;
+                    }
+                    
+                    if ($taxableRemaining > 0) {
+                        // Next ₦13,000,000 @ 21%
+                        $band3 = min(13000000.00, $taxableRemaining);
+                        $annualTax += $band3 * 0.21;
+                        $taxableRemaining -= $band3;
+                    }
+                    
+                    if ($taxableRemaining > 0) {
+                        // Next ₦25,000,000 @ 23%
+                        $band4 = min(25000000.00, $taxableRemaining);
+                        $annualTax += $band4 * 0.23;
+                        $taxableRemaining -= $band4;
+                    }
+                    
+                    if ($taxableRemaining > 0) {
+                        // Above ₦50,000,000 @ 25%
+                        $annualTax += $taxableRemaining * 0.25;
+                    }
+                }
+                
+                $payeTax = round($annualTax / 12.0, 2);
+
                 $pension = 0.00;
                 if ($struct && $struct->pen_act == 1) {
-                    $pension = ($grossPay * 0.5) * ($pensionRate / 100.0);
+                    $pension = $declareIncome * ($pensionRate / 100.0);
                 }
 
                 // Fetch monthly IOU taken from iou_records table

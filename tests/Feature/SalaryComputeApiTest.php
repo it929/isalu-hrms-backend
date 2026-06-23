@@ -227,6 +227,7 @@ class SalaryComputeApiTest extends TestCase
                 'housing_allowance' => 20000.00,
                 'transport_allowance' => 10000.00,
                 'medical_allowance' => 10000.00,
+                'declare_salary' => 140000.00,
                 'pension_rate' => 8.00, // 8% pension
                 'pen_act' => 0,
                 'created_at' => now()
@@ -263,9 +264,8 @@ class SalaryComputeApiTest extends TestCase
         $row = DB::table('payroll_conpt')->where('payroll_run_id', $runId)->where('staffID', $employee->ID)->first();
         $this->assertNotNull($row);
 
-        // Pension calculation: (basic + housing + transport + medical) * 0.5 * (pension_rate / 100.0)
-        $pensionBase = (float)$row->basic + (float)$row->housing + (float)$row->transport + (float)$row->medical;
-        $expectedPension = round(($pensionBase * 0.5) * 0.08, 2);
+        // Pension calculation: declare_salary * (pension_rate / 100.0)
+        $expectedPension = round(140000.00 * 0.08, 2);
         
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $runId,
