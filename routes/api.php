@@ -350,6 +350,8 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/finance-reject/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'financeReject']);
             Route::get('/hr-approve/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'hrApprove']);
             Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'hrReject']);
+            Route::get('/audit-approve/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'auditApprove']);
+            Route::get('/audit-reject/{id}', [\App\Http\Controllers\Api\IouApiController::class, 'auditReject']);
         });
 
         // Staff Refunds
@@ -364,6 +366,8 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/finance-reject/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'financeReject']);
             Route::get('/hr-approve/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'hrApprove']);
             Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'hrReject']);
+            Route::get('/audit-approve/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'auditApprove']);
+            Route::get('/audit-reject/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'auditReject']);
         });
 
         // Staff Resignations
