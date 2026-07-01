@@ -153,10 +153,10 @@ class IouApiController extends Controller
 
             $maxLimit = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.50);
 
-            // Sum already used amount for this month and year where finance approval is done (finance_status = 1)
+            // Sum already used amount for this month and year (excluding rejected status = 2)
             $query = DB::table('iou_records')
                 ->where('staff_id', $staffId)
-                ->where('finance_status', 1)
+                ->where('status', '!=', 2)
                 ->whereYear('iou_date', $year)
                 ->whereMonth('iou_date', $month);
 
@@ -206,6 +206,7 @@ class IouApiController extends Controller
                 ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
                 ->leftJoin('users as u_hod', 'u_hod.id', '=', 'ir.hod_id')
                 ->leftJoin('users as u_admin', 'u_admin.id', '=', 'ir.admin_id')
+                ->leftJoin('users as u_audit', 'u_audit.id', '=', 'ir.audit_id')
                 ->leftJoin('users as u_finance', 'u_finance.id', '=', 'ir.finance_id')
                 ->leftJoin('salary_structures as ss', 'ss.staffId', '=', 'ir.staff_id')
                 ->select(
@@ -217,6 +218,7 @@ class IouApiController extends Controller
                     'd.department',
                     'u_hod.name as hod_name',
                     'u_admin.name as admin_name',
+                    'u_audit.name as audit_name',
                     'u_finance.name as finance_name',
                     'ss.basic_salary',
                     'ss.housing_allowance',
@@ -350,10 +352,10 @@ class IouApiController extends Controller
             $month = date('m', $time);
             $year = date('Y', $time);
 
-            // Calculate other active requests for this month where finance approval is done (finance_status = 1)
+            // Calculate other active requests for this month (excluding rejected status = 2)
             $query = DB::table('iou_records')
                 ->where('staff_id', $validated['staff_id'])
-                ->where('finance_status', 1)
+                ->where('status', '!=', 2)
                 ->whereYear('iou_date', $year)
                 ->whereMonth('iou_date', $month);
 
@@ -432,8 +434,9 @@ class IouApiController extends Controller
                 $message = 'IOU application updated successfully.';
             } else {
                 $data['hod_status']     = 0;
-                $data['finance_status'] = 0;
                 $data['admin_status']   = 0;
+                $data['audit_status']   = 0;
+                $data['finance_status'] = 0;
                 $data['created_at']     = now();
                 $id = DB::table('iou_records')->insertGetId($data);
                 $message = 'IOU application submitted successfully.';
@@ -630,9 +633,9 @@ class IouApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'IOU record not found.'], 404);
             }
 
-            // Finance approves after HR recommends (admin_status === 1)
-            if ($record->admin_status !== 1 || $record->finance_status !== 0 || $record->status !== 0) {
-                return response()->json(['status' => 'error', 'message' => 'This IOU is not recommended by HR or already processed by Finance.'], 400);
+            // Finance approves after Audit recommends (audit_status === 1)
+            if ($record->audit_status !== 1 || $record->finance_status !== 0 || $record->status !== 0) {
+                return response()->json(['status' => 'error', 'message' => 'This IOU is not recommended by Audit or already processed by Finance.'], 400);
             }
 
             $remarks = $request->input('remarks');
@@ -647,7 +650,7 @@ class IouApiController extends Controller
 
             $this->logApproval($id, 'Finance', (int)$ctx['userId'], 1, $remarks);
 
-            return response()->json(['status' => 'success', 'message' => 'IOU application fully approved.']);
+            return response()->json(['status' => 'success', 'message' => 'IOU application marked as paid.']);
         } catch (\Throwable $th) {
             Log::error('IouApiController financeApprove: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
@@ -670,8 +673,8 @@ class IouApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'IOU record not found.'], 404);
             }
 
-            if ($record->admin_status !== 1 || $record->finance_status !== 0 || $record->status !== 0) {
-                return response()->json(['status' => 'error', 'message' => 'This IOU is not recommended by HR or already processed by Finance.'], 400);
+            if ($record->audit_status !== 1 || $record->finance_status !== 0 || $record->status !== 0) {
+                return response()->json(['status' => 'error', 'message' => 'This IOU is not recommended by Audit or already processed by Finance.'], 400);
             }
 
             $remarks = $request->input('remarks');
@@ -767,6 +770,84 @@ class IouApiController extends Controller
             return response()->json(['status' => 'success', 'message' => 'IOU rejected by HR.']);
         } catch (\Throwable $th) {
             Log::error('IouApiController hrReject: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/nextjs/payroll/ious/audit-approve/{id}
+     */
+    public function auditApprove(Request $request, $id)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isAuditStaff'])) {
+                return response()->json(['status' => 'error', 'message' => 'Audit or administrative privileges required.'], 401);
+            }
+
+            $record = DB::table('iou_records')->where('id', $id)->first();
+            if (!$record) {
+                return response()->json(['status' => 'error', 'message' => 'IOU record not found.'], 404);
+            }
+
+            // Audit recommends after HR recommends
+            if ($record->admin_status !== 1 || $record->audit_status !== 0 || $record->status !== 0) {
+                return response()->json(['status' => 'error', 'message' => 'This IOU is not recommended by HR or already processed by Audit.'], 400);
+            }
+
+            $remarks = $request->input('remarks');
+            DB::table('iou_records')->where('id', $id)->update([
+                'audit_status' => 1,
+                'audit_id'     => $ctx['userId'],
+                'audit_date'   => now(),
+                'remarks'      => $remarks,
+                'updated_at'   => now(),
+            ]);
+
+            $this->logApproval($id, 'Audit', (int)$ctx['userId'], 1, $remarks);
+
+            return response()->json(['status' => 'success', 'message' => 'IOU recommended successfully by Audit.']);
+        } catch (\Throwable $th) {
+            Log::error('IouApiController auditApprove: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/nextjs/payroll/ious/audit-reject/{id}
+     */
+    public function auditReject(Request $request, $id)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isAuditStaff'])) {
+                return response()->json(['status' => 'error', 'message' => 'Audit or administrative privileges required.'], 401);
+            }
+
+            $record = DB::table('iou_records')->where('id', $id)->first();
+            if (!$record) {
+                return response()->json(['status' => 'error', 'message' => 'IOU record not found.'], 404);
+            }
+
+            if ($record->admin_status !== 1 || $record->audit_status !== 0 || $record->status !== 0) {
+                return response()->json(['status' => 'error', 'message' => 'This IOU is not recommended by HR or already processed by Audit.'], 400);
+            }
+
+            $remarks = $request->input('remarks');
+            DB::table('iou_records')->where('id', $id)->update([
+                'audit_status' => 2,
+                'status'       => 2, // Rejects overall application immediately
+                'audit_id'     => $ctx['userId'],
+                'audit_date'   => now(),
+                'remarks'      => $remarks,
+                'updated_at'   => now(),
+            ]);
+
+            $this->logApproval($id, 'Audit', (int)$ctx['userId'], 2, $remarks);
+
+            return response()->json(['status' => 'success', 'message' => 'IOU rejected by Audit.']);
+        } catch (\Throwable $th) {
+            Log::error('IouApiController auditReject: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
     }

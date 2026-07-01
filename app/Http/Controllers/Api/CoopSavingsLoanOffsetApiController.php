@@ -35,11 +35,12 @@ class CoopSavingsLoanOffsetApiController extends Controller
             $search = trim($request->input('search', ''));
 
             $query = DB::table('tblper as p')
-                ->join('coop_savings_setups as css', 'css.staffId', '=', 'p.ID')
                 ->join('coop_loan_deduction_setups as clds', 'clds.staffId', '=', 'p.ID')
-                ->where('css.is_active', 1)
+                ->leftJoin('coop_savings_setups as css', function($join) {
+                    $join->on('css.staffId', '=', 'p.ID')
+                         ->where('css.is_active', '=', 1);
+                })
                 ->where('clds.is_active', 1)
-                ->where('css.saving_balance', '>', 0)
                 ->where('clds.balance_remaining', '>', 0)
                 ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
                 ->select(
@@ -50,7 +51,7 @@ class CoopSavingsLoanOffsetApiController extends Controller
                     'p.othernames',
                     'd.department',
                     DB::raw("CONCAT(p.surname, ' ', p.first_name, ' ', COALESCE(p.othernames, '')) as name"),
-                    DB::raw('MAX(css.saving_balance) as saving_balance'),
+                    DB::raw('COALESCE(MAX(css.saving_balance), 0) as saving_balance'),
                     DB::raw('MAX(clds.balance_remaining) as loan_balance')
                 )
                 ->groupBy('p.ID', 'p.fileNo', 'p.surname', 'p.first_name', 'p.othernames', 'd.department');
@@ -187,27 +188,29 @@ class CoopSavingsLoanOffsetApiController extends Controller
 
             $validated = $request->validate([
                 'staffId'          => 'required|integer|exists:tblper,ID',
-                'savings_setup_id' => 'required|integer|exists:coop_savings_setups,id',
+                'offset_type'      => 'required|string|in:savings,bank',
+                'savings_setup_id' => 'required_if:offset_type,savings|nullable|integer|exists:coop_savings_setups,id',
                 'loan_setup_id'    => 'required|integer|exists:coop_loan_deduction_setups,id',
                 'offset_amount'    => 'required|numeric|min:0.01',
                 'notes'            => 'nullable|string|max:500',
+                'proof_of_payment' => 'required_if:offset_type,bank|nullable|file|mimes:jpeg,png,jpg,pdf|max:2048',
             ]);
 
             $staffId       = (int) $validated['staffId'];
-            $savingsId     = (int) $validated['savings_setup_id'];
+            $offsetType    = $validated['offset_type'];
+            $savingsId     = $validated['savings_setup_id'] ? (int) $validated['savings_setup_id'] : null;
             $loanId        = (int) $validated['loan_setup_id'];
             $offsetAmount  = (float) $validated['offset_amount'];
             $notes         = $validated['notes'] ?? null;
 
-            DB::beginTransaction();
+            // Handle Proof of Payment file upload
+            $proofOfPaymentPath = null;
+            if ($offsetType === 'bank' && $request->hasFile('proof_of_payment')) {
+                $file = $request->file('proof_of_payment');
+                $proofOfPaymentPath = \App\Helpers\FileUploadHelper::upload($file, 'coop_offsets');
+            }
 
-            // Lock rows for update
-            $savings = DB::table('coop_savings_setups')
-                ->where('id', $savingsId)
-                ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->lockForUpdate()
-                ->first();
+            DB::beginTransaction();
 
             $loan = DB::table('coop_loan_deduction_setups')
                 ->where('id', $loanId)
@@ -216,27 +219,12 @@ class CoopSavingsLoanOffsetApiController extends Controller
                 ->lockForUpdate()
                 ->first();
 
-            if (!$savings) {
-                DB::rollBack();
-                return response()->json(['status' => 'error', 'message' => 'Active coop savings setup not found.'], 404);
-            }
-
             if (!$loan) {
                 DB::rollBack();
                 return response()->json(['status' => 'error', 'message' => 'Active coop loan setup not found.'], 404);
             }
 
-            $savingsBalance = (float) $savings->saving_balance;
-            $loanBalance    = (float) $loan->balance_remaining;
-
-            // Validation: offset cannot exceed either balance
-            if ($offsetAmount > $savingsBalance) {
-                DB::rollBack();
-                return response()->json([
-                    'status'  => 'error',
-                    'message' => 'Offset amount (' . number_format($offsetAmount, 2) . ') exceeds the available savings balance (' . number_format($savingsBalance, 2) . ').'
-                ], 422);
-            }
+            $loanBalance = (float) $loan->balance_remaining;
 
             if ($offsetAmount > $loanBalance) {
                 DB::rollBack();
@@ -246,16 +234,60 @@ class CoopSavingsLoanOffsetApiController extends Controller
                 ], 422);
             }
 
-            $newSavingsBalance = round($savingsBalance - $offsetAmount, 2);
-            $newLoanBalance    = round($loanBalance    - $offsetAmount, 2);
+            $savingsBalance = null;
+            $newSavingsBalance = null;
 
-            // Update savings balance
-            DB::table('coop_savings_setups')
-                ->where('id', $savingsId)
-                ->update([
-                    'saving_balance' => $newSavingsBalance,
-                    'updated_at'     => now(),
-                ]);
+            if ($offsetType === 'savings') {
+                if (!$savingsId) {
+                    DB::rollBack();
+                    return response()->json(['status' => 'error', 'message' => 'Savings setup ID is required for coop savings offset.'], 422);
+                }
+
+                $savings = DB::table('coop_savings_setups')
+                    ->where('id', $savingsId)
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$savings) {
+                    DB::rollBack();
+                    return response()->json(['status' => 'error', 'message' => 'Active coop savings setup not found.'], 404);
+                }
+
+                $savingsBalance = (float) $savings->saving_balance;
+
+                if ($offsetAmount > $savingsBalance) {
+                    DB::rollBack();
+                    return response()->json([
+                        'status'  => 'error',
+                        'message' => 'Offset amount (' . number_format($offsetAmount, 2) . ') exceeds the available savings balance (' . number_format($savingsBalance, 2) . ').'
+                    ], 422);
+                }
+
+                $newSavingsBalance = round($savingsBalance - $offsetAmount, 2);
+
+                // Update savings balance
+                DB::table('coop_savings_setups')
+                    ->where('id', $savingsId)
+                    ->update([
+                        'saving_balance' => $newSavingsBalance,
+                        'updated_at'     => now(),
+                    ]);
+            } else {
+                // Bank offset: read savings details if savingsId is provided, but don't deduct
+                if ($savingsId) {
+                    $savings = DB::table('coop_savings_setups')
+                        ->where('id', $savingsId)
+                        ->first();
+                    if ($savings) {
+                        $savingsBalance = (float) $savings->saving_balance;
+                        $newSavingsBalance = $savingsBalance;
+                    }
+                }
+            }
+
+            $newLoanBalance = round($loanBalance - $offsetAmount, 2);
 
             // Update loan balance; deactivate if fully cleared
             $loanUpdate = ['balance_remaining' => $newLoanBalance, 'updated_at' => now()];
@@ -271,6 +303,8 @@ class CoopSavingsLoanOffsetApiController extends Controller
                 'staffId'               => $staffId,
                 'savings_setup_id'      => $savingsId,
                 'loan_setup_id'         => $loanId,
+                'offset_type'           => $offsetType,
+                'proof_of_payment'      => $proofOfPaymentPath,
                 'offset_amount'         => $offsetAmount,
                 'savings_balance_before'=> $savingsBalance,
                 'savings_balance_after' => $newSavingsBalance,

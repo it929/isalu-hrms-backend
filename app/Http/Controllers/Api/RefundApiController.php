@@ -85,6 +85,7 @@ class RefundApiController extends Controller
                 ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
                 ->leftJoin('users as u_hod', 'u_hod.id', '=', 'rr.hod_id')
                 ->leftJoin('users as u_admin', 'u_admin.id', '=', 'rr.admin_id')
+                ->leftJoin('users as u_audit', 'u_audit.id', '=', 'rr.audit_id')
                 ->leftJoin('users as u_finance', 'u_finance.id', '=', 'rr.finance_id')
                 ->select(
                     'rr.*',
@@ -95,6 +96,7 @@ class RefundApiController extends Controller
                     'd.department',
                     'u_hod.name as hod_name',
                     'u_admin.name as admin_name',
+                    'u_audit.name as audit_name',
                     'u_finance.name as finance_name'
                 );
 
@@ -207,6 +209,7 @@ class RefundApiController extends Controller
                 $data['status']         = 0;
                 $data['hod_status']     = 0;
                 $data['admin_status']   = 0;
+                $data['audit_status']   = 0;
                 $data['finance_status'] = 0;
                 $data['created_at']     = now();
 
@@ -413,16 +416,16 @@ class RefundApiController extends Controller
             if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'])) {
                 return response()->json(['status' => 'error', 'message' => 'Administrative head privileges required.'], 401);
             }
-
+ 
             $record = DB::table('refund_requests')->where('id', $id)->first();
             if (!$record) {
                 return response()->json(['status' => 'error', 'message' => 'Refund request not found.'], 404);
             }
-
+ 
             if ($record->hod_status !== 1 || $record->admin_status !== 0 || $record->status !== 0) {
                 return response()->json(['status' => 'error', 'message' => 'This request is not in a pending HR state.'], 400);
             }
-
+ 
             $remarks = $request->input('remarks');
             DB::table('refund_requests')->where('id', $id)->update([
                 'admin_status' => 2,
@@ -432,10 +435,84 @@ class RefundApiController extends Controller
                 'remarks'      => $remarks,
                 'updated_at'   => now(),
             ]);
-
+ 
             return response()->json(['status' => 'success', 'message' => 'Refund request rejected by HR Admin.']);
         } catch (\Throwable $th) {
             Log::error('RefundApiController hrReject: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+ 
+    /**
+     * GET /api/nextjs/payroll/refunds/audit-approve/{id}
+     */
+    public function auditApprove(Request $request, $id)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isAuditStaff'])) {
+                return response()->json(['status' => 'error', 'message' => 'Audit or administrative privileges required.'], 401);
+            }
+ 
+            $record = DB::table('refund_requests')->where('id', $id)->first();
+            if (!$record) {
+                return response()->json(['status' => 'error', 'message' => 'Refund request not found.'], 404);
+            }
+ 
+            // Audit recommends after HR recommends
+            if ($record->admin_status !== 1 || $record->audit_status !== 0 || $record->status !== 0) {
+                return response()->json(['status' => 'error', 'message' => 'This request is not recommended by HR or already processed by Audit.'], 400);
+            }
+ 
+            $remarks = $request->input('remarks');
+            DB::table('refund_requests')->where('id', $id)->update([
+                'audit_status' => 1,
+                'audit_id'     => $ctx['userId'],
+                'audit_date'   => now(),
+                'remarks'      => $remarks,
+                'updated_at'   => now(),
+            ]);
+ 
+            return response()->json(['status' => 'success', 'message' => 'Refund request recommended successfully by Audit.']);
+        } catch (\Throwable $th) {
+            Log::error('RefundApiController auditApprove: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+ 
+    /**
+     * GET /api/nextjs/payroll/refunds/audit-reject/{id}
+     */
+    public function auditReject(Request $request, $id)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isAuditStaff'])) {
+                return response()->json(['status' => 'error', 'message' => 'Audit or administrative privileges required.'], 401);
+            }
+ 
+            $record = DB::table('refund_requests')->where('id', $id)->first();
+            if (!$record) {
+                return response()->json(['status' => 'error', 'message' => 'Refund request not found.'], 404);
+            }
+ 
+            if ($record->admin_status !== 1 || $record->audit_status !== 0 || $record->status !== 0) {
+                return response()->json(['status' => 'error', 'message' => 'This request is not recommended by HR or already processed by Audit.'], 400);
+            }
+ 
+            $remarks = $request->input('remarks');
+            DB::table('refund_requests')->where('id', $id)->update([
+                'audit_status' => 2,
+                'status'       => 2, // Rejects overall application immediately
+                'audit_id'     => $ctx['userId'],
+                'audit_date'   => now(),
+                'remarks'      => $remarks,
+                'updated_at'   => now(),
+            ]);
+ 
+            return response()->json(['status' => 'success', 'message' => 'Refund request rejected by Audit.']);
+        } catch (\Throwable $th) {
+            Log::error('RefundApiController auditReject: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
     }
@@ -450,16 +527,17 @@ class RefundApiController extends Controller
             if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isFinanceStaff'])) {
                 return response()->json(['status' => 'error', 'message' => 'Finance head privileges required.'], 401);
             }
-
+ 
             $record = DB::table('refund_requests')->where('id', $id)->first();
             if (!$record) {
                 return response()->json(['status' => 'error', 'message' => 'Refund request not found.'], 404);
             }
-
-            if ($record->admin_status !== 1 || $record->finance_status !== 0 || $record->status !== 0) {
-                return response()->json(['status' => 'error', 'message' => 'This request is not in a pending Finance state.'], 400);
+ 
+            // Finance approves after Audit recommends (audit_status === 1)
+            if ($record->audit_status !== 1 || $record->finance_status !== 0 || $record->status !== 0) {
+                return response()->json(['status' => 'error', 'message' => 'This request is not recommended by Audit or already processed by Finance.'], 400);
             }
-
+ 
             $remarks = $request->input('remarks');
             DB::table('refund_requests')->where('id', $id)->update([
                 'finance_status' => 1,
@@ -469,8 +547,8 @@ class RefundApiController extends Controller
                 'remarks'        => $remarks,
                 'updated_at'     => now(),
             ]);
-
-            return response()->json(['status' => 'success', 'message' => 'Refund request approved and completed by Finance.']);
+ 
+            return response()->json(['status' => 'success', 'message' => 'Refund request marked as paid and completed by Finance.']);
         } catch (\Throwable $th) {
             Log::error('RefundApiController financeApprove: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
@@ -487,16 +565,16 @@ class RefundApiController extends Controller
             if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isFinanceStaff'])) {
                 return response()->json(['status' => 'error', 'message' => 'Finance head privileges required.'], 401);
             }
-
+ 
             $record = DB::table('refund_requests')->where('id', $id)->first();
             if (!$record) {
                 return response()->json(['status' => 'error', 'message' => 'Refund request not found.'], 404);
             }
-
-            if ($record->admin_status !== 1 || $record->finance_status !== 0 || $record->status !== 0) {
-                return response()->json(['status' => 'error', 'message' => 'This request is not in a pending Finance state.'], 400);
+ 
+            if ($record->audit_status !== 1 || $record->finance_status !== 0 || $record->status !== 0) {
+                return response()->json(['status' => 'error', 'message' => 'This request is not recommended by Audit or already processed by Finance.'], 400);
             }
-
+ 
             $remarks = $request->input('remarks');
             DB::table('refund_requests')->where('id', $id)->update([
                 'finance_status' => 2,
@@ -506,7 +584,7 @@ class RefundApiController extends Controller
                 'remarks'        => $remarks,
                 'updated_at'     => now(),
             ]);
-
+ 
             return response()->json(['status' => 'success', 'message' => 'Refund request rejected by Finance.']);
         } catch (\Throwable $th) {
             Log::error('RefundApiController financeReject: ' . $th->getMessage());

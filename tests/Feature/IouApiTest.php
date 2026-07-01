@@ -33,6 +33,9 @@ class IouApiTest extends TestCase
             $this->markTestSkipped('No staff record found in tblper.');
         }
 
+        // Clean up any existing IOU records to avoid state pollution
+        DB::table('iou_records')->where('staff_id', $staff->ID)->delete();
+
         // Establish a mock salary structure for the staff
         DB::table('salary_structures')->updateOrInsert(
             ['staffId' => $staff->ID],
@@ -43,6 +46,8 @@ class IouApiTest extends TestCase
                 'medical_allowance' => 10000.00,
                 'utility_allowance' => 15000.00,
                 'meal_allowance' => 15000.00,
+                'can_take_iou' => 1,
+                'max_iou_amount' => 0.00,
             ]
         );
 
@@ -87,6 +92,9 @@ class IouApiTest extends TestCase
             $this->markTestSkipped('No staff record found in tblper.');
         }
 
+        // Clean up any existing IOU records to avoid state pollution
+        DB::table('iou_records')->where('staff_id', $staff->ID)->delete();
+
         // Establish a mock salary structure: gross salary = 160,000. 50% limit = 80,000
         DB::table('salary_structures')->updateOrInsert(
             ['staffId' => $staff->ID],
@@ -97,6 +105,8 @@ class IouApiTest extends TestCase
                 'medical_allowance' => 10000.00,
                 'utility_allowance' => 10000.00,
                 'meal_allowance' => 10000.00,
+                'can_take_iou' => 1,
+                'max_iou_amount' => 0.00,
             ]
         );
 
@@ -146,6 +156,7 @@ class IouApiTest extends TestCase
         $this->assertEquals(0, $inserted->hod_status);
         $this->assertEquals(0, $inserted->finance_status);
         $this->assertEquals(0, $inserted->admin_status);
+        $this->assertEquals(0, $inserted->audit_status);
 
         // 3. Update IOU application (still pending)
         $payloadUpdate = [
@@ -194,6 +205,7 @@ class IouApiTest extends TestCase
 
         $afterHr = DB::table('iou_records')->where('id', $iouId)->first();
         $this->assertEquals(1, $afterHr->admin_status);
+        $this->assertEquals(0, $afterHr->audit_status);
         $this->assertEquals(0, $afterHr->finance_status);
         $this->assertEquals(0, $afterHr->status);
 
@@ -202,18 +214,40 @@ class IouApiTest extends TestCase
         $this->assertNotNull($logHr);
         $this->assertEquals(1, $logHr->status);
 
-        // 6. Test Finance Final Approval Tier
-        $responseFinance = $this->getJson("/api/nextjs/payroll/ious/finance-approve/{$iouId}?remarks=Fully+approved", $headers);
-        $responseFinance->assertStatus(200)
+        // 6. Test Finance cannot approve before Audit
+        $responseFinanceBeforeAudit = $this->getJson("/api/nextjs/payroll/ious/finance-approve/{$iouId}?remarks=Fully+approved", $headers);
+        $responseFinanceBeforeAudit->assertStatus(400);
+
+        // 7. Test Audit Approval Tier
+        $responseAudit = $this->getJson("/api/nextjs/payroll/ious/audit-approve/{$iouId}?remarks=Audit+recommended", $headers);
+        $responseAudit->assertStatus(200)
             ->assertJson([
                 'status' => 'success'
             ]);
 
+        $afterAudit = DB::table('iou_records')->where('id', $iouId)->first();
+        $this->assertEquals(1, $afterAudit->audit_status);
+        $this->assertEquals(0, $afterAudit->finance_status);
+        $this->assertEquals(0, $afterAudit->status);
+
+        // Assert approval log created
+        $logAudit = DB::table('iou_approvals')->where('iou_id', $iouId)->where('level', 'Audit')->first();
+        $this->assertNotNull($logAudit);
+        $this->assertEquals(1, $logAudit->status);
+
+        // 8. Test Finance Final Approval Tier (Marked as Paid)
+        $responseFinance = $this->getJson("/api/nextjs/payroll/ious/finance-approve/{$iouId}?remarks=Fully+approved", $headers);
+        $responseFinance->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'IOU application marked as paid.'
+            ]);
+
         $afterFinance = DB::table('iou_records')->where('id', $iouId)->first();
         $this->assertEquals(1, $afterFinance->finance_status);
-        $this->assertEquals(1, $afterFinance->status); // Overall status becomes 1 (approved)
+        $this->assertEquals(1, $afterFinance->status); // Overall status becomes 1 (paid)
 
-        // 7. Delete the record
+        // 9. Delete the record
         $responseDelete = $this->deleteJson("/api/nextjs/payroll/ious/{$iouId}", [], $headers);
         $responseDelete->assertStatus(200)
             ->assertJson([
@@ -239,6 +273,9 @@ class IouApiTest extends TestCase
             $this->markTestSkipped('No staff record found in tblper.');
         }
 
+        // Clean up any existing IOU records to avoid state pollution
+        DB::table('iou_records')->where('staff_id', $staff->ID)->delete();
+
         // Gross salary = 200,000 (50% limit = 100,000)
         DB::table('salary_structures')->updateOrInsert(
             ['staffId' => $staff->ID],
@@ -249,6 +286,8 @@ class IouApiTest extends TestCase
                 'medical_allowance' => 10000.00,
                 'utility_allowance' => 15000.00,
                 'meal_allowance' => 15000.00,
+                'can_take_iou' => 1,
+                'max_iou_amount' => 0.00,
             ]
         );
 
@@ -326,6 +365,9 @@ class IouApiTest extends TestCase
             $this->markTestSkipped('No staff record found in tblper.');
         }
 
+        // Clean up any existing IOU records to avoid state pollution
+        DB::table('iou_records')->where('staff_id', $staff->ID)->delete();
+
         // Gross salary = 160,000 (50% limit = 80,000)
         DB::table('salary_structures')->updateOrInsert(
             ['staffId' => $staff->ID],
@@ -336,6 +378,8 @@ class IouApiTest extends TestCase
                 'medical_allowance' => 10000.00,
                 'utility_allowance' => 10000.00,
                 'meal_allowance' => 10000.00,
+                'can_take_iou' => 1,
+                'max_iou_amount' => 0.00,
             ]
         );
 

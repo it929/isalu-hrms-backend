@@ -61,6 +61,9 @@ class RefundApiTest extends TestCase
             $this->markTestSkipped('No staff record found in tblper.');
         }
 
+        // Clean up any existing refund records to avoid state pollution
+        DB::table('refund_requests')->where('staff_id', $staff->ID)->delete();
+
         $headers = $this->getHeaders($user->id);
         $testDate = '2034-01-15';
 
@@ -122,16 +125,39 @@ class RefundApiTest extends TestCase
         $this->assertEquals(1, $afterHr->admin_status);
         $this->assertEquals(0, $afterHr->status);
 
-        // 5. Test Finance Approval
+        // 5. Assert Finance Approval fails before Audit Approval
+        $responseFinanceEarly = $this->getJson("/api/nextjs/payroll/refunds/finance-approve/{$refundId}?remarks=Finance+early", $headers);
+        $responseFinanceEarly->assertStatus(400)
+            ->assertJson([
+                'status' => 'error',
+                'message' => 'This request is not recommended by Audit or already processed by Finance.'
+            ]);
+
+        // 6. Test Audit Approval
+        $responseAudit = $this->getJson("/api/nextjs/payroll/refunds/audit-approve/{$refundId}?remarks=Audit+approved", $headers);
+        $responseAudit->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Refund request recommended successfully by Audit.'
+            ]);
+
+        $afterAudit = DB::table('refund_requests')->where('id', $refundId)->first();
+        $this->assertEquals(1, $afterAudit->audit_status);
+        $this->assertEquals(0, $afterAudit->status);
+
+        // 7. Test Finance Approval (marked as Paid)
         $responseFinance = $this->getJson("/api/nextjs/payroll/refunds/finance-approve/{$refundId}?remarks=Finance+approved", $headers);
         $responseFinance->assertStatus(200)
-            ->assertJson(['status' => 'success']);
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Refund request marked as paid and completed by Finance.'
+            ]);
 
         $afterFinance = DB::table('refund_requests')->where('id', $refundId)->first();
         $this->assertEquals(1, $afterFinance->finance_status);
         $this->assertEquals(1, $afterFinance->status);
 
-        // 6. Delete request (after approval, it should fail for non-admins but succeed for admin)
+        // 8. Delete request (after approval, it should fail for non-admins but succeed for admin)
         $responseDelete = $this->deleteJson("/api/nextjs/payroll/refunds/{$refundId}", [], $headers);
         $responseDelete->assertStatus(200)
             ->assertJson(['status' => 'success']);
