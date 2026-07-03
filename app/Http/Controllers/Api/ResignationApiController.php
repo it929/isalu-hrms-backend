@@ -123,6 +123,7 @@ class ResignationApiController extends Controller
 
             $records = $query->orderBy('rr.id', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                $row->last_day = date('Y-m-d', strtotime($row->resignation_date . ' + 30 days'));
                 return $row;
             });
 
@@ -386,6 +387,7 @@ class ResignationApiController extends Controller
             $remarks = $request->input('remarks');
             DB::table('resignation_requests')->where('id', $id)->update([
                 'admin_status' => 1,
+                'status'       => 1, // Approved overall (HR is now final stage)
                 'admin_id'     => $ctx['userId'],
                 'admin_date'   => now(),
                 'remarks'      => $remarks,
@@ -432,93 +434,6 @@ class ResignationApiController extends Controller
             return response()->json(['status' => 'success', 'message' => 'Resignation request rejected by HR Admin.']);
         } catch (\Throwable $th) {
             Log::error('ResignationApiController hrReject: ' . $th->getMessage());
-            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
-        }
-    }
-
-    /**
-     * GET /api/nextjs/payroll/resignations/finance-approve/{id}
-     */
-    public function financeApprove(Request $request, $id)
-    {
-        try {
-            $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isFinanceStaff'])) {
-                return response()->json(['status' => 'error', 'message' => 'Finance privileges required.'], 401);
-            }
-
-            $record = DB::table('resignation_requests')->where('id', $id)->first();
-            if (!$record) {
-                return response()->json(['status' => 'error', 'message' => 'Resignation request not found.'], 404);
-            }
-
-            if ($record->admin_status !== 1 || $record->finance_status !== 0 || $record->status !== 0) {
-                return response()->json(['status' => 'error', 'message' => 'This request is not in a pending Finance state.'], 400);
-            }
-
-            $remarks = $request->input('remarks');
-
-            DB::beginTransaction();
-
-            DB::table('resignation_requests')->where('id', $id)->update([
-                'finance_status' => 1,
-                'status'         => 1, // Approved overall
-                'finance_id'     => $ctx['userId'],
-                'finance_date'   => now(),
-                'remarks'        => $remarks,
-                'updated_at'     => now(),
-            ]);
-
-            // Update staff status value to resignation, rank to 2, and staff_status to 0 in tblper
-            DB::table('tblper')->where('ID', $record->staff_id)->update([
-                'status_value' => 'resignation',
-                'rank'         => 2,
-                'staff_status' => 0,
-            ]);
-
-            DB::commit();
-
-            return response()->json(['status' => 'success', 'message' => 'Resignation request approved and processed successfully by Finance.']);
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            Log::error('ResignationApiController financeApprove: ' . $th->getMessage());
-            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
-        }
-    }
-
-    /**
-     * GET /api/nextjs/payroll/resignations/finance-reject/{id}
-     */
-    public function financeReject(Request $request, $id)
-    {
-        try {
-            $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isFinanceStaff'])) {
-                return response()->json(['status' => 'error', 'message' => 'Finance privileges required.'], 401);
-            }
-
-            $record = DB::table('resignation_requests')->where('id', $id)->first();
-            if (!$record) {
-                return response()->json(['status' => 'error', 'message' => 'Resignation request not found.'], 404);
-            }
-
-            if ($record->admin_status !== 1 || $record->finance_status !== 0 || $record->status !== 0) {
-                return response()->json(['status' => 'error', 'message' => 'This request is not in a pending Finance state.'], 400);
-            }
-
-            $remarks = $request->input('remarks');
-            DB::table('resignation_requests')->where('id', $id)->update([
-                'finance_status' => 2,
-                'status'         => 2, // rejected
-                'finance_id'     => $ctx['userId'],
-                'finance_date'   => now(),
-                'remarks'        => $remarks,
-                'updated_at'     => now(),
-            ]);
-
-            return response()->json(['status' => 'success', 'message' => 'Resignation request rejected by Finance.']);
-        } catch (\Throwable $th) {
-            Log::error('ResignationApiController financeReject: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
     }
