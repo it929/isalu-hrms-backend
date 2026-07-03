@@ -110,6 +110,9 @@ class ResignationApiTest extends TestCase
         $this->assertEquals(1, $afterHod->hod_status);
         $this->assertEquals(0, $afterHod->status);
 
+        // Fetch staff initial state
+        $initialStaff = DB::table('tblper')->where('ID', $staff->ID)->first();
+
         // 4. Test HR Approval
         $responseHr = $this->getJson("/api/nextjs/payroll/resignations/hr-approve/{$resignationId}?remarks=HR+approved", $headers);
         $responseHr->assertStatus(200)
@@ -117,24 +120,15 @@ class ResignationApiTest extends TestCase
 
         $afterHr = DB::table('resignation_requests')->where('id', $resignationId)->first();
         $this->assertEquals(1, $afterHr->admin_status);
-        $this->assertEquals(0, $afterHr->status);
+        $this->assertEquals(1, $afterHr->status); // HR approval is final stage
 
-        // 5. Test Finance Approval
-        $responseFinance = $this->getJson("/api/nextjs/payroll/resignations/finance-approve/{$resignationId}?remarks=Finance+approved", $headers);
-        $responseFinance->assertStatus(200)
-            ->assertJson(['status' => 'success']);
-
-        $afterFinance = DB::table('resignation_requests')->where('id', $resignationId)->first();
-        $this->assertEquals(1, $afterFinance->finance_status);
-        $this->assertEquals(1, $afterFinance->status);
-
-        // Verify staff record in tblper is updated (status_value = resignation, rank = 2, staff_status = 0)
+        // Verify staff record in tblper is NOT updated (should match initial staff state)
         $updatedStaff = DB::table('tblper')->where('ID', $staff->ID)->first();
-        $this->assertEquals('resignation', $updatedStaff->status_value);
-        $this->assertEquals(2, $updatedStaff->rank);
-        $this->assertEquals(0, $updatedStaff->staff_status);
+        $this->assertEquals($initialStaff->status_value, $updatedStaff->status_value);
+        $this->assertEquals($initialStaff->rank, $updatedStaff->rank);
+        $this->assertEquals($initialStaff->staff_status, $updatedStaff->staff_status);
 
-        // 6. Delete request
+        // 5. Delete request
         $responseDelete = $this->deleteJson("/api/nextjs/payroll/resignations/{$resignationId}", [], $headers);
         $responseDelete->assertStatus(200)
             ->assertJson(['status' => 'success']);

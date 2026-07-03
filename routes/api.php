@@ -378,8 +378,6 @@ Route::prefix('nextjs')->group(function () {
             Route::delete('/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'destroy']);
             Route::get('/hod-approve/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hodApprove']);
             Route::get('/hod-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hodReject']);
-            Route::get('/finance-approve/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'financeApprove']);
-            Route::get('/finance-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'financeReject']);
             Route::get('/hr-approve/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hrApprove']);
             Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hrReject']);
         });
