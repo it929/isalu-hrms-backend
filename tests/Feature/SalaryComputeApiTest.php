@@ -250,7 +250,8 @@ class SalaryComputeApiTest extends TestCase
 
         // Scenario 2: pen_act is 1 (Pension SHOULD be deducted)
         DB::table('salary_structures')->where('staffId', $employee->ID)->update([
-            'pen_act' => 1
+            'pen_act' => 1,
+            'declare_salary' => 80000.00 // Declared salary different from gross to distinguish
         ]);
 
         // Run compute again
@@ -261,16 +262,38 @@ class SalaryComputeApiTest extends TestCase
 
         $response->assertStatus(200);
 
-        $row = DB::table('payroll_conpt')->where('payroll_run_id', $runId)->where('staffID', $employee->ID)->first();
-        $this->assertNotNull($row);
-
-        // Pension calculation: declare_salary * (pension_rate / 100.0)
-        $expectedPension = round(140000.00 * 0.08, 2);
+        // Monthly Pension: 8% of 50% of gross (140,000) = 5,600.00
+        $expectedPension = round((140000.00 * 0.5) * 0.08, 2);
         
+        // PAYE Tax: (80,000 * 12) = 960,000 annual. Pension relief = (960,000 * 0.5) * 0.08 = 38,400. Taxable = 921,600.
+        // Tax = (921,600 - 800,000) * 15% = 121,600 * 15% = 18,240 annual. Monthly PAYE = 1,520.00
+        $expectedTax = 1520.00;
+
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $runId,
             'staffID' => $employee->ID,
-            'pension' => $expectedPension
+            'pension' => $expectedPension,
+            'paye_tax' => $expectedTax
+        ]);
+
+        // Scenario 3: declare_salary is 0.00 (standard staff, pension is 8% of 50% of gross, tax is 0.00)
+        DB::table('salary_structures')->where('staffId', $employee->ID)->update([
+            'declare_salary' => 0.00
+        ]);
+
+        // Run compute again
+        $response = $this->postJson('/api/nextjs/payroll/compute', [
+            'month' => 'MAY',
+            'year' => '2026'
+        ], $headers);
+
+        $response->assertStatus(200);
+
+        $this->assertDatabaseHas('payroll_conpt', [
+            'payroll_run_id' => $runId,
+            'staffID' => $employee->ID,
+            'pension' => $expectedPension,
+            'paye_tax' => 0.00
         ]);
     }
 

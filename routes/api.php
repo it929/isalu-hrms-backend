@@ -164,6 +164,10 @@ Route::prefix('nextjs')->group(function () {
         Route::post('/compute', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'computeSalary']);
         Route::get('/payslip/init', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getPayslipInit']);
         Route::get('/payslip',  [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getPayslip']);
+        Route::post('/payslip/send-email', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'sendPayslipEmail']);
+        Route::post('/payslip/send-email-bulk', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'sendPayslipEmailBulk']);
+        Route::get('/hr-signature', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getHrSignature']);
+        Route::post('/hr-signature', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'saveHrSignature']);
 
         // Active Month Setup
         Route::get('/active-month', [\App\Http\Controllers\Api\ActiveMonthApiController::class, 'index']);
@@ -173,6 +177,10 @@ Route::prefix('nextjs')->group(function () {
         Route::get('/lock-active-month', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'index']);
         Route::post('/lock-active-month/lock', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'lock']);
         Route::post('/lock-active-month/unlock', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'unlock']);
+        Route::post('/lock-active-month/forward-to-audit', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'forwardToAudit']);
+        Route::post('/lock-active-month/audit-approve', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'auditApprove']);
+        Route::post('/lock-active-month/pay', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'pay']);
+        Route::post('/lock-active-month/audit-check', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'auditCheck']);
 
         // Bank updates
         Route::prefix('bank-updates')->group(function () {

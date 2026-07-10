@@ -100,6 +100,12 @@ class NextJsPayrollApiController extends Controller
                 'perPage'  => $perPage,
                 'page'     => $page,
                 'lastPage' => (int) ceil($total / $perPage),
+                'userCtx'  => [
+                    'isAuditStaff'   => (bool)($userCtx['isAuditStaff'] ?? false),
+                    'isSuperAdmin'   => (bool)($userCtx['isSuperAdmin'] ?? false),
+                    'isFinanceStaff' => (bool)($userCtx['isFinanceStaff'] ?? false),
+                    'isAdminStaff'   => (bool)($userCtx['isAdminStaff'] ?? false),
+                ]
             ]);
         } catch (\Throwable $th) {
             Log::error('PayrollAPI getPayrollList: ' . $th->getMessage());
@@ -352,7 +358,11 @@ class NextJsPayrollApiController extends Controller
                 'pc.leave_of_absence_deduction',
                 'p.AccNo',
                 'bl.bank as bankName',
-                'pc.paid_days'
+                'pc.paid_days',
+                'pc.salary_lock',
+                'pc.vstage',
+                'pc.audit_checked',
+                'pc.is_paid'
             )->get();
 
             $mapped = $allRows->map(function ($row) use ($revolvingLoanBalances, $coopLoanBalances, $coopSavingsBalances, $medicalLoanBalances, $coopAssetFinanceBalances, $loanSetupDeductions) {
@@ -394,6 +404,10 @@ class NextJsPayrollApiController extends Controller
                     'BANK'               => $row->bankName ?? '',
                     'CODE'               => '',
                     'PAYER ID'           => '',
+                    'salary_lock'        => (int)($row->salary_lock ?? 0),
+                    'vstage'             => (int)($row->vstage ?? 0),
+                    'audit_checked'      => (int)($row->audit_checked ?? 0),
+                    'is_paid'            => (int)($row->is_paid ?? 0),
                 ];
             });
 
@@ -596,6 +610,17 @@ class NextJsPayrollApiController extends Controller
 
             if ($month < 1 || $month > 12) {
                 return response()->json(['status' => 'error', 'message' => 'Invalid month specified.'], 422);
+            }
+
+            // Check if active month is locked
+            $isLocked = DB::table('payroll_conpt')
+                ->where('year', $year)
+                ->where('month', $month)
+                ->where('salary_lock', 1)
+                ->exists();
+
+            if ($isLocked) {
+                return response()->json(['status' => 'error', 'message' => 'Cannot compute: this active month is locked.'], 400);
             }
 
             // Start transaction
@@ -1124,11 +1149,12 @@ class NextJsPayrollApiController extends Controller
                 $grossPay = $totalIncome + $totalEarningVars;
                 $declareIncome = $declareSalary;
 
-                // PAYE and Pension calculated using Nigeria Tax Act 2025/2026 progressive bands with standard 8% pension deduction (on declare income)
+                // PAYE and Pension calculated using Nigeria Tax Act 2025/2026 progressive bands with standard pension deduction (8% of 50% on declare income)
                 $annualGross = $declareIncome * 12.0;
                 $annualPension = 0.00;
                 if ($struct && $struct->pen_act == 1) {
-                    $annualPension = $annualGross * ($pensionRate / 100.0);
+                    $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
+                    $annualPension = ($annualGross * 0.5) * $rate;
                 }
                 $annualTaxable = max(0.00, $annualGross - $annualPension);
 
@@ -1172,7 +1198,8 @@ class NextJsPayrollApiController extends Controller
 
                 $pension = 0.00;
                 if ($struct && $struct->pen_act == 1) {
-                    $pension = $declareIncome * ($pensionRate / 100.0);
+                    $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
+                    $pension = ($totalIncome * 0.5) * $rate;
                 }
 
                 // Fetch monthly IOU taken from iou_records table
@@ -1379,6 +1406,13 @@ class NextJsPayrollApiController extends Controller
             return response()->json(['status' => 'error', 'message' => "No payslip record found for the selected month and year."], 404);
         }
 
+        if ($matchedRow['vstage'] < 4) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Payslip cannot be generated: payroll for this month has not been paid yet.'
+            ], 400);
+        }
+
         // 4. Resolve bank name
         $bankName = $matchedRow['BANK'] ?: 'N/A';
 
@@ -1430,9 +1464,461 @@ class NextJsPayrollApiController extends Controller
             ]
         ];
 
+        // Fetch HR Head Signature or Super Admin fallback
+        $hrSignature = DB::table('users')
+            ->join('assign_user_role', 'assign_user_role.userID', '=', 'users.id')
+            ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+            ->where('user_role.rolename', 'like', '%HR HEAD%')
+            ->whereNotNull('users.signature')
+            ->value('users.signature');
+
+        if (!$hrSignature) {
+            $hrSignature = DB::table('users')
+                ->join('assign_user_role', 'assign_user_role.userID', '=', 'users.id')
+                ->where('assign_user_role.roleID', 1)
+                ->whereNotNull('users.signature')
+                ->value('users.signature');
+        }
+
+        $response['hr_signature'] = $hrSignature;
+
         return response()->json([
             'status' => 'success',
             'data' => $response
         ]);
+    }
+
+    /**
+     * GET /api/nextjs/payroll/hr-signature
+     * Returns the HR signature for the logged-in user context.
+     */
+    public function getHrSignature(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+            }
+
+            $signature = DB::table('users')->where('id', $ctx['userId'])->value('signature');
+
+            return response()->json([
+                'status'    => 'success',
+                'signature' => $signature
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('PayrollAPI getHrSignature: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/nextjs/payroll/hr-signature
+     * Saves the HR signature (base64 string) for the logged-in user context.
+     */
+    public function saveHrSignature(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+            }
+
+            $request->validate([
+                'signature' => 'required|string'
+            ]);
+
+            DB::table('users')->where('id', $ctx['userId'])->update([
+                'signature' => $request->input('signature'),
+                'updated_at' => now()
+            ]);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Signature saved successfully.'
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('PayrollAPI saveHrSignature: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/nextjs/payroll/payslip/send-email
+     * Send payslip to staff email.
+     */
+    public function sendPayslipEmail(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+            }
+
+            // Verify logged-in user has Admin or HR privileges
+            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied: Only Admin or HR staff can send payslip emails.'], 403);
+            }
+
+            $staffId = $request->input('staff_id');
+            $month = $request->input('month');
+            $year = $request->input('year');
+
+            if (!$staffId || !$month || !$year) {
+                return response()->json(['status' => 'error', 'message' => 'Staff ID, Month, and Year are required.'], 422);
+            }
+
+            $personData = DB::table('tblper')
+                ->where('ID', $staffId)
+                ->orWhere('fileNo', $staffId)
+                ->first();
+
+            if (!$personData) {
+                return response()->json(['status' => 'error', 'message' => 'Staff record not found.'], 404);
+            }
+
+            if (empty($personData->email)) {
+                return response()->json(['status' => 'error', 'message' => 'Cannot send payslip: staff email is not configured.'], 400);
+            }
+
+            [$payrollRows] = $this->fetchPayrollData($month, $year, '', '', PHP_INT_MAX, 1);
+            $matchedRow = null;
+            foreach ($payrollRows as $row) {
+                if ($row['IDNO'] == $personData->ID || $row['IDNO'] == $personData->fileNo) {
+                    $matchedRow = $row;
+                    break;
+                }
+            }
+
+            if (!$matchedRow) {
+                return response()->json(['status' => 'error', 'message' => 'No computed payroll record found.'], 404);
+            }
+
+            // ONLY paid staff can have payslips emailed!
+            if ($matchedRow['vstage'] < 4) {
+                return response()->json(['status' => 'error', 'message' => 'Cannot send payslip: staff has not been paid yet.'], 400);
+            }
+
+            // Get HR Head Signature
+            $hrSignature = DB::table('users')
+                ->join('assign_user_role', 'assign_user_role.userID', '=', 'users.id')
+                ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+                ->where('user_role.rolename', 'like', '%HR HEAD%')
+                ->whereNotNull('users.signature')
+                ->value('users.signature');
+
+            if (!$hrSignature) {
+                $hrSignature = DB::table('users')
+                    ->join('assign_user_role', 'assign_user_role.userID', '=', 'users.id')
+                    ->where('assign_user_role.roleID', 1)
+                    ->whereNotNull('users.signature')
+                    ->value('users.signature');
+            }
+
+            // Build HTML Content for payslip email
+            $subject = "Payslip for " . $month . " " . $year;
+            $staffName = trim($personData->surname . ' ' . $personData->first_name . ' ' . ($personData->othernames ?? ''));
+
+            // Basic details
+            $basic = number_format((float)$matchedRow['BASIC'], 2);
+            $housing = number_format((float)$matchedRow['HOUSING'], 2);
+            $transport = number_format((float)$matchedRow['TRANSPORT'], 2);
+            $medical = number_format((float)$matchedRow['MEDICAL'], 2);
+            $utility = number_format((float)$matchedRow['UTILITY'], 2);
+            $meal = number_format((float)$matchedRow['MEAL'], 2);
+            $gross = number_format((float)$matchedRow['TOTAL INCOME'], 2);
+
+            // Deductions
+            $tax = number_format((float)$matchedRow['P.TAX'], 2);
+            $pension = number_format((float)$matchedRow['PENSION'], 2);
+            $loan = number_format((float)$matchedRow['LOAN'], 2);
+            $coopSavings = number_format((float)$matchedRow['COOP. SAVING'], 2);
+            $coopLoan = number_format((float)$matchedRow['COOP. LOAN RPYT'], 2);
+            $iou = number_format((float)$matchedRow['IOU'], 2);
+            $retention = number_format((float)$matchedRow['RETENTION'], 2);
+            $surcharges = number_format((float)$matchedRow['SURGHARGES'], 2);
+            $medLoan = number_format((float)$matchedRow['MEDICAL LOAN'], 2);
+            $absencePen = number_format((float)$matchedRow['ABSENCE PENALTY'], 2);
+            $coopAsset = number_format((float)$matchedRow['COOP.ASSET.'], 2);
+            $loaDed = number_format((float)$matchedRow['LEAVE OF ABSENCE DEDUCTION'], 2);
+            $otherDed = number_format((float)$matchedRow['OTHER DEDUCTION'], 2);
+            $totalDed = number_format((float)$matchedRow['TOTAL DEDUCTION'], 2);
+            $netPay = number_format((float)$matchedRow['NETPAY'], 2);
+
+            $bankAccount = $matchedRow['ACC. NO'] ?: ($personData->AccNo ?: 'N/A');
+            $bankName = $matchedRow['BANK'] ?: 'N/A';
+            $department = DB::table('tbldepartment')->where('id', $personData->departmentID)->value('department') ?: 'N/A';
+            $designation = DB::table('tbldesignation')->where('id', $personData->designationID)->value('designation') ?: 'N/A';
+
+            $signatureHtml = $hrSignature ? '<img src="' . $hrSignature . '" alt="HR Head Signature" style="max-height: 70px; display: block;" />' : '<em>No signature on file</em>';
+
+            $html = "
+            <html>
+            <body style='font-family: Arial, sans-serif; color: #333;'>
+                <div style='max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;'>
+                    <h2 style='color: #2c3e50; text-align: center; border-bottom: 2px solid #34495e; padding-bottom: 10px;'>PAYSLIP REPORT</h2>
+                    <p style='text-align: center; font-weight: bold;'>Period: {$month} {$year}</p>
+                    
+                    <table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'>
+                        <tr><td style='padding: 5px; font-weight: bold; width: 30%;'>Staff Name:</td><td style='padding: 5px;'>{$staffName}</td></tr>
+                        <tr><td style='padding: 5px; font-weight: bold;'>File No:</td><td style='padding: 5px;'>{$personData->fileNo}</td></tr>
+                        <tr><td style='padding: 5px; font-weight: bold;'>Department:</td><td style='padding: 5px;'>{$department}</td></tr>
+                        <tr><td style='padding: 5px; font-weight: bold;'>Designation:</td><td style='padding: 5px;'>{$designation}</td></tr>
+                        <tr><td style='padding: 5px; font-weight: bold;'>Bank Name:</td><td style='padding: 5px;'>{$bankName}</td></tr>
+                        <tr><td style='padding: 5px; font-weight: bold;'>Bank Account:</td><td style='padding: 5px;'>{$bankAccount}</td></tr>
+                    </table>
+
+                    <div style='margin-bottom: 20px;'>
+                        <h3 style='background-color: #f2f2f2; padding: 8px; margin-top: 0;'>Earnings</h3>
+                        <table style='width: 100%;'>
+                            <tr><td>Basic Salary:</td><td style='text-align: right;'>₦{$basic}</td></tr>
+                            <tr><td>Housing Allowance:</td><td style='text-align: right;'>₦{$housing}</td></tr>
+                            <tr><td>Transport Allowance:</td><td style='text-align: right;'>₦{$transport}</td></tr>
+                            <tr><td>Medical Allowance:</td><td style='text-align: right;'>₦{$medical}</td></tr>
+                            <tr><td>Utility Allowance:</td><td style='text-align: right;'>₦{$utility}</td></tr>
+                            <tr><td>Meal Allowance:</td><td style='text-align: right;'>₦{$meal}</td></tr>
+                            <tr style='font-weight: bold; border-top: 1px solid #ccc;'><td>Gross Pay:</td><td style='text-align: right;'>₦{$gross}</td></tr>
+                        </table>
+                    </div>
+
+                    <div style='margin-bottom: 20px;'>
+                        <h3 style='background-color: #f2f2f2; padding: 8px; margin-top: 0;'>Deductions</h3>
+                        <table style='width: 100%;'>
+                            <tr><td>PAYE Tax:</td><td style='text-align: right;'>₦{$tax}</td></tr>
+                            <tr><td>Pension Contribution:</td><td style='text-align: right;'>₦{$pension}</td></tr>
+                            <tr><td>Loan Repayment:</td><td style='text-align: right;'>₦{$loan}</td></tr>
+                            <tr><td>Cooperative Savings:</td><td style='text-align: right;'>₦{$coopSavings}</td></tr>
+                            <tr><td>Cooperative Loan Repayment:</td><td style='text-align: right;'>₦{$coopLoan}</td></tr>
+                            <tr><td>IOU Deduction:</td><td style='text-align: right;'>₦{$iou}</td></tr>
+                            <tr><td>Retention:</td><td style='text-align: right;'>₦{$retention}</td></tr>
+                            <tr><td>Surcharges:</td><td style='text-align: right;'>₦{$surcharges}</td></tr>
+                            <tr><td>Medical Loan:</td><td style='text-align: right;'>₦{$medLoan}</td></tr>
+                            <tr><td>Absence Penalty:</td><td style='text-align: right;'>₦{$absencePen}</td></tr>
+                            <tr><td>Coop. Asset Finance:</td><td style='text-align: right;'>₦{$coopAsset}</td></tr>
+                            <tr><td>LOA Deduction:</td><td style='text-align: right;'>₦{$loaDed}</td></tr>
+                            <tr><td>Other Deductions:</td><td style='text-align: right;'>₦{$otherDed}</td></tr>
+                            <tr style='font-weight: bold; border-top: 1px solid #ccc;'><td>Total Deductions:</td><td style='text-align: right;'>₦{$totalDed}</td></tr>
+                        </table>
+                    </div>
+
+                    <div style='border-top: 2px solid #2c3e50; padding-top: 10px; margin-bottom: 30px;'>
+                        <table style='width: 100%; font-size: 1.2em; font-weight: bold;'>
+                            <tr><td>NET PAY:</td><td style='text-align: right; color: #27ae60;'>₦{$netPay}</td></tr>
+                        </table>
+                    </div>
+
+                    <div style='margin-top: 40px; border-top: 1px dashed #ccc; padding-top: 15px;'>
+                        <p style='margin: 0; font-size: 0.9em; font-weight: bold;'>Authorized Signature (HR Head):</p>
+                        <div style='margin-top: 10px;'>
+                            {$signatureHtml}
+                        </div>
+                    </div>
+                </div>
+            </body>
+            </html>
+            ";
+
+            \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($personData, $subject, $html) {
+                $message->to($personData->email)
+                    ->subject($subject)
+                    ->setBody($html, 'text/html');
+            });
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Payslip emailed successfully to ' . $personData->email
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('PayrollAPI sendPayslipEmail: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/nextjs/payroll/payslip/send-email-bulk
+     * Send payslips to all paid staff emails.
+     */
+    public function sendPayslipEmailBulk(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+            }
+
+            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied: Only Admin or HR staff can send payslip emails.'], 403);
+            }
+
+            $month = $request->input('month');
+            $year = $request->input('year');
+
+            if (!$month || !$year) {
+                return response()->json(['status' => 'error', 'message' => 'Month and Year are required.'], 422);
+            }
+
+            [$payrollRows] = $this->fetchPayrollData($month, $year, '', '', PHP_INT_MAX, 1);
+            
+            // Filter paid staff
+            $paidRows = array_filter($payrollRows, function($row) {
+                return $row['vstage'] == 4 && $row['is_paid'] == 1;
+            });
+
+            if (empty($paidRows)) {
+                return response()->json(['status' => 'error', 'message' => 'No paid staff records found for this period.'], 400);
+            }
+
+            // Get HR Head Signature
+            $hrSignature = DB::table('users')
+                ->join('assign_user_role', 'assign_user_role.userID', '=', 'users.id')
+                ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+                ->where('user_role.rolename', 'like', '%HR HEAD%')
+                ->whereNotNull('users.signature')
+                ->value('users.signature');
+
+            if (!$hrSignature) {
+                $hrSignature = DB::table('users')
+                    ->join('assign_user_role', 'assign_user_role.userID', '=', 'users.id')
+                    ->where('assign_user_role.roleID', 1)
+                    ->whereNotNull('users.signature')
+                    ->value('users.signature');
+            }
+
+            $sentCount = 0;
+            $failedCount = 0;
+
+            foreach ($paidRows as $row) {
+                $personData = DB::table('tblper')
+                    ->where('ID', $row['IDNO'])
+                    ->orWhere('fileNo', $row['IDNO'])
+                    ->first();
+
+                if (!$personData || empty($personData->email)) {
+                    $failedCount++;
+                    continue;
+                }
+
+                $staffName = trim($personData->surname . ' ' . $personData->first_name . ' ' . ($personData->othernames ?? ''));
+
+                // Basic details
+                $basic = number_format((float)$row['BASIC'], 2);
+                $housing = number_format((float)$row['HOUSING'], 2);
+                $transport = number_format((float)$row['TRANSPORT'], 2);
+                $medical = number_format((float)$row['MEDICAL'], 2);
+                $utility = number_format((float)$row['UTILITY'], 2);
+                $meal = number_format((float)$row['MEAL'], 2);
+                $gross = number_format((float)$row['TOTAL INCOME'], 2);
+
+                // Deductions
+                $tax = number_format((float)$row['P.TAX'], 2);
+                $pension = number_format((float)$row['PENSION'], 2);
+                $loan = number_format((float)$row['LOAN'], 2);
+                $coopSavings = number_format((float)$row['COOP. SAVING'], 2);
+                $coopLoan = number_format((float)$row['COOP. LOAN RPYT'], 2);
+                $iou = number_format((float)$row['IOU'], 2);
+                $retention = number_format((float)$row['RETENTION'], 2);
+                $surcharges = number_format((float)$row['SURGHARGES'], 2);
+                $medLoan = number_format((float)$row['MEDICAL LOAN'], 2);
+                $absencePen = number_format((float)$row['ABSENCE PENALTY'], 2);
+                $coopAsset = number_format((float)$row['COOP.ASSET.'], 2);
+                $loaDed = number_format((float)$row['LEAVE OF ABSENCE DEDUCTION'], 2);
+                $otherDed = number_format((float)$row['OTHER DEDUCTION'], 2);
+                $totalDed = number_format((float)$row['TOTAL DEDUCTION'], 2);
+                $netPay = number_format((float)$row['NETPAY'], 2);
+
+                $bankAccount = $row['ACC. NO'] ?: ($personData->AccNo ?: 'N/A');
+                $bankName = $row['BANK'] ?: 'N/A';
+                $department = DB::table('tbldepartment')->where('id', $personData->departmentID)->value('department') ?: 'N/A';
+                $designation = DB::table('tbldesignation')->where('id', $personData->designationID)->value('designation') ?: 'N/A';
+
+                $signatureHtml = $hrSignature ? '<img src="' . $hrSignature . '" alt="HR Head Signature" style="max-height: 70px; display: block;" />' : '<em>No signature on file</em>';
+
+                $html = "
+                <html>
+                <body style='font-family: Arial, sans-serif; color: #333;'>
+                    <div style='max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;'>
+                        <h2 style='color: #2c3e50; text-align: center; border-bottom: 2px solid #34495e; padding-bottom: 10px;'>PAYSLIP REPORT</h2>
+                        <p style='text-align: center; font-weight: bold;'>Period: {$month} {$year}</p>
+                        
+                        <table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'>
+                            <tr><td style='padding: 5px; font-weight: bold; width: 30%;'>Staff Name:</td><td style='padding: 5px;'>{$staffName}</td></tr>
+                            <tr><td style='padding: 5px; font-weight: bold;'>File No:</td><td style='padding: 5px;'>{$personData->fileNo}</td></tr>
+                            <tr><td style='padding: 5px; font-weight: bold;'>Department:</td><td style='padding: 5px;'>{$department}</td></tr>
+                            <tr><td style='padding: 5px; font-weight: bold;'>Designation:</td><td style='padding: 5px;'>{$designation}</td></tr>
+                            <tr><td style='padding: 5px; font-weight: bold;'>Bank Name:</td><td style='padding: 5px;'>{$bankName}</td></tr>
+                            <tr><td style='padding: 5px; font-weight: bold;'>Bank Account:</td><td style='padding: 5px;'>{$bankAccount}</td></tr>
+                        </table>
+
+                        <div style='margin-bottom: 20px;'>
+                            <h3 style='background-color: #f2f2f2; padding: 8px; margin-top: 0;'>Earnings</h3>
+                            <table style='width: 100%;'>
+                                <tr><td>Basic Salary:</td><td style='text-align: right;'>₦{$basic}</td></tr>
+                                <tr><td>Housing Allowance:</td><td style='text-align: right;'>₦{$housing}</td></tr>
+                                <tr><td>Transport Allowance:</td><td style='text-align: right;'>₦{$transport}</td></tr>
+                                <tr><td>Medical Allowance:</td><td style='text-align: right;'>₦{$medical}</td></tr>
+                                <tr><td>Utility Allowance:</td><td style='text-align: right;'>₦{$utility}</td></tr>
+                                <tr><td>Meal Allowance:</td><td style='text-align: right;'>₦{$meal}</td></tr>
+                                <tr style='font-weight: bold; border-top: 1px solid #ccc;'><td>Gross Pay:</td><td style='text-align: right;'>₦{$gross}</td></tr>
+                            </table>
+                        </div>
+
+                        <div style='margin-bottom: 20px;'>
+                            <h3 style='background-color: #f2f2f2; padding: 8px; margin-top: 0;'>Deductions</h3>
+                            <table style='width: 100%;'>
+                                <tr><td>PAYE Tax:</td><td style='text-align: right;'>₦{$tax}</td></tr>
+                                <tr><td>Pension Contribution:</td><td style='text-align: right;'>₦{$pension}</td></tr>
+                                <tr><td>Loan Repayment:</td><td style='text-align: right;'>₦{$loan}</td></tr>
+                                <tr><td>Cooperative Savings:</td><td style='text-align: right;'>₦{$coopSavings}</td></tr>
+                                <tr><td>Cooperative Loan Repayment:</td><td style='text-align: right;'>₦{$coopLoan}</td></tr>
+                                <tr><td>IOU Deduction:</td><td style='text-align: right;'>₦{$iou}</td></tr>
+                                <tr><td>Retention:</td><td style='text-align: right;'>₦{$retention}</td></tr>
+                                <tr><td>Surcharges:</td><td style='text-align: right;'>₦{$surcharges}</td></tr>
+                                <tr><td>Medical Loan:</td><td style='text-align: right;'>₦{$medLoan}</td></tr>
+                                <tr><td>Absence Penalty:</td><td style='text-align: right;'>₦{$absencePen}</td></tr>
+                                <tr><td>Coop. Asset Finance:</td><td style='text-align: right;'>₦{$coopAsset}</td></tr>
+                                <tr><td>LOA Deduction:</td><td style='text-align: right;'>₦{$loaDed}</td></tr>
+                                <tr><td>Other Deductions:</td><td style='text-align: right;'>₦{$otherDed}</td></tr>
+                                <tr style='font-weight: bold; border-top: 1px solid #ccc;'><td>Total Deductions:</td><td style='text-align: right;'>₦{$totalDed}</td></tr>
+                            </table>
+                        </div>
+
+                        <div style='border-top: 2px solid #2c3e50; padding-top: 10px; margin-bottom: 30px;'>
+                            <table style='width: 100%; font-size: 1.2em; font-weight: bold;'>
+                                <tr><td>NET PAY:</td><td style='text-align: right; color: #27ae60;'>₦{$netPay}</td></tr>
+                            </table>
+                        </div>
+
+                        <div style='margin-top: 40px; border-top: 1px dashed #ccc; padding-top: 15px;'>
+                            <p style='margin: 0; font-size: 0.9em; font-weight: bold;'>Authorized Signature (HR Head):</p>
+                            <div style='margin-top: 10px;'>
+                                {$signatureHtml}
+                            </div>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                ";
+
+                try {
+                    \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($personData, $subject, $html) {
+                        $message->to($personData->email)
+                            ->subject($subject)
+                            ->setBody($html, 'text/html');
+                    });
+                    $sentCount++;
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error("Failed sending bulk email to " . $personData->email . ": " . $e->getMessage());
+                    $failedCount++;
+                }
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Bulk emailing complete. Sent: {$sentCount}, Failed: {$failedCount}."
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('PayrollAPI sendPayslipEmailBulk: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
     }
 }
