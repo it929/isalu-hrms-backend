@@ -168,6 +168,7 @@ Route::prefix('nextjs')->group(function () {
         Route::post('/payslip/send-email-bulk', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'sendPayslipEmailBulk']);
         Route::get('/hr-signature', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getHrSignature']);
         Route::post('/hr-signature', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'saveHrSignature']);
+        Route::get('/staff-netpay/{staffId}', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getStaffNetPay']);
 
         // Active Month Setup
         Route::get('/active-month', [\App\Http\Controllers\Api\ActiveMonthApiController::class, 'index']);
@@ -403,5 +404,17 @@ Route::prefix('nextjs')->group(function () {
             Route::post('/toggle', [\App\Http\Controllers\Api\RetentionActivationApiController::class, 'toggleRetention']);
             Route::post('/import', [\App\Http\Controllers\Api\RetentionActivationApiController::class, 'importRetention']);
         });
+
+    });
+
+    // Dynamic Reports endpoints
+    Route::prefix('reports')->group(function () {
+        Route::get('/salary-advances', [\App\Http\Controllers\Api\ReportApiController::class, 'getSalaryAdvances']);
+        Route::get('/vacancies', [\App\Http\Controllers\Api\ReportApiController::class, 'getVacancies']);
+        Route::get('/applicants', [\App\Http\Controllers\Api\ReportApiController::class, 'getApplicants']);
+        Route::get('/appraisals', [\App\Http\Controllers\Api\ReportApiController::class, 'getAppraisals']);
+        Route::get('/user-activities', [\App\Http\Controllers\Api\ReportApiController::class, 'getUserActivities']);
+        Route::get('/payroll-audits', [\App\Http\Controllers\Api\ReportApiController::class, 'getPayrollAudits']);
+        Route::get('/employee-changes', [\App\Http\Controllers\Api\ReportApiController::class, 'getEmployeeChanges']);
     });
 });

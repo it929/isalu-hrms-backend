@@ -224,7 +224,8 @@ class HrStaffApiController extends Controller
                     'tbldepartment.department',
                     'lga.lga as lga_name',
                     'tblstates.State as state_name',
-                    'tblper.progress_regID'
+                    'tblper.progress_regID',
+                    'tblper.staff_status'
                 )
                 ->orderBy('tblper.surname', 'asc')
                 ->get();
