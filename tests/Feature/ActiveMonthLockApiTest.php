@@ -147,7 +147,8 @@ class ActiveMonthLockApiTest extends TestCase
         // Audit Approve
         $response = $this->postJson('/api/nextjs/payroll/lock-active-month/audit-approve', [
             'year'       => 2026,
-            'month'      => 'OCTOBER'
+            'month'      => 'OCTOBER',
+            'remarks'    => 'Looks good, approved by internal audit'
         ], $headers);
         $response->assertStatus(200)
             ->assertJson(['status' => 'success', 'message' => 'Payroll approved by Audit successfully.']);
@@ -155,6 +156,11 @@ class ActiveMonthLockApiTest extends TestCase
         $this->assertDatabaseHas('payroll_conpt', [
             'staffID' => $user->ID,
             'vstage'  => 3
+        ]);
+
+        $this->assertDatabaseHas('audit_log', [
+            'user_id'   => $expectedUserId,
+            'operation' => " active month payroll approved by audit globally for OCTOBER/2026 Remarks: Looks good, approved by internal audit"
         ]);
 
         // Try fetching payslip before paid -> should fail with 400
@@ -165,7 +171,8 @@ class ActiveMonthLockApiTest extends TestCase
         // Pay
         $response = $this->postJson('/api/nextjs/payroll/lock-active-month/pay', [
             'year'       => 2026,
-            'month'      => 'OCTOBER'
+            'month'      => 'OCTOBER',
+            'remarks'    => 'Paid successfully, payment sent to bank'
         ], $headers);
         $response->assertStatus(200)
             ->assertJson(['status' => 'success', 'message' => 'Payroll marked as paid successfully.']);
@@ -174,6 +181,11 @@ class ActiveMonthLockApiTest extends TestCase
             'staffID' => $user->ID,
             'vstage'  => 4,
             'is_paid' => 1
+        ]);
+
+        $this->assertDatabaseHas('audit_log', [
+            'user_id'   => $expectedUserId,
+            'operation' => " active month payroll marked as paid globally for OCTOBER/2026 Remarks: Paid successfully, payment sent to bank"
         ]);
 
         // Fetch payslip after paid -> should succeed with 200
@@ -246,7 +258,7 @@ class ActiveMonthLockApiTest extends TestCase
             ->where('staffID', $user->ID)
             ->where('month', 10)
             ->where('year', 2026)
-            ->update(['vstage' => 4]); // Paid
+            ->update(['vstage' => 4, 'is_paid' => 1]); // Paid
 
         // Mock Laravel Mailer to prevent real mail delivery during tests
         \Illuminate\Support\Facades\Mail::fake();
@@ -258,5 +270,23 @@ class ActiveMonthLockApiTest extends TestCase
         ], $headers);
         $response->assertStatus(200)
             ->assertJson(['status' => 'success', 'message' => 'Payslip emailed successfully to staff@example.com']);
+
+        // 9. Test Send Bulk Payslip Emails
+        $response = $this->postJson('/api/nextjs/payroll/payslip/send-email-bulk', [
+            'month'    => 'OCTOBER',
+            'year'     => 2026
+        ], $headers);
+        $response->assertStatus(200)
+            ->assertJson(['status' => 'success']);
+
+        // 10. Test Get Staff Net Pay
+        $response = $this->getJson("/api/nextjs/payroll/staff-netpay/{$user->ID}", $headers);
+        $response->assertStatus(200)
+            ->assertJson([
+                'status'  => 'success',
+                'net_pay' => 0.00,
+                'month'   => 'OCTOBER',
+                'year'    => 2026
+            ]);
     }
 }

@@ -362,8 +362,9 @@ class ActiveMonthLockApiController extends Controller
             }
 
             $request->validate([
-                'year'  => 'required|integer',
-                'month' => 'required|string'
+                'year'    => 'required|integer',
+                'month'   => 'required|string',
+                'remarks' => 'nullable|string'
             ]);
 
             $year = (int)$request->input('year');
@@ -396,7 +397,12 @@ class ActiveMonthLockApiController extends Controller
                     'vstage' => 3
                 ]);
 
-            $this->addLog($request, $ctx['userId'], " active month payroll approved by audit globally for " . $month . "/" . $year . " ");
+            $remarks = $request->input('remarks');
+            $logMsg = " active month payroll approved by audit globally for " . $month . "/" . $year . " ";
+            if (!empty($remarks)) {
+                $logMsg .= "Remarks: " . $remarks;
+            }
+            $this->addLog($request, $ctx['userId'], $logMsg);
 
             return response()->json([
                 'status'  => 'success',
@@ -425,8 +431,9 @@ class ActiveMonthLockApiController extends Controller
             }
 
             $request->validate([
-                'year'  => 'required|integer',
-                'month' => 'required|string'
+                'year'    => 'required|integer',
+                'month'   => 'required|string',
+                'remarks' => 'nullable|string'
             ]);
 
             $year = (int)$request->input('year');
@@ -460,7 +467,12 @@ class ActiveMonthLockApiController extends Controller
                     'vstage'  => 4
                 ]);
 
-            $this->addLog($request, $ctx['userId'], " active month payroll marked as paid globally for " . $month . "/" . $year . " ");
+            $remarks = $request->input('remarks');
+            $logMsg = " active month payroll marked as paid globally for " . $month . "/" . $year . " ";
+            if (!empty($remarks)) {
+                $logMsg .= "Remarks: " . $remarks;
+            }
+            $this->addLog($request, $ctx['userId'], $logMsg);
 
             return response()->json([
                 'status'  => 'success',
