@@ -180,6 +180,7 @@ Route::prefix('nextjs')->group(function () {
         Route::post('/lock-active-month/unlock', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'unlock']);
         Route::post('/lock-active-month/forward-to-audit', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'forwardToAudit']);
         Route::post('/lock-active-month/audit-approve', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'auditApprove']);
+        Route::post('/lock-active-month/audit-reject', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'auditReject']);
         Route::post('/lock-active-month/pay', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'pay']);
         Route::post('/lock-active-month/audit-check', [\App\Http\Controllers\Api\ActiveMonthLockApiController::class, 'auditCheck']);
 

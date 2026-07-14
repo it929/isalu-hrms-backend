@@ -144,6 +144,49 @@ class ActiveMonthLockApiTest extends TestCase
             'audit_checked' => 1
         ]);
 
+        // Audit Reject without remarks -> should fail validation (422)
+        $response = $this->postJson('/api/nextjs/payroll/lock-active-month/audit-reject', [
+            'year'       => 2026,
+            'month'      => 'OCTOBER'
+        ], $headers);
+        $response->assertStatus(422);
+
+        // Audit Reject with remarks -> should succeed (200) and revert vstage to 1, audit_checked to 0
+        $response = $this->postJson('/api/nextjs/payroll/lock-active-month/audit-reject', [
+            'year'       => 2026,
+            'month'      => 'OCTOBER',
+            'remarks'    => 'Rejected due to discrepancies'
+        ], $headers);
+        $response->assertStatus(200)
+            ->assertJson(['status' => 'success', 'message' => 'Payroll rejected by Audit successfully.']);
+
+        $this->assertDatabaseHas('payroll_conpt', [
+            'staffID'       => $user->ID,
+            'vstage'        => 1,
+            'audit_checked' => 0
+        ]);
+
+        $this->assertDatabaseHas('audit_log', [
+            'user_id'   => $expectedUserId,
+            'operation' => " active month payroll rejected by audit globally for OCTOBER/2026. Remarks: Rejected due to discrepancies"
+        ]);
+
+        // Re-forward to audit so we can continue testing approval and pay steps
+        $response = $this->postJson('/api/nextjs/payroll/lock-active-month/forward-to-audit', [
+            'year'       => 2026,
+            'month'      => 'OCTOBER'
+        ], $headers);
+        $response->assertStatus(200);
+
+        // Re-check staff
+        $response = $this->postJson('/api/nextjs/payroll/lock-active-month/audit-check', [
+            'year'       => 2026,
+            'month'      => 'OCTOBER',
+            'checked'    => 1,
+            'staff_ids'  => [$user->ID]
+        ], $headers);
+        $response->assertStatus(200);
+
         // Audit Approve
         $response = $this->postJson('/api/nextjs/payroll/lock-active-month/audit-approve', [
             'year'       => 2026,
