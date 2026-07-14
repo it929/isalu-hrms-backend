@@ -17,7 +17,7 @@
     			</div>
     			<div align="left" class="col-xs-10">
         			<div align="center" class="text-success text-center">
-        				<h3><strong>SUPREME COURT OF NIGERIA</strong></h3>
+        				<h3><strong>ISALU HOSPITAL LIMITED</strong></h3>
         				<h4>RESUMPTION OF DUTY FORM (JUNIOR OFFICER)</h4>
         			</div>
     			</div>

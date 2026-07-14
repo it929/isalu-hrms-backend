@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>SUPREME COURT OF NIGERIA</title>
+    <title>ISALU HOSPITAL LIMITED</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
     <link rel="stylesheet" type="text/css" href="https://funds.njc.gov.ng/assets/css/datepicker.min.css">
 
@@ -101,7 +101,7 @@
                             style="width:100%; height:auto;"></div>
                     <div class="col-xs-10">
                         <div>
-                            <h4 class="text-success text-center"><strong>SUPREME COURT OF NIGERIA</strong></h4>
+                            <h4 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h4>
 
                             <h6 class=" text-center text-success col-md-offset-4"><strong>ACCOUNT NO.: <select
                                         class="type">

@@ -5,7 +5,7 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <link rel="shortcut icon" href="images/favicon.ico">
-    <title>SUPREME COURT OF NIGERIA</title>
+    <title>ISALU HOSPITAL LIMITED</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
     <style type="text/css">
         body,
@@ -58,7 +58,7 @@
                 <h3><br />
                     <br />
                     <br />
-                    SUPREME COURT OF NIGERIA
+                    ISALU HOSPITAL LIMITED
                 </h3>
                 @if ($bank == 'CBN')
                     <h4>CENTRAL BANK OF NIGERIA DEDUCTION PAYMENT MANDATE</h4>

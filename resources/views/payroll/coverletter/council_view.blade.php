@@ -31,7 +31,7 @@
 <table width="650" height="649" border="0" align="center" cellpadding="0" cellspacing="0" style="font-size:19px">
   <!--<tr>
     <td height="23">&nbsp;</td>
-    <td colspan="2" align="center" style="font-weight:bold">Supreme Court of Nigeria, ABUJA</td>
+    <td colspan="2" align="center" style="font-weight:bold">ISALU HOSPITAL LIMITED, ABUJA</td>
     <td>&nbsp;</td>
   </tr>
   

@@ -20,7 +20,7 @@
                         @endphp
 
                         <div>
-                            <h3 class="text-success text-center"><strong>SUPREME COURT OF NIGERIA</strong></h3>
+                            <h3 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h3>
                             <h4 class="text-center text-success"><strong>THREE ARMS ZONE, CENTRAL DISTRICT PMB 308, ABUJA</strong></h4>
                             <h4 class="text-center text-success"><strong>Vote Book Report</strong></h4>
                             @if ($selected)

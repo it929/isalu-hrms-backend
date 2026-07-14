@@ -63,7 +63,7 @@
 				<div align="left" class="col-xs-6">
 					<table >
 						<tr><td align="left">TO ALL STAFF, </td></tr>
-						<tr><td align="left"><br /> SUPREME COURT OF NIGERIA</td></tr>
+						<tr><td align="left"><br /> ISALU HOSPITAL LIMITED</td></tr>
 					</table>
 				</div>
 				<div align="right" class="col-xs-6">

@@ -147,7 +147,7 @@ class StyledBatchExport implements FromCollection, WithEvents, ShouldAutoSize, W
                 // ================= HEADER SECTION =================
 
                 $sheet->mergeCells('A1:I1');
-                $sheet->setCellValue('A1', 'SUPREME COURT OF NIGERIA');
+                $sheet->setCellValue('A1', 'ISALU HOSPITAL LIMITED');
 
                 $sheet->getStyle('A1')->applyFromArray([
                     'font' => ['bold' => true, 'size' => 14],

@@ -4,7 +4,7 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <link rel="shortcut icon" href="images/favicon.ico">
-    <title>Supreme Court of Nigeria...::...Bank Mandate Schedule</title>
+    <title>ISALU HOSPITAL LIMITED...::...Bank Mandate Schedule</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/watermark.css') }}">
 
@@ -243,8 +243,8 @@
                         </div>
 
                         <div class="col-xs-8 text-center">
-                            <h4 class="text-success"><strong>Supreme Court of Nigeria</strong></h4>
-                            <h5 class="text-success"><strong>SUPREME COURT COMPLEX</strong></h5>
+                            <h4 class="text-success"><strong>ISALU HOSPITAL LIMITED</strong></h4>
+                            <h5 class="text-success"><strong>ISALU HOSPITAL LIMITED</strong></h5>
                             <h6 class="text-success"><strong>THREE ARM ZONE</strong></h6>
                             <h6 class="text-success">
                                 <strong>ACCOUNT NUMBER: {{ $accountDetails->account_no ?? 'N/A' }}</strong>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>SUPREME COURT OF NIGERIA</title>
+  <title>ISALU HOSPITAL LIMITED</title>
 
   <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
   <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
@@ -31,7 +31,7 @@
           <table width="1122" border="0" align="center" cellpadding="0" cellspacing="0">
             <tr>
               <td colspan="3"><div align="center">
-                <h2>SUPREME COURT OF NIGERIA<br />
+                <h2>ISALU HOSPITAL LIMITED<br />
                  
                  
                   NEW SALARY STRUCTURE</h2>

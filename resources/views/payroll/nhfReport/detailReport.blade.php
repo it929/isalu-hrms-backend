@@ -60,7 +60,7 @@
 
             <!-- Main Content for Printing -->
             <div id="mainContent">
-                <h2 class="text-center">SUPREME COURT OF NIGERIA</h2>
+                <h2 class="text-center">ISALU HOSPITAL LIMITED</h2>
                 <h3 class="text-center">ADDRESS:................................................</h3>
                 <h3 class="text-center">NHF PAYMENT SCHEDULE FOR THE MONTH OF
                     {{ $month ? $month : '' }}, {{ $year ? $year : '' }}.

@@ -5,7 +5,7 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <link rel="shortcut icon" href="images/favicon.ico">
-    <title>SUPREME COURT OF NIGERIA PAYROLL
+    <title>ISALU HOSPITAL LIMITED PAYROLL
         ...::...Payroll Report</title>
 
 
@@ -203,7 +203,7 @@
         <div style="width:90%; margin: auto;">
             <div align="center" class="marginTableHeading">
                 <h2>
-                    <div style="color:#06c;">SUPREME COURT OF NIGERIA PAYROLL</div>
+                    <div style="color:#06c;">ISALU HOSPITAL LIMITED PAYROLL</div>
                 </h2>
             </div>
             <table class="head-color" width="100%" border="0" cellpadding="0" cellspacing="0"

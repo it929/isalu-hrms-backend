@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link rel="shortcut icon" href="images/favicon.ico">
-<title>SUPREME COURT OF NIGERIA...::...Report</title>
+<title>ISALU HOSPITAL LIMITED...::...Report</title>
 <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 <style type="text/css">
 <!--

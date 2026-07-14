@@ -10,7 +10,7 @@
     <form method="post" action="{{ url('/approve') }}">
         <div class="row">
             <div class="col-md-12">
-                <div align="center"><h2><strong>SUPREME COURT OF NIGERIA PAYROLL</strong></h2></div>
+                <div align="center"><h2><strong>ISALU HOSPITAL LIMITED PAYROLL</strong></h2></div>
             </div>
         </div>
         <hr />
@@ -19,7 +19,7 @@
       </div>
       <br />
       <div align="left"> 
-            <div>MINISTRY/DEPARTMENT: SUPREME COURT OF NIGERIA, {{$curDivision}} </div>
+            <div>MINISTRY/DEPARTMENT: ISALU HOSPITAL LIMITED, {{$curDivision}} </div>
       </div>
       <br />
       <div align="left">

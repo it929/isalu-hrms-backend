@@ -6,7 +6,7 @@
 <div class="box-body">
   <div class="row">
     <div class="col-md-6 col-md-offset-3">
-        <b><p class="profile-username text-center text-success">SUPREME COURT OF NIGERIA
+        <b><p class="profile-username text-center text-success">ISALU HOSPITAL LIMITED
         </p></b>
       <b><p class="profile-username text-center text-success">PAYROLL</p></b>
       <ul class="list-group list-group-unbordered">

@@ -55,7 +55,7 @@
 
         <div id="pensionSummaryPrint">
             <div align="center" class="text-success">
-                <h3><b>SUPREME COURT OF NIGERIA</b></h3>
+                <h3><b>ISALU HOSPITAL LIMITED</b></h3>
                 <h4><b>PENSION SUMMARY FOR {{ strtoupper($division[0]->division) }}, FOR {{ $month }}
                         {{ $year }}</b></h4>
                 {{-- <h5><b>{{ strtoupper($nameOfPFA) }}</b></h5> --}}

@@ -3,7 +3,7 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <link rel="shortcut icon" href="images/favicon.ico">
-    <title>SUPREME COURT OF NIGERIA...::...Report</title>
+    <title>ISALU HOSPITAL LIMITED...::...Report</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
     <style type="text/css">
         <!--
@@ -226,7 +226,7 @@
             var ws_data = [];
             
             // Add headers with proper formatting
-            ws_data.push(["SUPREME COURT OF NIGERIA"]);
+            ws_data.push(["ISALU HOSPITAL LIMITED"]);
             ws_data.push(["ADVICE OF DEDUCTION FROM SALARY"]);
             
             @if (isset($reportType) && $reportType == 'TAX')
@@ -406,7 +406,7 @@
         <!-- Report Table -->
         <table class="tblborder compact-table" border="1" cellpadding="0" cellspacing="0" id="tableData">
             <tr>
-                <th colspan="6" class="text-center" style="font-size: 16px; padding: 8px;">SUPREME COURT OF NIGERIA</th>
+                <th colspan="6" class="text-center" style="font-size: 16px; padding: 8px;">ISALU HOSPITAL LIMITED</th>
             </tr>
             <tr>
                 <th colspan="6" class="text-center" style="font-size: 16px; padding: 8px;">ADVICE OF DEDUCTION FROM SALARY</th>

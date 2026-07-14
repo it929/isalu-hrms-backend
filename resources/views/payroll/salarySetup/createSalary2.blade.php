@@ -70,7 +70,7 @@
 
     <div style="margin: 10px 20px;">
       <div align="center">
-        <h3><b>{{strtoupper('Supreme Court of Nigeria')}}</b></h3>
+        <h3><b>{{strtoupper('ISALU HOSPITAL LIMITED')}}</b></h3>
         
       </div>
           

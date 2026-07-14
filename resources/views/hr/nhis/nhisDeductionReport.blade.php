@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link rel="shortcut icon" href="images/favicon.ico">
-<title>SUPREME COURT OF NIGERIA...::...Report</title>
+<title>ISALU HOSPITAL LIMITED...::...Report</title>
 <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 <style type="text/css">
 <!--
@@ -112,7 +112,7 @@ $(window).keyup(function(e){
 <div align="center" style="width:80%; margin:auto;">
 <table class="" border="0" align="left" cellpadding="0" cellspacing="0" style="margin-bottom:30px; margin-top:20px;" >
   <tr>
-  <th>SUPREME COURT OF NIGERIA</th>
+  <th>ISALU HOSPITAL LIMITED</th>
   </tr>
   <tr><th>ADVICE OF DEDUCTION FROM SALARY</th></tr>
   <tr><th> {{strtoupper('NHIS')}} DEDUCTION FOR THE MONTH OF {{strtoupper($selectedMonth)}}, {{strtoupper($selectedYear)}}</th></tr>

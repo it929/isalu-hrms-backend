@@ -85,7 +85,7 @@
                                     <div class="card-body">
                                         <h5 class="card-title">TO ALL STAFF,</h5>
                                         <p class="card-text">
-                                            SUPREME COURT OF NIGERIA
+                                            ISALU HOSPITAL LIMITED
                                         </p>
                                     </div>
                                 </div>

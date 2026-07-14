@@ -57,8 +57,8 @@
 
                     <div class="col-xs-8">
                         <div>
-                            <h3 class="text-success text-center"><strong>SUPREME COURT OF NIGERIA</strong></h3>
-                            <h4 class="text-center text-success"><strong>SUPREME COURT OF NIGERIA, THREE ARMS ZONE, CENTRAL DISTRICT PMB 308, ABUJA</strong></h4>
+                            <h3 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h3>
+                            <h4 class="text-center text-success"><strong>ISALU HOSPITAL LIMITED, THREE ARMS ZONE, CENTRAL DISTRICT PMB 308, ABUJA</strong></h4>
                             <h4 class="text-center text-success"><strong>Approval/Action Comments</strong></h4>
                         </div>
                     </div>

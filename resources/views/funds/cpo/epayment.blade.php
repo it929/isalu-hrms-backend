@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>SUPREME COURT OF NIGERIA</title>
+    <title>ISALU HOSPITAL LIMITED</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
     <link rel="stylesheet" type="text/css" href="https://funds.njc.gov.ng/assets/css/datepicker.min.css">
 
@@ -276,7 +276,7 @@
                         style="width:100%; height:auto;"></div>
                 <div class="col-xs-10">
                     <div>
-                        <h4 class="text-success text-center RefD"><strong>SUPREME COURT OF NIGERIA</strong>
+                        <h4 class="text-success text-center RefD"><strong>ISALU HOSPITAL LIMITED</strong>
                         </h4>
 
                         <h6 class=" text-center text-success col-md-offset-4 RefD"><strong>ACCOUNT NO.: <select
@@ -1105,7 +1105,7 @@
             var ws_data = [];
 
             // ===== HEADER SECTION =====
-            ws_data.push(["SUPREME COURT OF NIGERIA"]);
+            ws_data.push(["ISALU HOSPITAL LIMITED"]);
             ws_data.push([]);
             ws_data.push(["The Branch Manager"]);
             ws_data.push(["{{ $accountAddress->bank }}"]);

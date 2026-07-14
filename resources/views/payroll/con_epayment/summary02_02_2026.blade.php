@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>Supreme Court of Nigeria...::...E-payment Schedule</title>
+    <title>ISALU HOSPITAL LIMITED...::...E-payment Schedule</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 
     <style type="text/css">
@@ -125,8 +125,8 @@
                     </div>
                     <div class="col-xs-8">
                         <div>
-                            <h4 class="text-success text-center"><strong>Supreme Court of Nigeria</strong></h4>
-                            <h5 class="text-center text-success"><strong> SUPREME COURT COMPLEX </strong></h5>
+                            <h4 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h4>
+                            <h5 class="text-center text-success"><strong> ISALU HOSPITAL LIMITED </strong></h5>
                             <h6 class=" text-center text-success"><strong>THREE ARM ZONE</strong></h6>
                             <h6 class=" text-center text-success"><strong>ACCOUNT NUMBER:
                                     {{ $accountDetails->account_no ?? 'No Account Number assigned' }}</strong></h6>

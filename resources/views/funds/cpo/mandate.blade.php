@@ -3,7 +3,7 @@
 
 <head>
 
-    <title>SUPREME COURT OF NIGERIA</title>
+    <title>ISALU HOSPITAL LIMITED</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 
     <style type="text/css">
@@ -64,7 +64,7 @@
                             style=""></div>
                     <div class="col-xs-10">
                         <div>
-                            <h4 class="text-success text-center"><strong>SUPREME COURT OF NIGERIA</strong></h4>
+                            <h4 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h4>
                             <!--<h5 class="text-center text-success"><strong>10, PORTHARCOURT CRESCENT, AREA 11, GARKI, ABUJA</strong></h5>
             <h6 class=" text-center text-success"><strong>ACCOUNT NUMBER: 2004656203</strong></h6>-->
                             <h6 class=" text-center text-success">E-PAYMENT SCHEDULE</h6>

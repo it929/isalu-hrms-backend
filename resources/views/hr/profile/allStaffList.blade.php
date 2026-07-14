@@ -114,7 +114,7 @@
 
     <div style="margin: 10px 20px;">
     	<div align="center">
-        <h3><b>{{strtoupper('SUPREME COURT OF NIGERIA')}}</b></h3>
+        <h3><b>{{strtoupper('ISALU HOSPITAL LIMITED')}}</b></h3>
         <big><b>{{strtoupper($headFile . ' AS AT ' . date('l jS \of F Y'))}}</b></big>
       </div>
     	<span class="pull-right" style="margin-right: 30px;">Printed On: {{date('D M, Y')}} &nbsp; | &nbsp; Time: {{date('h:i:s A')}}</span>

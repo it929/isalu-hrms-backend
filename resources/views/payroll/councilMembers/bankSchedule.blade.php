@@ -2,7 +2,7 @@
 <html>
 <head>
   
-  <title>SUPREME COURT OF NIGERIA...::...Bank Schedule</title>
+  <title>ISALU HOSPITAL LIMITED...::...Bank Schedule</title>
   <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
   
 <style type="text/css">
@@ -90,7 +90,7 @@ table tr th, table tr td
         <div class="col-xs-2"></div>
         <div class="col-xs-8">
           <div>
-            <h2 class="text-center"><strong>SUPREME COURT OF NIGERIA, ABUJA</strong></h2>
+            <h2 class="text-center"><strong>ISALU HOSPITAL LIMITED, ABUJA</strong></h2>
             
             <h3 class=" text-center">COUNCIL MEMBERS SALARY SCHEDULE,<br/> FOR THE MONTH OF {{$month}} {{$year}}</h3>
           </div>

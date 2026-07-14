@@ -3,7 +3,7 @@
 
 <head>
 
-    <title>SUPREME COURT OF NIGERIA...::...E-payment Schedule</title>
+    <title>ISALU HOSPITAL LIMITED...::...E-payment Schedule</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 
     <style type="text/css">
@@ -136,7 +136,7 @@
                     <div class="col-xs-2"></div>
                     <div class="col-xs-8">
                         <div>
-                            <h2 class="text-center"><strong>SUPREME COURT OF NIGERIA</strong></h2>
+                            <h2 class="text-center"><strong>ISALU HOSPITAL LIMITED</strong></h2>
 
                             <h3 class="text-center">BANK SCHEDULE FOR THE MONTH ENDED {{ $month }}
                                 {{ $year }}</h3>

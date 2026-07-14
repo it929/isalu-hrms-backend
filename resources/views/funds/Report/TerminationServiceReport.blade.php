@@ -20,7 +20,7 @@
 		<div class="col-xs-2"><img src="{{asset('Images/logo.jpg')}}" class="responsive"></div>
 		<div class="col-xs-8">
 			<div>
-				<h4 class="text-success text-center"><strong>SUPREME COURT OF NIGERIA</strong></h4>
+				<h4 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h4>
 				<h5 class="text-center text-success"><strong>10, PORTHARCOURT CRESCENT, AREA 11, GARKI, ABUJA</strong></h5>
 				<h6 class=" text-center text-success"><strong>REPORT ON PARTICULARS OF TERMINATION OF SERVICE</strong></h6>
 			</div>

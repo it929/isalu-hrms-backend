@@ -2,7 +2,7 @@
 <html>
 <head>
 
-  <title>SUPREME COURT OF NIGERIA...::...E-payment Schedule</title>
+  <title>ISALU HOSPITAL LIMITED...::...E-payment Schedule</title>
   <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 
 <style type="text/css">
@@ -118,7 +118,7 @@ $lock = 0;
         <div class="col-xs-2"></div>
         <div class="col-xs-8">
           <div>
-            <h4 class="text-success text-center"><strong>SUPREME COURT OF NIGERIA, ABUJA</strong></h4>
+            <h4 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED, ABUJA</strong></h4>
 
             <h6 class=" text-center text-success">COUNCIL MEMBERS SALARY ANALYSIS FOR {{$month}} {{$year}}</h6>
           </div>

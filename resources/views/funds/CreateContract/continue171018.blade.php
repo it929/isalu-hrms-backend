@@ -78,8 +78,8 @@
                 @endif
 
     <!-- <div align="center">
-      <h3><b><div>{{strtoupper('SUPREME COURT OF NIGERIA')}}</div></b></h3>
-      <div><h4><b>{{strtoupper('SUPREME COURT OF NIGERIA, THREE ARMS ZONE, CENTRAL DISTRICT PMB 308, ABUJA')}}</b></h4></div>
+      <h3><b><div>{{strtoupper('ISALU HOSPITAL LIMITED')}}</div></b></h3>
+      <div><h4><b>{{strtoupper('ISALU HOSPITAL LIMITED, THREE ARMS ZONE, CENTRAL DISTRICT PMB 308, ABUJA')}}</b></h4></div>
     </div> -->
   <form class="form-horizontal" role="form" action="" method="post" id="form1" enctype="multipart/form-data">
         {{ csrf_field() }}

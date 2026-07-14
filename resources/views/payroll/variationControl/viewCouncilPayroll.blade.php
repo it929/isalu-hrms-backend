@@ -76,7 +76,7 @@
                 <td colspan="2">
                     <h3>MINISTRY/DEPARTMENT:
 
-                        SUPREME COURT OF NIGERIA, ABUJA </h3>
+                        ISALU HOSPITAL LIMITED, ABUJA </h3>
                 </td>
             </tr>
             <tr>

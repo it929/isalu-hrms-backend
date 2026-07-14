@@ -120,7 +120,7 @@
 
         <div class="card-body">
             <div class="text-center fw-bold mb-4 sub-header">
-                SUPREME COURT OF NIGERIA STAFF LIST BY STATES OF ORIGIN AS AT
+                ISALU HOSPITAL LIMITED STAFF LIST BY STATES OF ORIGIN AS AT
                 {{ date('d-M-Y') }}
             </div>
 

@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link rel="shortcut icon" href="images/favicon.ico">
-<title>SUPREME COURT OF NIGERIA...::...Report</title>
+<title>ISALU HOSPITAL LIMITED...::...Report</title>
 <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 <style type="text/css">
 <!--
@@ -115,7 +115,7 @@ $(window).keyup(function(e){
   </table>
   <table class="table tblborder"  border="1" align="left" cellpadding="0" cellspacing="0" id="tableData" style="margin-top: 20px;">
     <tr>
-      <th colspan="13" class="text-center">SUPREME COURT OF NIGERIA</th>
+      <th colspan="13" class="text-center">ISALU HOSPITAL LIMITED</th>
       </tr>
       <tr><th colspan="13" class="text-center">ADVICE OF DEDUCTION FROM SALARY</th></tr>
       @if($reportType == 'TAX')
@@ -181,7 +181,7 @@ $(window).keyup(function(e){
  
   <td>{{$k++}}</td>
   @if($reportType == 'NHF')
-  <td>SUPREME COURT OF NIGERIA</td>
+  <td>ISALU HOSPITAL LIMITED</td>
   <td>0-200011466</td>
   <td>{{$list->surname}}</td>
   <td>{{$list->first_name}}</td>

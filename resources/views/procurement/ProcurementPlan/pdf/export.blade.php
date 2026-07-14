@@ -30,8 +30,8 @@
     <div class="row">
         <div class="col-md-8">
             <div style="text-align: center;">
-                <h3><strong>Supreme Court of Nigeria</strong></h3>
-                <h4><strong>3 ARMS ZONE SUPREME COURT COMPLEX, ABUJA</strong></h4>
+                <h3><strong>ISALU HOSPITAL LIMITED</strong></h3>
+                <h4><strong>ISALU HOSPITAL LIMITED</strong></h4>
             </div>
         </div>
     </div>

@@ -30,7 +30,7 @@
 
                 <!-- Job Order Header -->
                 <div class="well well-sm text-center" style="background-color: #00a65a; color: white;">
-                    <h2>SUPREME COURT OF NIGERIA</h2>
+                    <h2>ISALU HOSPITAL LIMITED</h2>
                     <h4>ABUJA</h4>
                     <h3>JOB ORDER - {{ $jobOrder->job_order_no ?? '______' }}</h3>
                     <h4>No: {{ $jobOrder->job_order_no ?? '______' }} Original</h4>

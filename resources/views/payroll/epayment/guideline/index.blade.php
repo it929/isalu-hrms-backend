@@ -87,7 +87,7 @@
 
     <div id="contain1" class="box-body panel">
         <div> 
-           <h4>IMPLEMENTATION OF e-PAYMENT GUIDELINE FOR SUPREME COURT OF NIGERIA</h4>
+           <h4>IMPLEMENTATION OF e-PAYMENT GUIDELINE FOR ISALU HOSPITAL LIMITED</h4>
            <p>The Manager,</p>
            <p>
                 @if ($bank_name != NULL )

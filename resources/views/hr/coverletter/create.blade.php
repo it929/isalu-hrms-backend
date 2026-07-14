@@ -25,7 +25,7 @@
 <table width="680" border="0" align="center" cellpadding="0" cellspacing="0" style="font-size:17px">
   <tr>
     <td height="23">&nbsp;</td>
-    <td colspan="2" align="center" style="font-weight:bold">SUPREME COURT OF NIGERIA, ABUJA</td>
+    <td colspan="2" align="center" style="font-weight:bold">ISALU HOSPITAL LIMITED, ABUJA</td>
     <td>&nbsp;</td>
   </tr>
 

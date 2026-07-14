@@ -10,7 +10,7 @@ User Area
 		<div class="col-md-12">
 			<div class="box box-solid">
 				<div class="box-header with-border">
-					<h3 class="text-center">SUPREME COURT OF NIGERIA HUMAN RESOURCE APPLICATION</h3>
+					<h3 class="text-center">ISALU HOSPITAL LIMITED HUMAN RESOURCE APPLICATION</h3>
 					<p class="text-red lead text-center">If you need assistance, please send a mail to support@supremecourt.gov.ng Thank you</p>
 				</div>
 				<!-- /.box-header -->

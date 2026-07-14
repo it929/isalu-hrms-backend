@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>Supreme Court of Nigeria...::...Staff Cooperative E-payment</title>
+    <title>ISALU HOSPITAL LIMITED...::...Staff Cooperative E-payment</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 
     <style type="text/css">
@@ -112,8 +112,8 @@
                     </div>
                     <div class="col-xs-8">
                         <div>
-                            <h4 class="text-success text-center"><strong>Supreme Court of Nigeria</strong></h4>
-                            <h5 class="text-center text-success"><strong> SUPREME COURT COMPLEX </strong></h5>
+                            <h4 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h4>
+                            <h5 class="text-center text-success"><strong> ISALU HOSPITAL LIMITED </strong></h5>
                             <h6 class=" text-center text-success"><strong>THREE ARM ZONE</strong></h6>
                             <h6 class=" text-center text-success">STAFF COOPERATIVE E-PAYMENT MANDATE</h6>
                         </div>

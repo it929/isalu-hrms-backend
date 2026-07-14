@@ -3,7 +3,7 @@
 
 <head>
 
-    <title>Supreme Court of Nigeria</title>
+    <title>ISALU HOSPITAL LIMITED</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 
 
@@ -65,7 +65,7 @@
         </div>
         <div style="">
             <div style="">
-                <div class="col-sm-6"><strong>Employer Name:</strong> SUPREME COURT OF NIGERIA</div>
+                <div class="col-sm-6"><strong>Employer Name:</strong> ISALU HOSPITAL LIMITED</div>
                 <div class="col-sm-6"> <strong>Employer NSITF No.:</strong> </div>
             </div>
         </div>

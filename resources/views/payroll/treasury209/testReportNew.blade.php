@@ -5,7 +5,7 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <link rel="shortcut icon" href="images/favicon.ico">
-    <title>SUPREME COURT OF NIGERIA...::...Report</title>
+    <title>ISALU HOSPITAL LIMITED...::...Report</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
     <style type="text/css">
         .style25 {
@@ -274,7 +274,7 @@
                 var ws_data = [];
 
                 // Add headers with proper formatting
-                ws_data.push(["SUPREME COURT OF NIGERIA"]);
+                ws_data.push(["ISALU HOSPITAL LIMITED"]);
                 ws_data.push(["ADVICE OF DEDUCTION FROM SALARY"]);
 
                 @if (isset($reportType) && $reportType == 'TAX')
@@ -508,7 +508,7 @@
         <!-- Report Table -->
         {{-- <table class="tblborder compact-table" border="1" cellpadding="0" cellspacing="0" >
             <tr>
-                <th colspan="6" class="text-center" style="font-size: 16px; padding: 8px;">SUPREME COURT OF NIGERIA
+                <th colspan="6" class="text-center" style="font-size: 16px; padding: 8px;">ISALU HOSPITAL LIMITED
                 </th>
             </tr>
             <tr>
@@ -539,7 +539,7 @@
         @if (isset($reportType->determinant) && $reportType->determinant == 'TAX')
 
             <div class="text-center" style="line-height: 6px; margin-bottom: 35px;">
-                <h4 style="font-size: 16px; padding: 8px;"> <strong>SUPREME COURT OF NIGERIA</strong> </h4>
+                <h4 style="font-size: 16px; padding: 8px;"> <strong>ISALU HOSPITAL LIMITED</strong> </h4>
                 <p style="font-size: 16px; padding: 8px;">Three Arms Zone, Abuja</p>
                 @if (isset($reportType->determinant) && $reportType->determinant == 'TAX')
                     <h4 style="font-size: 24px; ">Return of Pay As You Earn for: {{ $selectedMonth }}
@@ -554,7 +554,7 @@
         @elseif (isset($reportType->determinant) && $reportType->determinant == 'NetPay')
             <div>
                 <h4 class="text-center" style="line-height: 6px; margin-bottom: 35px; font-size: 16px; padding: 8px;">
-                    <strong>SUPREME COURT OF NIGERIA</strong>
+                    <strong>ISALU HOSPITAL LIMITED</strong>
                 </h4>
 
             </div>

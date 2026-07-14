@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link rel="shortcut icon" href="images/favicon.ico">
-<title>SUPREME COURT OF NIGERIA</title>
+<title>ISALU HOSPITAL LIMITED</title>
 <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 <style type="text/css">
 
@@ -44,7 +44,7 @@ body {
 <div align="center"><strong><span class="style2"><h3><br />
   <br />
   <br />
-  SUPREME COURT OF NIGERIA</h3>
+  ISALU HOSPITAL LIMITED</h3>
 <h4>PAYMENT VOUCHER EMOLUMENTS - SENIOR OFFICERS</h4>
 </span>
         </strong></div>

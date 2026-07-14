@@ -24,7 +24,7 @@ border:1px solid #333;
       <div class="col-xs-2"><img src="{{asset('Images/logo.jpg')}}" class="responsive"></div>
       <div class="col-xs-8">
         <div>
-          <h3 class="text-success text-center"><strong>SUPREME COURT OF NIGERIA</strong></h3>
+          <h3 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h3>
           <h4 class="text-center text-success"><strong>THREE ARMS ZONE, CENTRAL DISTRICT PMB 308, ABUJA`</strong></h4>
          <h4 class="text-center text-success"><strong>Audit Log</strong></h4>
         </div>

@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link rel="shortcut icon" href="images/favicon.ico">
-<title>SUPREME COURT OF NIGERIA...::...Bank Schedule</title>
+<title>ISALU HOSPITAL LIMITED...::...Bank Schedule</title>
 
 <style type="text/css">
 <!--

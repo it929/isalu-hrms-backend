@@ -2,7 +2,7 @@
 <html>
 <head>
 
-  <title>SUPREME COURT OF NIGERIA</title>
+  <title>ISALU HOSPITAL LIMITED</title>
   <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 
 
@@ -55,7 +55,7 @@
  </div>
  </div>
  <div style="">
-  <div style=""><div class="col-sm-6"><strong>Employer Name:</strong> SUPREME COURT OF NIGERIA</div> <div class="col-sm-6"> <strong>Employer NSITF No.:</strong> </div></div>
+  <div style=""><div class="col-sm-6"><strong>Employer Name:</strong> ISALU HOSPITAL LIMITED</div> <div class="col-sm-6"> <strong>Employer NSITF No.:</strong> </div></div>
   </div>
 
 <table border="0" align="center" cellpadding="0" cellspacing="0" >

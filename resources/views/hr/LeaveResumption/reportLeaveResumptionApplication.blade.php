@@ -17,8 +17,8 @@
     			</div>
     			<div align="left" class="col-xs-10">
         			<div align="center" class="text-success text-center">
-        				<h3><strong>SUPREME COURT OF NIGERIA</strong></h3>
-        				<h4>SUPREME COURT OF NIGERIA COMPLEX,</h4>
+        				<h3><strong>ISALU HOSPITAL LIMITED</strong></h3>
+        				<h4>ISALU HOSPITAL LIMITED COMPLEX,</h4>
 						<h4>THREE ARMS ZONE,</h4>
 						<h4>ABUJA</h4>
         			</div>
