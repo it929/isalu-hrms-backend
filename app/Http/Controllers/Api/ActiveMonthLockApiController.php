@@ -415,6 +415,75 @@ class ActiveMonthLockApiController extends Controller
     }
 
     /**
+     * POST /api/nextjs/payroll/lock-active-month/audit-reject
+     * Reject the payroll globally and send it back to HR/Finance locked stage.
+     */
+    public function auditReject(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            if (!$ctx['isSuperAdmin'] && !$ctx['isAuditStaff']) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied: Only Audit staff can reject.'], 403);
+            }
+
+            $request->validate([
+                'year'    => 'required|integer',
+                'month'   => 'required|string',
+                'remarks' => 'required|string'
+            ]);
+
+            $year = (int)$request->input('year');
+            $month = strtoupper(trim($request->input('month')));
+            $monthInt = $this->monthToInt($month);
+
+            $totalComputed = DB::table('payroll_conpt')
+                ->where('year', $year)
+                ->where('month', $monthInt)
+                ->count();
+
+            if ($totalComputed === 0) {
+                return response()->json(['status' => 'error', 'message' => 'No computed payroll records found.'], 400);
+            }
+
+            $anyNonStage2 = DB::table('payroll_conpt')
+                ->where('year', $year)
+                ->where('month', $monthInt)
+                ->where('vstage', '!=', 2)
+                ->exists();
+
+            if ($anyNonStage2) {
+                return response()->json(['status' => 'error', 'message' => 'Rejection is only allowed when payroll is under Audit review (stage 2).'], 400);
+            }
+
+            DB::table('payroll_conpt')
+                ->where('year', $year)
+                ->where('month', $monthInt)
+                ->update([
+                    'vstage'        => 1,
+                    'audit_checked' => 0
+                ]);
+
+            $remarks = $request->input('remarks');
+            $logMsg = " active month payroll rejected by audit globally for " . $month . "/" . $year . ". Remarks: " . $remarks;
+            $this->addLog($request, $ctx['userId'], $logMsg);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Payroll rejected by Audit successfully.'
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $th) {
+            Log::error('ActiveMonthLockApiController auditReject: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
      * POST /api/nextjs/payroll/lock-active-month/pay
      * Mark checked payroll records as paid and transition period stage.
      */
