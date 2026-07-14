@@ -151,9 +151,9 @@
 						<td>
 						<div class="col-md-5 addr pull-right">
 							<h6><span>Ref. No NICB/455/03/VOLIV/</span> <span><input type="text" name="fileno" id="fileno" class="form-control stylecontrol" style="width:20%; display: inline;" placeholder="___________________"></span></h6>
-							<h6>SUPREME COURT OF NIGERIA</h6>
+							<h6>ISALU HOSPITAL LIMITED</h6>
 							<h6>THREE ARMS ZONE, CENTRAL DISTRICT PMB 308, ABUJA</h6>
-							<h6>SUPREME COURT OF NIGERIA COMPLEX</h6>
+							<h6>ISALU HOSPITAL LIMITED COMPLEX</h6>
 							<h6>ABUJA</h6>
 							<h6>DATE: <input type="text" name="date" id="date" class="form-control stylecontrol" style="width:45%; display: inline;" placeholder="_______________________"></h6>
 						</div>

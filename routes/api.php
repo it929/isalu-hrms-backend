@@ -168,6 +168,7 @@ Route::prefix('nextjs')->group(function () {
         Route::post('/payslip/send-email-bulk', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'sendPayslipEmailBulk']);
         Route::get('/hr-signature', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getHrSignature']);
         Route::post('/hr-signature', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'saveHrSignature']);
+        Route::post('/print-activation', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'togglePrintActivation']);
         Route::get('/staff-netpay/{staffId}', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getStaffNetPay']);
 
         // Active Month Setup

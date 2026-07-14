@@ -108,7 +108,7 @@
 						<td>
 						<div class="col-md-5 pull-right">
 							<h6><span>Ref. No NICB/455/03/VOLIV/{{$list->fileNo}}</span> <span></span></h6>
-							<h6>SUPREME COURT OF NIGERIA</h6>
+							<h6>ISALU HOSPITAL LIMITED</h6>
 							<h6>10 PORTH-HARCOURT CRESENT</h6>
 							<h6>Area II GARKI</h6>
 							<h6>ABUJA</h6>

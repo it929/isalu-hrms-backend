@@ -176,7 +176,7 @@ class StyledBatchCapitalExport implements
                 $sheet->mergeCells('A3:H3');
                 $sheet->mergeCells('A4:H4');
 
-                $sheet->setCellValue('A1', 'SUPREME COURT OF NIGERIA');
+                $sheet->setCellValue('A1', 'ISALU HOSPITAL LIMITED');
                 $sheet->setCellValue('A2', 'Three Arms Zone');
                 $sheet->setCellValue('A3', 'Account Number: ' . $this->accNo);
                 $sheet->setCellValue('A4', 'E-Payment Schedule');

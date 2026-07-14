@@ -413,7 +413,7 @@
                                 <th colspan="4">
                                     <h2 class="text-success">
 
-                                        <strong>SUPREME COURT OF NIGERIA</strong>
+                                        <strong>ISALU HOSPITAL LIMITED</strong>
                                     </h2>
                                 </th>
                             </tr>

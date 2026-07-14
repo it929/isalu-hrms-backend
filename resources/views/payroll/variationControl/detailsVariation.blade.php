@@ -3,7 +3,7 @@
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
   <link rel="shortcut icon" href="images/favicon.ico">
-  <title>Supreme Court of Nigeria PAYROLL
+  <title>ISALU HOSPITAL LIMITED PAYROLL
     ...::...Payroll Report</title>
 
 <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
@@ -25,7 +25,7 @@ color:#06c;
 
 
 <body>
-<div align="center"><h2><div style="color:#06c;">Supreme Court of Nigeria
+<div align="center"><h2><div style="color:#06c;">ISALU HOSPITAL LIMITED
       <br />
       PAYROLL</div><br />
   </h2>

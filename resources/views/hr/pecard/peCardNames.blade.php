@@ -7,11 +7,11 @@ PE-CARD
 <div class="box-body">
   <div class="row">
     <div class="col-md-8 col-md-offset-2">
-      <b><p class="profile-username text-center text-success">SUPREME COURT OF NIGERIA
+      <b><p class="profile-username text-center text-success">ISALU HOSPITAL LIMITED
       </p></b>
       <b><p class="profile-username text-center text-success">PAYROLL</p></b>
       <b><p class="text-muted text-left ">Payroll P.V. No:</p></b>
-      <p class="text-muted text-left ">MINISTRY/DEPARTMENT: SUPREME COURT OF NIGERIA, {{session('division')}} DIVISION </p>
+      <p class="text-muted text-left ">MINISTRY/DEPARTMENT: ISALU HOSPITAL LIMITED, {{session('division')}} DIVISION </p>
       <b><p class="text-muted text-left "> MONTH ENDING: {{$bankName}} {{$bankgroup}}</p></b>
       <table class="table table-hover">
         <tr>

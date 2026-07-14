@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link rel="shortcut icon" href="images/favicon.ico">
-<title>SUPREME COURT OF NIGERIA </title>
+<title>ISALU HOSPITAL LIMITED </title>
 <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 <style type="text/css">
 
@@ -56,7 +56,7 @@ color:#000;
     <br />
       <div>{{ strtoupper(isset($divisionName) && $divisionName ? $divisionName : "Abuja") }}</div>
   </h3> --}}
-  <h4>SUPREME COURT OF NIGERIA</h4>
+  <h4>ISALU HOSPITAL LIMITED</h4>
   <h5>PAYMENT VOUCHER EMOLUMENTS - SENIOR OFFICERS</h5>
 </span>
         </strong></div>

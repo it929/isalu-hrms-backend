@@ -10,7 +10,7 @@
     <div class="row">
           <div class="col-md-12">
               <div align="center"><h2><strong>FEDERAL GOVERNMENT OF NIGERIA</strong></h2></div>
-              <div align="center"><h4><strong>Supreme Court of Nigeria</strong></h4></div>
+              <div align="center"><h4><strong>ISALU HOSPITAL LIMITED</strong></h4></div>
               <div align="center"><h5><strong>PAYMENT VOUCHER</strong></h5></div>
           </div>
       </div>

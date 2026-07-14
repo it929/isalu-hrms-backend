@@ -25,13 +25,13 @@ NHF Reports
 
       <!-- Main Content -->
       <div id="mainContent">
-        <h2 class="text-center">SUPREME COURT OF NIGERIA</h2>
+        <h2 class="text-center">ISALU HOSPITAL LIMITED</h2>
         <h3 class="text-center">MONTHLY NHF CONTRIBUTION SCHEDULE</h3>
         
         <div class="col-md-12">
           <div class="employer-info">
             <div class="init">
-              <strong>EMPLOYER NAME:</strong> <span> SUPREME COURT OF NIGERIA</span>
+              <strong>EMPLOYER NAME:</strong> <span> ISALU HOSPITAL LIMITED</span>
             </div>
             <div class="init">
               <strong>EMPLOYER NHF NUMBER:</strong> <span> </span>
@@ -72,7 +72,7 @@ NHF Reports
                     <td>{{ $i++ }}</td>
                     <td>{{$list->surname}} {{$list->first_name}} {{$list->othernames}}</td>
                     <td>{{$list->fileNo}}</td>
-                    <td>Supreme Court of Nigeria</td>
+                    <td>ISALU HOSPITAL LIMITED</td>
                     <td>{{$list->nhfNo}}</td>
                     <td>{{$list->bank_name}}</td> 
                     <td>{{$list->AccNo}}</td> 

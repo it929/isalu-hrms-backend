@@ -79,10 +79,10 @@
     <div class="col-md-12 hidden-print">
         <div class="row">
             <div>
-                <h3 class="text-success text-center"><b>SUPREME COURT OF NIGERIA</b></h3>
+                <h3 class="text-success text-center"><b>ISALU HOSPITAL LIMITED</b></h3>
             </div>
             <div>
-                <h4 class="text-success text-center"><b>SUPREME COURT OF NIGERIA,THREE ARMS ZONE, CENTRAL DISTRICT PMB 308, ABUJA</b></h4>
+                <h4 class="text-success text-center"><b>ISALU HOSPITAL LIMITED,THREE ARMS ZONE, CENTRAL DISTRICT PMB 308, ABUJA</b></h4>
             </div>
         </div>
     </div>

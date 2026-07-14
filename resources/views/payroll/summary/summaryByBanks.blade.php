@@ -14,7 +14,7 @@
       <div class="col-xs-2"><img src="{{asset('Images/logo.jpg')}}" class="responsive"></div>
       <div class="col-xs-8">
         <div>
-          <h3 class="text-success text-center"><strong>Supreme Court of Nigeria</strong></h3>
+          <h3 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h3>
           
         </div>
       </div>

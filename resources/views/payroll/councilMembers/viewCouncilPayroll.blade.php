@@ -3,7 +3,7 @@
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
   <link rel="shortcut icon" href="images/favicon.ico">
-  <title>SUPREME COURT OF NIGERIA
+  <title>ISALU HOSPITAL LIMITED
     ...::...Payroll Report</title>
 
 <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
@@ -44,7 +44,7 @@ color:#FFF !important;
 
 
 <body>
-<div align="center"><h2><div style="color:#06c;">SUPREME COURT OF NIGERIA
+<div align="center"><h2><div style="color:#06c;">ISALU HOSPITAL LIMITED
       <br />
       COUNCIL MEMBERS PAYROLL</div><br />
   </h2>
@@ -59,7 +59,7 @@ color:#FFF !important;
   <tr>
     <td colspan="2"><h3>MINISTRY/DEPARTMENT:
         
-        SUPREME COURT OF NIGERIA, ABUJA </h3></td>
+        ISALU HOSPITAL LIMITED, ABUJA </h3></td>
   </tr>
   <tr>
     <td width="1294">

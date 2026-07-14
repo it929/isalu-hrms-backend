@@ -5,7 +5,7 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Supreme Court of Nigeria</title>
+    <title>ISALU HOSPITAL LIMITED</title>
     <!-- Tell the browser to be responsive to screen width -->
     <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
@@ -27,7 +27,7 @@
 </head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link rel="shortcut icon" href="images/favicon.ico">
-<title>Supreme Court of Nigeria...::...PeCard Report</title>
+<title>ISALU HOSPITAL LIMITED...::...PeCard Report</title>
 <style type="text/css">
 @media print {
 

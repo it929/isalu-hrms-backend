@@ -331,5 +331,35 @@ class ActiveMonthLockApiTest extends TestCase
                 'month'   => 'OCTOBER',
                 'year'    => 2026
             ]);
+
+        // 11. Test Print Activation Flow
+        // Ensure tblactivemonth has print_active = 0 initially
+        DB::table('tblactivemonth')->where('courtID', 9)->update(['print_active' => 0]);
+
+        $regHeaders = [
+            'X-User-Id' => 9999,
+            'Accept'    => 'application/json'
+        ];
+
+        // Fetch payslip as regular staff -> should fail (403)
+        $response = $this->getJson("/api/nextjs/payroll/payslip?staff_id={$user->ID}&month=OCTOBER&year=2026", $regHeaders);
+        $response->assertStatus(403)
+            ->assertJson(['status' => 'error', 'message' => 'Payslip printing has not been activated yet by HR for the current active period.']);
+
+        // Toggle print activation to 1 as Admin
+        $response = $this->postJson('/api/nextjs/payroll/print-activation', [
+            'print_active' => true
+        ], $headers);
+        $response->assertStatus(200)
+            ->assertJson(['status' => 'success', 'message' => 'Payslip printing successfully activated!']);
+
+        // Fetch payslip as regular staff after activation -> should now succeed (200)
+        $response = $this->getJson("/api/nextjs/payroll/payslip?staff_id={$user->ID}&month=OCTOBER&year=2026", $regHeaders);
+        $response->assertStatus(200);
+
+        // Fetch signature as admin -> should return print_active as 1
+        $response = $this->getJson('/api/nextjs/payroll/hr-signature', $headers);
+        $response->assertStatus(200)
+            ->assertJsonPath('print_active', 1);
     }
 }

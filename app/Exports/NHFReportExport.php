@@ -46,7 +46,7 @@ class NHFReportExport implements FromCollection, WithHeadings, WithTitle
         // Add serial numbers
         $data = $data->map(function ($item, $key) {
             $item->sn = $key + 1;
-            $item->organization = 'Supreme Court of Nigeria';
+            $item->organization = 'ISALU HOSPITAL LIMITED';
             $item->remark = $this->month . ' ' . $this->year . ' NHF Contribution';
             return $item;
         });

@@ -10,9 +10,9 @@
             </div>
             <div class="col-md-4"></div>
             <div class="col-md-4 align-right" style="margin-right: 0px !important;"><span class="pull-right text-success"><em>Form SCN 116</em></span> <br><span class="text-success" style="font-weight:bold; font-size:18px;">
-                SUPREME COURT OF NIGERIA,<br></span>
+                ISALU HOSPITAL LIMITED,<br></span>
                 <span class="text-success" style="font-weight:bold;">
-                SUPREME COURT OF NIGERIA COMPLEX,<br>
+                ISALU HOSPITAL LIMITED COMPLEX,<br>
                 THREE ARMS ZONE,<br>
                 CENTRAL DISTRICT,<br>
                 P.M.B. 483,<br>

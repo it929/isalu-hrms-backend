@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link rel="shortcut icon" href="images/favicon.ico">
-<title>Supreme Court of Nigeria</title>
+<title>ISALU HOSPITAL LIMITED</title>
 <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 <style type="text/css">
 
@@ -49,7 +49,7 @@ body {
 <div align="center"><strong><span class="style2"><h3><br />
   <br />
   <br />
-Supreme Court of Nigeria</h3>
+ISALU HOSPITAL LIMITED</h3>
 <h4>ANALYSIS OF STAFF SALARIES FOR THE MONTH OF {{$month}} {{$year}}</h4>
 </span>
         </strong></div>

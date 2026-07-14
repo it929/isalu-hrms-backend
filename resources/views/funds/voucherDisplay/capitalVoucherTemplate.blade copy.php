@@ -1837,7 +1837,7 @@
                     <img src="{{ asset('Images/scn_logo.png') }}" class="img-responsive responsive"
                         style="width:100px; height:100px;" />
 
-                    <h3><strong>Supreme Court of Nigeria </strong></h3>
+                    <h3><strong>ISALU HOSPITAL LIMITED </strong></h3>
                     <h4>Three Arms Zone, Abuja</h4>
                 </div>
             </div>
@@ -1921,7 +1921,7 @@
                         <img src="{{ asset('Images/scn_logo.png') }}" class="img-responsive responsive"
                             style="width:100px; height:100px;" />
 
-                        <h3><strong>Supreme Court of Nigeria </strong></h3>
+                        <h3><strong>ISALU HOSPITAL LIMITED </strong></h3>
                         <h4>Three Arms Zone, Abuja</h4>
                     </div>
                 </div>
@@ -2013,7 +2013,7 @@
                         <img src="{{ asset('Images/scn_logo.png') }}" class="img-responsive responsive"
                             style="width:100px; height:100px;" />
 
-                        <h3><strong>Supreme Court of Nigeria </strong></h3>
+                        <h3><strong>ISALU HOSPITAL LIMITED </strong></h3>
                         <h4>Three Arms Zone, Abuja</h4>
                     </div>
                 </div>
@@ -2106,7 +2106,7 @@
                         <img src="{{ asset('Images/scn_logo.png') }}" class="img-responsive responsive"
                             style="width:100px; height:100px;" />
 
-                        <h3><strong>Supreme Court of Nigeria </strong></h3>
+                        <h3><strong>ISALU HOSPITAL LIMITED </strong></h3>
                         <h4>Three Arms Zone, Abuja</h4>
                     </div>
                 </div>

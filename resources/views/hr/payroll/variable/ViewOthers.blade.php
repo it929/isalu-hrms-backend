@@ -7,7 +7,7 @@
 @section('content')
 
   <div align="center" style="background-color:#9f9f9f; color:#fff; padding:5px;">
-    <strong>SUPREME COURT OF NIGERIA</strong>
+    <strong>ISALU HOSPITAL LIMITED</strong>
     <br />
   </div>
 

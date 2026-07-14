@@ -146,7 +146,7 @@
                     <div class="col-xs-8">
                         <div>
                             {{-- <h4 class="text-success text-center"><strong>COURT OF APPEAL</strong></h4> --}}
-                            <h5 class="text-center text-success"><strong> SUPREME COURT OF NIGERIA </strong></h5>
+                            <h5 class="text-center text-success"><strong> ISALU HOSPITAL LIMITED </strong></h5>
                             <h6 class=" text-center text-success"><strong>THREE ARMS ZONE</strong></h6>
                             <h6 class=" text-center text-success">E-PAYMENT SCHEDULE - {{strtoupper($divisionName)}} DIVISION</h6>
                         </div>

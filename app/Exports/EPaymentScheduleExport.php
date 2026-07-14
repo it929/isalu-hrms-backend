@@ -24,7 +24,7 @@ class EPaymentScheduleExport implements FromArray, WithDrawings, WithEvents, Wit
         $sheet = [];
 
         $sheet[] = ['']; // row 1 (logos will sit here)
-        $sheet[] = ['SUPREME COURT COMPLEX']; // row 2
+        $sheet[] = ['ISALU HOSPITAL LIMITED']; // row 2
         $sheet[] = ['THREE ARM ZONE']; // row 3
         $sheet[] = ['ACCOUNT NUMBER: ' . ($this->meta['account_no'] ?? 'N/A')]; // row 4
         $sheet[] = [$this->meta['title'] ?? 'E-PAYMENT SCHEDULE']; // row 5

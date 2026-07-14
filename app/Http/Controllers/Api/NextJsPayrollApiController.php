@@ -1376,6 +1376,23 @@ class NextJsPayrollApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Staff ID, Month, and Year are required.'], 422);
         }
 
+        $ctx = $this->getUserContext($request);
+        $activePeriod = DB::table('tblactivemonth')->first();
+        $isCurrentActivePeriod = ($activePeriod && strtoupper(trim($activePeriod->month)) === strtoupper(trim($month)) && (int)$activePeriod->year === (int)$year);
+
+        if ($isCurrentActivePeriod) {
+            $printActive = $activePeriod ? ($activePeriod->print_active ?? 0) : 0;
+            if (!$printActive) {
+                $isAdmin = $ctx && ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']);
+                if (!$isAdmin) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Payslip printing has not been activated yet by HR for the current active period.'
+                    ], 403);
+                }
+            }
+        }
+
         // 1. Fetch the staff information
         $personData = DB::table('tblper')
             ->where('ID', $staffId)
@@ -1501,10 +1518,14 @@ class NextJsPayrollApiController extends Controller
             }
 
             $signature = DB::table('users')->where('id', $ctx['userId'])->value('signature');
+            
+            $activePeriod = DB::table('tblactivemonth')->first();
+            $printActive = $activePeriod ? (int)($activePeriod->print_active ?? 0) : 0;
 
             return response()->json([
-                'status'    => 'success',
-                'signature' => $signature
+                'status'       => 'success',
+                'signature'    => $signature,
+                'print_active' => $printActive
             ]);
         } catch (\Throwable $th) {
             Log::error('PayrollAPI getHrSignature: ' . $th->getMessage());
@@ -1539,6 +1560,63 @@ class NextJsPayrollApiController extends Controller
             ]);
         } catch (\Throwable $th) {
             Log::error('PayrollAPI saveHrSignature: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/nextjs/payroll/print-activation
+     * Toggle print activation status for the current active month.
+     */
+    public function togglePrintActivation(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+            }
+
+            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied: Only Admin or HR staff can toggle print activation.'], 403);
+            }
+
+            $request->validate([
+                'print_active' => 'required|boolean'
+            ]);
+
+            $printActive = $request->input('print_active') ? 1 : 0;
+
+            $activePeriod = DB::table('tblactivemonth')->first();
+            if (!$activePeriod) {
+                return response()->json(['status' => 'error', 'message' => 'No active period found.'], 400);
+            }
+
+            DB::table('tblactivemonth')
+                ->where('courtID', $activePeriod->courtID)
+                ->update([
+                    'print_active' => $printActive
+                ]);
+
+            $statusText = $printActive ? 'activated' : 'deactivated';
+
+            DB::table('audit_log')->insert([
+                'comp_name' => php_uname('a'),
+                'user_id'   => $ctx['userId'],
+                'date'      => \Carbon\Carbon::now('Africa/Lagos'),
+                'ip_addr'   => $request->ip(),
+                'operation' => " payslip printing {$statusText} for active period: " . $activePeriod->month . "/" . $activePeriod->year,
+                'host'      => $request->header('host') ?? 'localhost',
+                'referer'   => $request->fullUrl()
+            ]);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => "Payslip printing successfully {$statusText}!"
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $th) {
+            Log::error('PayrollAPI togglePrintActivation: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
     }
@@ -1661,11 +1739,9 @@ class NextJsPayrollApiController extends Controller
                     
                     <table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'>
                         <tr><td style='padding: 5px; font-weight: bold; width: 30%;'>Staff Name:</td><td style='padding: 5px;'>{$staffName}</td></tr>
-                        <tr><td style='padding: 5px; font-weight: bold;'>File No:</td><td style='padding: 5px;'>{$personData->fileNo}</td></tr>
+                        <tr><td style='padding: 5px; font-weight: bold;'>Staff ID:</td><td style='padding: 5px;'>{$personData->ID}</td></tr>
                         <tr><td style='padding: 5px; font-weight: bold;'>Department:</td><td style='padding: 5px;'>{$department}</td></tr>
                         <tr><td style='padding: 5px; font-weight: bold;'>Designation:</td><td style='padding: 5px;'>{$designation}</td></tr>
-                        <tr><td style='padding: 5px; font-weight: bold;'>Bank Name:</td><td style='padding: 5px;'>{$bankName}</td></tr>
-                        <tr><td style='padding: 5px; font-weight: bold;'>Bank Account:</td><td style='padding: 5px;'>{$bankAccount}</td></tr>
                     </table>
 
                     <div style='margin-bottom: 20px;'>
@@ -1705,13 +1781,6 @@ class NextJsPayrollApiController extends Controller
                         <table style='width: 100%; font-size: 1.2em; font-weight: bold;'>
                             <tr><td>NET PAY:</td><td style='text-align: right; color: #27ae60;'>₦{$netPay}</td></tr>
                         </table>
-                    </div>
-
-                    <div style='margin-top: 40px; border-top: 1px dashed #ccc; padding-top: 15px;'>
-                        <p style='margin: 0; font-size: 0.9em; font-weight: bold;'>Authorized Signature (HR Head):</p>
-                        <div style='margin-top: 10px;'>
-                            {$signatureHtml}
-                        </div>
                     </div>
                 </div>
             </body>
@@ -1843,11 +1912,9 @@ class NextJsPayrollApiController extends Controller
                         
                         <table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'>
                             <tr><td style='padding: 5px; font-weight: bold; width: 30%;'>Staff Name:</td><td style='padding: 5px;'>{$staffName}</td></tr>
-                            <tr><td style='padding: 5px; font-weight: bold;'>File No:</td><td style='padding: 5px;'>{$personData->fileNo}</td></tr>
+                            <tr><td style='padding: 5px; font-weight: bold;'>Staff ID:</td><td style='padding: 5px;'>{$personData->ID}</td></tr>
                             <tr><td style='padding: 5px; font-weight: bold;'>Department:</td><td style='padding: 5px;'>{$department}</td></tr>
                             <tr><td style='padding: 5px; font-weight: bold;'>Designation:</td><td style='padding: 5px;'>{$designation}</td></tr>
-                            <tr><td style='padding: 5px; font-weight: bold;'>Bank Name:</td><td style='padding: 5px;'>{$bankName}</td></tr>
-                            <tr><td style='padding: 5px; font-weight: bold;'>Bank Account:</td><td style='padding: 5px;'>{$bankAccount}</td></tr>
                         </table>
 
                         <div style='margin-bottom: 20px;'>
@@ -1887,13 +1954,6 @@ class NextJsPayrollApiController extends Controller
                             <table style='width: 100%; font-size: 1.2em; font-weight: bold;'>
                                 <tr><td>NET PAY:</td><td style='text-align: right; color: #27ae60;'>₦{$netPay}</td></tr>
                             </table>
-                        </div>
-
-                        <div style='margin-top: 40px; border-top: 1px dashed #ccc; padding-top: 15px;'>
-                            <p style='margin: 0; font-size: 0.9em; font-weight: bold;'>Authorized Signature (HR Head):</p>
-                            <div style='margin-top: 10px;'>
-                                {$signatureHtml}
-                            </div>
                         </div>
                     </div>
                 </body>

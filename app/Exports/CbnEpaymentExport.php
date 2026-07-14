@@ -74,7 +74,7 @@ class CbnEpaymentExport implements FromCollection, WithEvents
                 }
 
                 // ─── HEADER TEXT ───────────────────────────────────────
-                $sheet->setCellValue('A1', 'SUPREME COURT OF NIGERIA');
+                $sheet->setCellValue('A1', 'ISALU HOSPITAL LIMITED');
                 $sheet->mergeCells('A1:G1'); // Changed from H1 to G1
 
                 $sheet->getStyle('A1')->applyFromArray([

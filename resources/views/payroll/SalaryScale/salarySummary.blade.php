@@ -31,7 +31,7 @@
           <table width="1122" border="0" align="center" cellpadding="0" cellspacing="0">
             <tr>
               <td colspan="3"><div align="center">
-                <h2>Supreme Court of Nigeria<br />
+                <h2>ISALU HOSPITAL LIMITED<br />
                  {{$employee_type}}
                  
                   SALARY STRUCTURE</h2>

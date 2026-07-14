@@ -17,7 +17,7 @@
     			</div>
     			<div align="right" class="col-xs-10">
         			<div align="right" class="text-success green-color">
-        				<strong>SUPREME COURT OF NIGERIA<br>ABUJA</strong>
+        				<strong>ISALU HOSPITAL LIMITED<br>ABUJA</strong>
 
         			</div>
     			</div>

@@ -4,7 +4,7 @@
 <div class="box box-default" style="border: none;">
     <div class="box-body box-profile" id="printLetter" style="margin:0 5px;">
         <div class="row">
-            <div class="col-md-4 offset-4 pull-right"><h4 class="text-success text-center">SUPREME COURT OF NIGERIA, ABUJA</h4></div>
+            <div class="col-md-4 offset-4 pull-right"><h4 class="text-success text-center">ISALU HOSPITAL LIMITED, ABUJA</h4></div>
         </div>
         <div class="row">
             <div class="col-md-12 text-success" style="font-weight:bold;"><h3 class="text-center">MEMORANDUM</h3><br>

@@ -170,7 +170,7 @@ class ConsolidatedCapitalByBankMandateSheet implements
                 // ================= TITLE =================
 
                 $sheet->mergeCells('A1:G1');
-                $sheet->setCellValue('A1', 'SUPREME COURT OF NIGERIA');
+                $sheet->setCellValue('A1', 'ISALU HOSPITAL LIMITED');
 
                 $sheet->mergeCells('A2:G2');
                 $sheet->setCellValue('A2', 'Three Arms Zone, Abuja');

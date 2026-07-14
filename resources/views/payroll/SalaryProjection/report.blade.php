@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link rel="shortcut icon" href="images/favicon.ico">
-<title>SUPREME COURT OF NIGERIA</title>
+<title>ISALU HOSPITAL LIMITED</title>
 <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 <style type="text/css">
 
@@ -51,7 +51,7 @@ color:#06c; */
       <br />
       <br />
       <br />
-      SUPREME COURT OF NIGERIA OF NIGERIA{{ isset($divisionName) ?  ', '. strtoupper($divisionName) : '' }}
+      ISALU HOSPITAL LIMITED{{ isset($divisionName) ?  ', '. strtoupper($divisionName) : '' }}
       <h4>SALARY PROJECTION FOR THE MONTH OF {{isset($month) ? $month . ', ' : ''}} {{isset($year) ? $year .'.' : ''}}</h4>
     </strong>
   </div>

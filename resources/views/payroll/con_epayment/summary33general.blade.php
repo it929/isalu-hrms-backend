@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta name="csrf-token" content="{{ csrf_token() }}" />
-  <title>SUPREME COURT OF NIGERIA...::...E-payment Schedule</title>
+  <title>ISALU HOSPITAL LIMITED...::...E-payment Schedule</title>
   <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
   
 <style type="text/css">
@@ -116,8 +116,8 @@ select {
         <div class="col-xs-2"></div>
         <div class="col-xs-8">
           <div>
-            <h4 class="text-success text-center"><strong>SUPREME COURT OF NIGERIA</strong></h4>
-            <!--<h5 class="text-center text-success"><strong> SUPREME COURT OF NIGERIA COMPLEX </strong></h5>-->
+            <h4 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h4>
+            <!--<h5 class="text-center text-success"><strong> ISALU HOSPITAL LIMITED COMPLEX </strong></h5>-->
             <!--<h6 class=" text-center text-success"><strong>THREE ARMS ZONE</strong></h6>-->
             <!--<h6 class=" text-center text-success"><strong>ACCOUNT NUMBER: 1015498475</strong></h6>-->
             <h6 class=" text-center text-success">E-PAYMENT SCHEDULE</h6>

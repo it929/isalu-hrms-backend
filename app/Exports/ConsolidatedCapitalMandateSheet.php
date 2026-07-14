@@ -151,7 +151,7 @@ class ConsolidatedCapitalMandateSheet implements
                 // ================= HEADER =================
 
                 $sheet->mergeCells('A1:J1');
-                $sheet->setCellValue('A1', 'SUPREME COURT OF NIGERIA');
+                $sheet->setCellValue('A1', 'ISALU HOSPITAL LIMITED');
 
                 $sheet->getStyle('A1')->applyFromArray([
                     'font' => ['bold' => true, 'size' => 14],

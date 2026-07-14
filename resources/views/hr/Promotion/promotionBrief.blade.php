@@ -52,9 +52,9 @@
 
                     </div>
                     <div class="col-md-12"><!--2nd col-->
-                        <h2 style="text-align: center; color: #00a65a;">SUPREME COURT OF NIGERIA </h2>
+                        <h2 style="text-align: center; color: #00a65a;">ISALU HOSPITAL LIMITED </h2>
                         <h4 class="text-center">
-                            <p>SUPREME COURT OF NIGERIA Complex</p>
+                            <p>ISALU HOSPITAL LIMITED Complex</p>
                             <p>THREE ARMS ZONE, CENTRAL DISTRICT PMB 308,</p>
                             <p>Abuja</p>
                         </h4>
@@ -319,7 +319,7 @@
 
                             </table>
 
-                            <h4> (B) SUPREME COURT OF NIGERIA </h4>
+                            <h4> (B) ISALU HOSPITAL LIMITED </h4>
                             <p>
                             <ul>
                                 <li>DATE OF APPOINMENT __________________________________{{ $lists->appointment_date }}

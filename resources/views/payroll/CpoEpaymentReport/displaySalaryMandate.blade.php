@@ -275,7 +275,7 @@
             <p>Above subject refers:</p>
             <p>
                 Kindly give approval for the payment of salary of the Honourable Justices and
-                Staff of the Supreme Court of Nigeria for the month of
+                Staff of the ISALU HOSPITAL LIMITED for the month of
                 {{ strtoupper($epayment_detail->first()->month ?? '') }}, {{ $epayment_detail->first()->year ?? '' }}
             </p>
 

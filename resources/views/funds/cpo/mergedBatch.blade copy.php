@@ -77,7 +77,7 @@
 
     <div class="box-body">
         <div class="col-sm-12 ">
-            <h2 class="text-center">SUPREME COURT OF NIGERIA</h2>
+            <h2 class="text-center">ISALU HOSPITAL LIMITED</h2>
             <h3 class="text-center">MERGED PAYMENT LIST</h3>
             <br />
             <!-- 1st column -->

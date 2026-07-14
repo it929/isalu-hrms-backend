@@ -7,7 +7,7 @@ NHF Reports
   <div class="box-body" style="background:#FFF;">
     <div class="row">
       {{ csrf_field() }}    
-      <h2 class="text-center">SUPREME COURT OF NIGERIA</h2>
+      <h2 class="text-center">ISALU HOSPITAL LIMITED</h2>
            <h3 class="text-center">MONTHLY NHF CONTRIBUTION SCHEDULE</h3>
         <div class="col-md-12">
             <div class="" style="margin-bottom:20px;">

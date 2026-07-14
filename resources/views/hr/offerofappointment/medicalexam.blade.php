@@ -167,7 +167,7 @@
 						<td>
 						<div class="col-md-6 pull-right">
 						<div class="addrs">
-						<p>SUPREME COURT OF NIGERIA</p>
+						<p>ISALU HOSPITAL LIMITED</p>
 						<p>Abuja Office</p>
 						<p>10 Port-Harcourt Crescent,</p>
 						<p>Area II Garki</p>
@@ -175,7 +175,7 @@
 						</div>
 						
 						<div class="addrs">
-							<p>SUPREME COURT OF NIGERIA</p>
+							<p>ISALU HOSPITAL LIMITED</p>
 							<p>P. M. P 12768</p>
 							<p>Ikoyi</p>
 							<p>Lagos</p>

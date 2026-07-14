@@ -78,7 +78,7 @@ Management --}}
 			<tr><td align="center" style="padding:20px;flaot:left;width:100%; text-align:center;">
 				<font face="Arial, Helvetica, sans-serif" size="3" color="#96a5b5" style="font-size: 13px;">
 				<span style="font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #96a5b5;">
-					Copyrights © {{ date("Y")}} Supreme Court of Nigeria. All Rights Reserved
+					Copyrights © {{ date("Y")}} ISALU HOSPITAL LIMITED. All Rights Reserved
 				</span></font>
 			</td></tr>
 		</table>

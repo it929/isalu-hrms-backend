@@ -124,7 +124,7 @@
 
                 <!-- Card Header -->
                 <div class="panel-heading text-center" style="background:#fff; border-bottom:1px solid #eee;">
-                    <h2 style="margin:0; font-weight:bold;">SUPREME COURT OF NIGERIA</h2>
+                    <h2 style="margin:0; font-weight:bold;">ISALU HOSPITAL LIMITED</h2>
                     <h3 style="margin-top:5px;">MERGED PAYMENT LIST</h3>
                 </div>
 

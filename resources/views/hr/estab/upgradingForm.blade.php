@@ -202,7 +202,7 @@ input, textarea, select, button, meter, progress {
 						<p class="phead">
 						<h4>The Secretary</h4>
 						<h4>Federal Judicial Service Commission</h4>
-						<h4>SUPREME COURT OF NIGERIA Complex</h4>
+						<h4>ISALU HOSPITAL LIMITED Complex</h4>
 						<h4>Abuja</h4>
 						</p>
 						

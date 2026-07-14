@@ -4,7 +4,7 @@
 <div class="box box-default" style="border: none;">
     <div class="box-body box-profile" id="printLetter" style="margin:0 5px;">
         <div class="row">
-            <div class="col-md-12"><h1 class="text-success text-center">SUPREME COURT OF NIGERIA</h1></div>
+            <div class="col-md-12"><h1 class="text-success text-center">ISALU HOSPITAL LIMITED</h1></div>
 
         </div>
 
@@ -18,9 +18,9 @@
             </div>
             <div class="col-md-4"></div>
             <div class="col-md-4 align-right" id="njcAddr" style="margin-right: 0px !important;"><span class="pull-right text-success"><em>Form SCN 118</em></span> <br>
-                SUPREME COURT OF NIGERIA,<br>
+                ISALU HOSPITAL LIMITED,<br>
                 Three Arms Zone, <br>
-                SUPREME COURT OF NIGERIA Complex,<br>
+                ISALU HOSPITAL LIMITED Complex,<br>
                 PMB 483, Abuja.<br>
                 09-6705701<br>
                 Ref...................................

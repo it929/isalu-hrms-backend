@@ -96,7 +96,7 @@
 </head>
 <body>
     <div class="header">
-        <h1>SUPREME COURT OF NIGERIA</h1>
+        <h1>ISALU HOSPITAL LIMITED</h1>
         <h2>ABUJA</h2>
         <h3>JOB ORDER - {{ $jobOrder->job_order_no ?? '______' }}</h3>
         <div class="job-order-no">No: {{ $jobOrder->job_order_no ?? '______' }} Original</div>

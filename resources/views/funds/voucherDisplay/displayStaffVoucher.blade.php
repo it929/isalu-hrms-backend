@@ -938,7 +938,7 @@
                                 <h4>
                                     <div class="make-bold">
                                         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                                        <h4 class="text-center">{{ strtoupper('SUPREME COURT OF NIGERIA') }}</h4>
+                                        <h4 class="text-center">{{ strtoupper('ISALU HOSPITAL LIMITED') }}</h4>
                                         <div>
                                             <h4 class="text-center">{{ strtoupper(' PAYMENT VERIFICATION SLIP') }}
                                             </h4>
@@ -1159,7 +1159,7 @@
                                 <img src="{{ asset('Images/scn_logo.png') }}" class="img-responsive responsive"
                                     style="width:100px; height:100px;" />
 
-                                <h2><strong>Supreme Court of Nigeria </strong></h2>
+                                <h2><strong>ISALU HOSPITAL LIMITED </strong></h2>
                                 <h3>Three Arms Zone, Abuja</h3>
                             </div>
                         </div>

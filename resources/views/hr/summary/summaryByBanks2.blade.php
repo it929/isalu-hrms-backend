@@ -2,7 +2,7 @@
 <html>
 <head>
 
-  <title>SUPREME COURT OF NIGERIA...::...E-payment Schedule</title>
+  <title>ISALU HOSPITAL LIMITED...::...E-payment Schedule</title>
   <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 
 <style type="text/css">
@@ -85,7 +85,7 @@ select {
         <div class="col-xs-2"></div>
         <div class="col-xs-8">
           <div>
-            <h2 class="text-center"><strong>SUPREME COURT OF NIGERIA, ABUJA</strong></h2>
+            <h2 class="text-center"><strong>ISALU HOSPITAL LIMITED, ABUJA</strong></h2>
 
             <h3 class=" text-center">{{$month}} {{$year}} BANK SCHEDULE</h3>
           </div>

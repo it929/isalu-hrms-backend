@@ -14,7 +14,7 @@
 
         <div style="margin: 10px 20px;">
             <div align="center">
-                <h3><b>{{ strtoupper('SUPREME COURT OF NIGERIA') }}</b></h3>
+                <h3><b>{{ strtoupper('ISALU HOSPITAL LIMITED') }}</b></h3>
                 <h5><b>{{ strtoupper('LIST OF Senior STAFF DUE FOR PROMOTION') }}</b></h5>
                 <big><b></b></big>
             </div>

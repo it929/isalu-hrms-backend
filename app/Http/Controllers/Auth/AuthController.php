@@ -150,7 +150,7 @@ class AuthController extends Controller
     //             function($message){
     //                 $message->to(env('MAIL_TO_EMAIL_ADDRESS', ''), Auth::user()->name);
     //                 $message->subject('Login Notification');
-    //                 $message->from(env('MAIL_FROM_ADDRESS', ''), env('MAIL_FROM_NAME', 'SUPREME COURT OF NIGERIA OF NIGERIA'));
+    //                 $message->from(env('MAIL_FROM_ADDRESS', ''), env('MAIL_FROM_NAME', 'ISALU HOSPITAL LIMITED'));
     //             }
     //          );
     //     }catch(Throwable $err){

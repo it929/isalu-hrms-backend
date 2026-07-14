@@ -3,7 +3,7 @@
 
 <head>
     <meta name="csrf-token" content="{{ csrf_token() }}" />
-    <title>SUPREME COURT OF NIGERIA...::...Justices E-payment</title>
+    <title>ISALU HOSPITAL LIMITED...::...Justices E-payment</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 
     <style type="text/css">
@@ -147,7 +147,7 @@
                 <!-- HEADER -->
                 <div class="row">
                     <div class="col-xs-12 text-center">
-                        <h4 class="text-success"><strong>SUPREME COURT OF NIGERIA</strong></h4>
+                        <h4 class="text-success"><strong>ISALU HOSPITAL LIMITED</strong></h4>
                         <h6 class="text-success"><strong>JUSTICES E-PAYMENT SCHEDULE</strong></h6>
                     </div>
                 </div>

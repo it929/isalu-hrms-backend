@@ -2,7 +2,7 @@
 <html>
 
     <head>
-        <title>Supreme Court of Nigeria :: Staff Cooperative E-Payment</title>
+        <title>ISALU HOSPITAL LIMITED :: Staff Cooperative E-Payment</title>
 
         <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
 
@@ -299,8 +299,8 @@
                         </div>
                         <div class="col-xs-8 text-center">
                             <div class="text-center">
-                                <h4 class="text-success"><strong>SUPREME COURT OF NIGERIA</strong></h4>
-                                {{-- <h5 class="text-success"><strong>SUPREME COURT COMPLEX</strong></h5> --}}
+                                <h4 class="text-success"><strong>ISALU HOSPITAL LIMITED</strong></h4>
+                                {{-- <h5 class="text-success"><strong>ISALU HOSPITAL LIMITED</strong></h5> --}}
                                 <h6 class="text-success"><strong>THREE ARM ZONE</strong></h6>
                                 <h6 class="text-success">
                                     <strong>ACCOUNT NUMBER: {{ $accountDetails->account_no ?? 'N/A' }}</strong>

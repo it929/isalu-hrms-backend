@@ -14,8 +14,8 @@
             <div class="row" >
                 <div class="col-xs-2"><img src="{{asset('Images/njc-logo.jpg')}}" class="img-responsive responsive" style="width:100%; height:auto;"></div>
                 <div class="col-xs-8"><div>
-                <h3 class="text-success text-center"><strong>SUPREME COURT OF NIGERIA</strong></h3>
-                <h4 class="text-center text-success"><strong>3 ARMS ZONE SUPREME COURT OF NIGERIA COMPLEX, ABUJA</strong></h4>
+                <h3 class="text-success text-center"><strong>ISALU HOSPITAL LIMITED</strong></h3>
+                <h4 class="text-center text-success"><strong>3 ARMS ZONE ISALU HOSPITAL LIMITED COMPLEX, ABUJA</strong></h4>
                 <h4 class="text-center text-success"><strong>Approval/Action Comments</strong></h4>
             </div>
         </div>

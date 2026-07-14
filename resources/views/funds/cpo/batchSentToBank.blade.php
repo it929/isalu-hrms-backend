@@ -125,7 +125,7 @@
                 <!-- Panel Header -->
                 <div class="panel-heading text-center">
                     <h3 class="panel-title" style="font-size: 18px;">
-                        SUPREME COURT OF NIGERIA
+                        ISALU HOSPITAL LIMITED
                     </h3>
                 </div>
 

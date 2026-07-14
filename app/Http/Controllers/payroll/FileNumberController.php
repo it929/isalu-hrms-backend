@@ -368,7 +368,7 @@ class FileNumberController extends BaseFileNumberSearchController
 
             // Get court and division info
             $courtName = DB::table('tbl_court')->where('id', '=', $court)->first();
-            $data['courtName'] = $courtName ? $courtName->court_name : 'Supreme Court of Nigeria';
+            $data['courtName'] = $courtName ? $courtName->court_name : 'ISALU HOSPITAL LIMITED';
             
             $divisionData = DB::table('tbldivision')->where('divisionID', '=', $user['user_id'])->first();
             $data['division'] = $divisionData;

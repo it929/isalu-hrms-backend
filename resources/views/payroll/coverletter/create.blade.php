@@ -2,7 +2,7 @@
 "http://www.w3.org/TR/html4/loose.dtd">
 <html>
 <head>
-<title>SUPREME COURT OF NIGERIA</title>
+<title>ISALU HOSPITAL LIMITED</title>
 <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
 <style type="text/css">
 <!--
@@ -25,7 +25,7 @@
 <table width="680" border="0" align="center" cellpadding="0" cellspacing="0" style="font-size:17px">
   <tr>
     <td height="23">&nbsp;</td>
-    <td colspan="2" align="center" style="font-weight:bold">SUPREME COURT OF NIGERIA</td>
+    <td colspan="2" align="center" style="font-weight:bold">ISALU HOSPITAL LIMITED</td>
     <td>&nbsp;</td>
   </tr>
   

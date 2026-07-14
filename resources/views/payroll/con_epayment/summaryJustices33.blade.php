@@ -3,7 +3,7 @@
 
 <head>
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Supreme Court of Nigeria...::...Justices E-payment Schedule</title>
+    <title>ISALU HOSPITAL LIMITED...::...Justices E-payment Schedule</title>
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/watermark.css') }}">
 
@@ -224,7 +224,7 @@
 <body onload="lookup()">
 
     <div class="container-fluid">
-        {{-- <div class="watermark">SUPREME COURT OF NIGERIA</div> --}}
+        {{-- <div class="watermark">ISALU HOSPITAL LIMITED</div> --}}
 
         <div class="watermark-container">
             <div class="print-container">
@@ -238,8 +238,8 @@
                         </div>
 
                         <div class="col-xs-8 text-center">
-                            <h4 class="text-success"><strong>Supreme Court of Nigeria</strong></h4>
-                            {{-- <h5 class="text-success"><strong>SUPREME COURT COMPLEX</strong></h5> --}}
+                            <h4 class="text-success"><strong>ISALU HOSPITAL LIMITED</strong></h4>
+                            {{-- <h5 class="text-success"><strong>ISALU HOSPITAL LIMITED</strong></h5> --}}
                             <h6 class="text-success"><strong>THREE ARM ZONE</strong></h6>
                             <h6 class="text-success">
                                 <strong>ACCOUNT NUMBER: {{ $accountDetails->account_no ?? 'N/A' }}</strong>

@@ -43,13 +43,13 @@
     <table width="1122" border="0" align="center" cellpadding="0" cellspacing="0">
           <tr>
           <td colspan="3"><div align="center">
-      <h2>SUPREME COURT OF NIGERIA PAYROLL<br />
+      <h2>ISALU HOSPITAL LIMITED PAYROLL<br />
    
 </h2>
 
 
 <h3>
-MINISTRY/DEPARTMENT: SUPREME COURT OF NIGERIA
+MINISTRY/DEPARTMENT: ISALU HOSPITAL LIMITED
 </h3>
 
         

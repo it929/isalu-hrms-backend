@@ -5,7 +5,7 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <link rel="shortcut icon" href="images/favicon.ico">
-    <title>SUPREME COURT OF NIGERIA OF NIGERIA PAYROLL
+    <title>ISALU HOSPITAL LIMITED PAYROLL
         ...::...Payroll Report</title>
 
 
