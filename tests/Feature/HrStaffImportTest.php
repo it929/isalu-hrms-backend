@@ -392,4 +392,124 @@ class HrStaffImportTest extends TestCase
 
         unlink($tempFile);
     }
+
+    public function test_staff_import_with_name_splitting()
+    {
+        // 1. Set up required lookup values (department, unit, designation)
+        $deptId = DB::table('tbldepartment')->insertGetId([
+            'department' => 'Name Split Test Department'
+        ]);
+
+        $unitId = DB::table('tblunits')->insertGetId([
+            'unit' => 'Name Split Test Unit',
+            'departmentID' => $deptId
+        ]);
+
+        $desigId = DB::table('tbldesignation')->insertGetId([
+            'designation' => 'Name Split Test Designation',
+            'departmentID' => $deptId
+        ]);
+
+        // 2. Prepare mock CSV data using 'name' column instead of surname, firstname, othernames
+        $csvContent = "staffID,title,name,sex,maritalStatus,date_of_birth,phoneNo,email,address,department,unit,designation,date_of_joining,iou\n";
+        // Row 1: 3 names (Tijani Akeem Olanrewaju)
+        $csvContent .= "9910,MR.,Tijani Akeem Olanrewaju,Male,Single,1992-04-05,08099887766,tijani@test.com,123 import st,{$deptId},{$unitId},{$desigId},2026-06-08,10000.00\n";
+        // Row 2: 2 names (Adewale Azeez)
+        $csvContent .= "9911,MR.,Adewale Azeez,Male,Single,1992-04-05,08099887766,adewale@test.com,123 import st,{$deptId},{$unitId},{$desigId},2026-06-08,10000.00\n";
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'name_split_csv');
+        file_put_contents($tempFile, $csvContent);
+
+        $uploadedFile = new UploadedFile(
+            $tempFile,
+            'name_split.csv',
+            'text/csv',
+            null,
+            true
+        );
+
+        $response = $this->postJson('/api/nextjs/hr/add-staff/import', [
+            'excel_file' => $uploadedFile
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'imported_count' => 2
+            ]);
+
+        // Row 1 assertions
+        $this->assertDatabaseHas('tblper', [
+            'ID' => 9910,
+            'surname' => 'TIJANI',
+            'first_name' => 'AKEEM',
+            'othernames' => 'OLANREWAJU'
+        ]);
+
+        // Row 2 assertions
+        $this->assertDatabaseHas('tblper', [
+            'ID' => 9911,
+            'surname' => 'ADEWALE',
+            'first_name' => 'AZEEZ',
+            'othernames' => null
+        ]);
+
+        unlink($tempFile);
+    }
+
+    public function test_staff_import_with_optional_fields_missing()
+    {
+        $this->withoutExceptionHandling();
+        // 1. Set up department (since it's still required)
+        $deptId = DB::table('tbldepartment')->insertGetId([
+            'department' => 'Optional Test Department'
+        ]);
+
+        // 2. Prepare mock CSV data with optional fields (unit, designation, address, email, title, sex, maritalStatus, dob, phoneNo, date_of_joining) empty
+        $csvContent = "staffID,title,name,sex,maritalStatus,date_of_birth,phoneNo,email,address,department,unit,designation,date_of_joining,iou\n";
+        // Row: optional fields empty/null
+        $csvContent .= "9920,,Optional Fields Staff,,,,,,,{$deptId},,,,10000.00\n";
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'opt_fields_csv');
+        file_put_contents($tempFile, $csvContent);
+
+        $uploadedFile = new UploadedFile(
+            $tempFile,
+            'opt_fields.csv',
+            'text/csv',
+            null,
+            true
+        );
+
+        $response = $this->postJson('/api/nextjs/hr/add-staff/import', [
+            'excel_file' => $uploadedFile
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'imported_count' => 1
+            ]);
+
+        // Verify tblper record exists with null optional fields
+        $this->assertDatabaseHas('tblper', [
+            'ID' => 9920,
+            'surname' => 'OPTIONAL',
+            'first_name' => 'FIELDS',
+            'othernames' => 'STAFF',
+            'departmentID' => $deptId,
+            'unitID' => null,
+            'designationID' => null,
+            'home_address' => null,
+            'email' => null,
+            'title' => '',
+            'gender' => null,
+            'maritalstatus' => null,
+            'dob' => null,
+            'phone' => null,
+            'doj' => null
+        ]);
+
+        unlink($tempFile);
+    }
 }

@@ -242,9 +242,11 @@ Route::prefix('nextjs')->group(function () {
         // Cooperative Loan Deduction Setup
         Route::prefix('coop-loan-deduction-setups')->group(function () {
             Route::get('/',        [\App\Http\Controllers\Api\CoopLoanDeductionSetupApiController::class, 'index']);
+            Route::get('/template', [\App\Http\Controllers\Api\CoopLoanDeductionSetupApiController::class, 'downloadTemplate']);
             Route::post('/',       [\App\Http\Controllers\Api\CoopLoanDeductionSetupApiController::class, 'store']);
             Route::post('/toggle/{id}', [\App\Http\Controllers\Api\CoopLoanDeductionSetupApiController::class, 'toggleStatus']);
             Route::delete('/{id}', [\App\Http\Controllers\Api\CoopLoanDeductionSetupApiController::class, 'destroy']);
+            Route::post('/import', [\App\Http\Controllers\Api\CoopLoanDeductionSetupApiController::class, 'import']);
         });
 
         // Loan Deduction Setup

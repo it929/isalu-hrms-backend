@@ -1174,6 +1174,7 @@ class HrStaffApiController extends Controller
             $fieldMap = [
                 'staffID' => -1,
                 'title' => -1,
+                'name' => -1,
                 'surname' => -1,
                 'firstname' => -1,
                 'othernames' => -1,
@@ -1197,6 +1198,8 @@ class HrStaffApiController extends Controller
                     $fieldMap['staffID'] = $index;
                 } elseif (in_array($cleanHeader, ['title'])) {
                     $fieldMap['title'] = $index;
+                } elseif (in_array($cleanHeader, ['name', 'fullname', 'full_name'])) {
+                    $fieldMap['name'] = $index;
                 } elseif (in_array($cleanHeader, ['surname', 'lastname'])) {
                     $fieldMap['surname'] = $index;
                 } elseif (in_array($cleanHeader, ['firstname', 'firstname', 'first_name'])) {
@@ -1271,10 +1274,31 @@ class HrStaffApiController extends Controller
                 }
                 if ($isEmptyRow) continue;
 
-                $surname = $getValue($row, 'surname');
-                $firstname = $getValue($row, 'firstname');
+                $fullName = $getValue($row, 'name');
+                $surname = '';
+                $firstname = '';
+                $othernames = '';
+
+                if (!empty($fullName)) {
+                    $nameParts = preg_split('/\s+/', trim($fullName));
+                    if (count($nameParts) >= 3) {
+                        $surname = $nameParts[0];
+                        $firstname = $nameParts[1];
+                        $othernames = implode(' ', array_slice($nameParts, 2));
+                    } elseif (count($nameParts) === 2) {
+                        $surname = $nameParts[0];
+                        $firstname = $nameParts[1];
+                    } else {
+                        $surname = $nameParts[0] ?? '';
+                    }
+                } else {
+                    $surname = $getValue($row, 'surname');
+                    $firstname = $getValue($row, 'firstname');
+                    $othernames = $getValue($row, 'othernames');
+                }
+
                 if (empty($surname) || empty($firstname)) {
-                    $warnings[] = "Row " . ($r + 1) . ": Surname and First Name are required. Skipping row.";
+                    $warnings[] = "Row " . ($r + 1) . ": Name (or Surname and First Name) is required. Skipping row.";
                     continue;
                 }
 
@@ -1342,7 +1366,7 @@ class HrStaffApiController extends Controller
                     }
                 }
 
-                if (!$unitId) {
+                if (!empty($unitVal) && !$unitId) {
                     $warnings[] = "Row " . ($r + 1) . ": Unit '{$unitVal}' could not be resolved. Skipping row.";
                     continue;
                 }
@@ -1385,22 +1409,26 @@ class HrStaffApiController extends Controller
                     }
                 }
 
-                if (!$desigId) {
+                if (!empty($desigVal) && !$desigId) {
                     $warnings[] = "Row " . ($r + 1) . ": Designation '{$desigVal}' could not be resolved. Skipping row.";
                     continue;
                 }
 
                 // Resolve Gender
                 $sexVal = trim(strtolower((string)$getValue($row, 'sex')));
-                $gender = 'Male';
-                if ($sexVal === 'female' || $sexVal === 'f') {
+                $gender = null;
+                if ($sexVal === 'male' || $sexVal === 'm') {
+                    $gender = 'Male';
+                } elseif ($sexVal === 'female' || $sexVal === 'f') {
                     $gender = 'Female';
                 }
 
                 // Resolve Marital Status
                 $maritalVal = trim(strtolower((string)$getValue($row, 'maritalstatus')));
-                $maritalStatus = 'Single';
-                if ($maritalVal === 'married') {
+                $maritalStatus = null;
+                if ($maritalVal === 'single') {
+                    $maritalStatus = 'Single';
+                } elseif ($maritalVal === 'married') {
                     $maritalStatus = 'Married';
                 } elseif ($maritalVal === 'divorced') {
                     $maritalStatus = 'Divorced';
@@ -1410,34 +1438,36 @@ class HrStaffApiController extends Controller
 
                 // Resolve DOB
                 $dobVal = $getValue($row, 'date_of_birth');
-                $dob = $this->parseSpreadsheetDate($dobVal);
-                if (!$dob) {
-                    $warnings[] = "Row " . ($r + 1) . ": Invalid or missing Date of Birth '{$dobVal}'. Skipping row.";
-                    continue;
+                $dob = null;
+                if (!empty($dobVal)) {
+                    $dob = $this->parseSpreadsheetDate($dobVal);
+                    if (!$dob) {
+                        $warnings[] = "Row " . ($r + 1) . ": Invalid Date of Birth '{$dobVal}'. Skipping row.";
+                        continue;
+                    }
                 }
 
                 // Resolve DOJ
                 $dojVal = $getValue($row, 'date_of_joining');
-                $doj = $this->parseSpreadsheetDate($dojVal);
-                if (!$doj) {
-                    $warnings[] = "Row " . ($r + 1) . ": Invalid or missing Date of Joining '{$dojVal}'. Skipping row.";
-                    continue;
+                $doj = null;
+                if (!empty($dojVal)) {
+                    $doj = $this->parseSpreadsheetDate($dojVal);
+                    if (!$doj) {
+                        $warnings[] = "Row " . ($r + 1) . ": Invalid Date of Joining '{$dojVal}'. Skipping row.";
+                        continue;
+                    }
                 }
 
                 // Resolve Address
                 $address = $getValue($row, 'address');
-                if (empty($address)) {
-                    $warnings[] = "Row " . ($r + 1) . ": Address is required. Skipping row.";
-                    continue;
-                }
 
                 // Title
-                $title = strtoupper((string)($getValue($row, 'title') ?: 'MR.'));
+                $titleVal = $getValue($row, 'title');
+                $title = !empty($titleVal) ? strtoupper((string)$titleVal) : '';
 
-                // Phone & Email & Othernames
                 $phone = $getValue($row, 'phoneno');
                 $email = $getValue($row, 'email');
-                $othernames = $getValue($row, 'othernames');
+                $othernames = $othernames ?: $getValue($row, 'othernames');
 
                 if (!empty($email)) {
                     $emailExists = DB::table('tblper')->where('email', $email)->exists();
