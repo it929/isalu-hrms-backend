@@ -250,4 +250,243 @@ class CoopLoanDeductionSetupApiController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * GET /api/nextjs/payroll/coop-loan-deduction-setups/template
+     * Download public CSV template.
+     */
+    public function downloadTemplate(Request $request)
+    {
+        try {
+            $headers = [
+                'Content-Type'        => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="coop_loan_setup_import_template.csv"',
+                'Pragma'              => 'no-cache',
+                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires'             => '0',
+            ];
+
+            $columns = ['Staff ID', 'Loan Amount', 'Interest Rate (%)', 'Duration Months', 'Start Month (YYYY-MM)'];
+            $exampleRow = ['9', '500000.00', '6', '12', '2026-05'];
+
+            $callback = function () use ($columns, $exampleRow) {
+                $handle = fopen('php://output', 'w');
+                fputcsv($handle, $columns);
+                fputcsv($handle, $exampleRow);
+                fclose($handle);
+            };
+
+            return response()->stream($callback, 200, $headers);
+        } catch (\Throwable $th) {
+            Log::error('CoopLoanDeductionSetupApiController downloadTemplate: ' . $th->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /api/nextjs/payroll/coop-loan-deduction-setups/import
+     * Bulk import from spreadsheet.
+     */
+    public function import(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Access denied: Only administrators can import settings.'
+                ], 403);
+            }
+
+            $request->validate([
+                'file' => 'required|file|mimes:xlsx,xls,csv'
+            ]);
+
+            $file = $request->file('file');
+            $rows = \Maatwebsite\Excel\Facades\Excel::toArray([], $file)[0];
+
+            if (empty($rows) || count($rows) <= 1) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'The uploaded file is empty or contains no records.'
+                ], 422);
+            }
+
+            // Normalize headers
+            $headers = array_map(function ($h) {
+                return strtolower(trim((string)$h));
+            }, $rows[0]);
+
+            $staffIdIdx = -1;
+            $fileNoIdx = -1;
+            $amountIdx = -1;
+            $interestIdx = -1;
+            $durationIdx = -1;
+            $startIdx = -1;
+
+            foreach ($headers as $index => $header) {
+                if (strpos($header, 'staff id') !== false || strpos($header, 'staff_id') !== false || $header === 'id' || $header === 'staffid') {
+                    $staffIdIdx = $index;
+                } elseif (strpos($header, 'file') !== false || $header === 'fileno' || $header === 'file_no') {
+                    $fileNoIdx = $index;
+                } elseif (strpos($header, 'amount') !== false || strpos($header, 'loan') !== false) {
+                    $amountIdx = $index;
+                } elseif (strpos($header, 'interest') !== false || strpos($header, 'rate') !== false) {
+                    $interestIdx = $index;
+                } elseif (strpos($header, 'start') !== false || strpos($header, 'period') !== false) {
+                    $startIdx = $index;
+                } elseif (strpos($header, 'duration') !== false || strpos($header, 'month') !== false) {
+                    $durationIdx = $index;
+                }
+            }
+
+            // Fallback checking by column position
+            if ($staffIdIdx === -1 && $fileNoIdx === -1) $staffIdIdx = 0;
+            if ($amountIdx === -1) $amountIdx = 1;
+            if ($interestIdx === -1) $interestIdx = 2;
+            if ($durationIdx === -1) $durationIdx = 3;
+            if ($startIdx === -1) $startIdx = 4;
+
+            $importedCount = 0;
+            $warnings = [];
+
+            DB::beginTransaction();
+
+            for ($r = 1; $r < count($rows); $r++) {
+                $row = $rows[$r];
+
+                $isEmptyRow = true;
+                foreach ($row as $cell) {
+                    if (trim((string)$cell) !== '') {
+                        $isEmptyRow = false;
+                        break;
+                    }
+                }
+                if ($isEmptyRow) continue;
+
+                $staff = null;
+
+                // Match by Staff ID
+                if ($staffIdIdx !== -1 && isset($row[$staffIdIdx]) && trim($row[$staffIdIdx]) !== '') {
+                    $val = trim($row[$staffIdIdx]);
+                    $staff = DB::table('tblper')->where('ID', $val)->first();
+                }
+
+                // Match by File Number
+                if (!$staff && $fileNoIdx !== -1 && isset($row[$fileNoIdx]) && trim($row[$fileNoIdx]) !== '') {
+                    $val = trim($row[$fileNoIdx]);
+                    $staff = DB::table('tblper')->where('fileNo', $val)->first();
+                }
+
+                // Fallback matching
+                if (!$staff && $staffIdIdx !== -1 && isset($row[$staffIdIdx]) && trim($row[$staffIdIdx]) !== '') {
+                    $val = trim($row[$staffIdIdx]);
+                    $staff = DB::table('tblper')->where('fileNo', $val)->first();
+                }
+
+                if (!$staff) {
+                    $warnings[] = "Row " . ($r + 1) . ": Employee ID/File Number not found.";
+                    continue;
+                }
+
+                // Parse loan amount
+                $loanAmount = isset($row[$amountIdx]) ? (float)trim(str_replace([',', '₦', '$'], '', $row[$amountIdx])) : 0.00;
+                if ($loanAmount <= 0) {
+                    $warnings[] = "Row " . ($r + 1) . ": Invalid loan amount.";
+                    continue;
+                }
+
+                // Parse interest rate
+                $interestRate = ($interestIdx !== -1 && isset($row[$interestIdx])) ? (float)trim($row[$interestIdx]) : 0.00;
+                if ($interestRate < 0 || $interestRate > 100) {
+                    $interestRate = 0.00;
+                }
+
+                // Parse duration months
+                $durationMonths = isset($row[$durationIdx]) ? (int)trim($row[$durationIdx]) : 12;
+                if ($durationMonths <= 0) {
+                    $warnings[] = "Row " . ($r + 1) . ": Invalid duration months.";
+                    continue;
+                }
+
+                // Parse start month
+                $startMonth = isset($row[$startIdx]) ? trim($row[$startIdx]) : '';
+                if ($startMonth === '') {
+                    $startMonth = date('Y-m');
+                } else {
+                    if (preg_match('/^\d{4}-\d{2}$/', $startMonth) === 0) {
+                        if (is_numeric($startMonth)) {
+                            $unixDate = ($startMonth - 25569) * 86400;
+                            $startMonth = date('Y-m', $unixDate);
+                        } else {
+                            $parsedTime = strtotime($startMonth);
+                            if ($parsedTime !== false) {
+                                $startMonth = date('Y-m', $parsedTime);
+                            } else {
+                                $startMonth = date('Y-m');
+                            }
+                        }
+                    }
+                }
+
+                // Calculate end month
+                $endMonth = $startMonth;
+                if ($startMonth && $durationMonths > 0) {
+                    $parts = explode('-', $startMonth);
+                    if (count($parts) === 2) {
+                        $y = (int)$parts[0];
+                        $m = (int)$parts[1];
+                        $startDate = new \DateTime("$y-$m-01");
+                        $startDate->modify("+" . ($durationMonths - 1) . " month");
+                        $endMonth = $startDate->format('Y-m');
+                    }
+                }
+
+                $totalRepayment = $loanAmount * (1 + $interestRate / 100);
+                $monthlyDeduction = round($totalRepayment / $durationMonths, 2);
+
+                DB::table('coop_loan_deduction_setups')->updateOrInsert(
+                    ['staffId' => $staff->ID],
+                    [
+                        'loan_amount' => $loanAmount,
+                        'interest_rate' => $interestRate,
+                        'duration_months' => $durationMonths,
+                        'monthly_deduction' => $monthlyDeduction,
+                        'balance_remaining' => $totalRepayment,
+                        'start_month' => $startMonth,
+                        'end_month' => $endMonth,
+                        'is_active' => 1,
+                        'updated_at' => now(),
+                        'created_at' => now()
+                    ]
+                );
+
+                $importedCount++;
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Bulk import completed. {$importedCount} cooperative loan deduction setups imported successfully.",
+                'warnings' => $warnings,
+                'imported_count' => $importedCount
+            ]);
+
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            Log::error('CoopLoanDeductionSetupApiController import: ' . $th->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
 }
