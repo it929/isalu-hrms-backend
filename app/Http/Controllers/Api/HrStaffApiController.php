@@ -340,6 +340,7 @@ class HrStaffApiController extends Controller
                 'Designation' => $request->designationID,
                 'designationID' => $request->designationID,
                 'date_present_appointment' => $request->date_present_appointment,
+                'doj' => $request->date_present_appointment,
                 'staff_status' => 0,
                 'status_value' => "new staff",
                 'rank' => 0,
