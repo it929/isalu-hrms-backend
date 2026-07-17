@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 
 class HrStaffApiController extends Controller
 {
+    use ResolveUserContextTrait;
     /**
      * Return all dropdowns needed by the Add New Staff form:
      * states and departments only (staff list is loaded separately via /list).
@@ -198,10 +199,16 @@ class HrStaffApiController extends Controller
     /**
      * List all admin staff.
      */
-    public function list()
+    public function list(Request $request)
     {
         try {
-            $staff = DB::table('tblper')
+            // Resolve who is making the request
+            $ctx = $this->getUserContext($request);
+
+            // Super Admin (role 1) and HR Admin (role 48 / isAdminStaff) see all staff
+            $isPrivileged = $ctx && ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']);
+
+            $query = DB::table('tblper')
                 ->where('isAdmin', 1)
                 ->leftJoin('tbldesignation', 'tblper.designationID', '=', 'tbldesignation.id')
                 ->leftJoin('tbldepartment', 'tblper.departmentID', '=', 'tbldepartment.id')
@@ -227,8 +234,20 @@ class HrStaffApiController extends Controller
                     'tblper.progress_regID',
                     'tblper.staff_status'
                 )
-                ->orderBy('tblper.surname', 'asc')
-                ->get();
+                ->orderBy('tblper.surname', 'asc');
+
+            // If the user is a regular staff member, restrict to only their own record
+            if (!$isPrivileged) {
+                $userId = $request->header('X-User-Id');
+                if ($userId) {
+                    $query->where('tblper.UserID', $userId);
+                } else {
+                    // No user context at all — return empty
+                    return response()->json(['status' => 'success', 'staff' => []]);
+                }
+            }
+
+            $staff = $query->get();
 
             return response()->json(['status' => 'success', 'staff' => $staff]);
         } catch (\Throwable $e) {

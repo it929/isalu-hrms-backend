@@ -8,51 +8,39 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 
-class DeclareSalaryApiController extends Controller
+class PayerIdApiController extends Controller
 {
     /**
-     * GET /api/nextjs/payroll/declare-salary
-     * Fetch existing salary structures with declared salary and staff information.
+     * GET /api/nextjs/payroll/payer-id
+     * Fetch existing active staff with file number, name, and Payer ID.
      */
     public function index(Request $request)
     {
         try {
             $search = trim($request->input('search', ''));
-            $query = DB::table('salary_structures as ss')
-                ->join('tblper as p', 'p.ID', '=', 'ss.staffId')
+            $query = DB::table('tblper')
+                ->where('staff_status', 1)
+                ->where('rank', '!=', 2)
                 ->select(
-                    'ss.id',
-                    'ss.staffId',
-                    'ss.basic_salary',
-                    'ss.housing_allowance',
-                    'ss.transport_allowance',
-                    'ss.medical_allowance',
-                    'ss.utility_allowance',
-                    'ss.meal_allowance',
-                    'ss.declare_salary',
-                    'p.fileNo',
-                    'p.surname',
-                    'p.first_name',
-                    'p.othernames'
+                    'ID as staffId',
+                    'fileNo',
+                    'surname',
+                    'first_name',
+                    'othernames',
+                    'payer_id'
                 );
 
             if ($search !== '') {
                 $query->where(function ($q) use ($search) {
-                    $q->where('p.fileNo', 'like', "%{$search}%")
-                      ->orWhere('p.surname', 'like', "%{$search}%")
-                      ->orWhere('p.first_name', 'like', "%{$search}%")
-                      ->orWhere('p.othernames', 'like', "%{$search}%");
+                    $q->where('fileNo', 'like', "%{$search}%")
+                      ->orWhere('surname', 'like', "%{$search}%")
+                      ->orWhere('first_name', 'like', "%{$search}%")
+                      ->orWhere('othernames', 'like', "%{$search}%");
                 });
             }
 
-            $records = $query->orderBy('ss.id', 'desc')->get()->map(function ($row) {
+            $records = $query->orderBy('ID', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
-                $row->gross_salary = (float)($row->basic_salary ?? 0)
-                    + (float)($row->housing_allowance ?? 0)
-                    + (float)($row->transport_allowance ?? 0)
-                    + (float)($row->medical_allowance ?? 0)
-                    + (float)($row->utility_allowance ?? 0)
-                    + (float)($row->meal_allowance ?? 0);
                 return $row;
             });
 
@@ -61,7 +49,7 @@ class DeclareSalaryApiController extends Controller
                 'data' => $records
             ]);
         } catch (\Throwable $th) {
-            Log::error('DeclareSalaryAPI index: ' . $th->getMessage());
+            Log::error('PayerIdAPI index: ' . $th->getMessage());
             return response()->json([
                 'status' => 'error',
                 'message' => $th->getMessage()
@@ -70,39 +58,39 @@ class DeclareSalaryApiController extends Controller
     }
 
     /**
-     * POST /api/nextjs/payroll/declare-salary
-     * Save/update a single staff member's declared salary if they have a salary structure.
+     * POST /api/nextjs/payroll/payer-id
+     * Save/update a single staff member's Payer ID.
      */
     public function store(Request $request)
     {
         try {
             $validated = $request->validate([
                 'staffId' => 'required|integer',
-                'declare_salary' => 'required|numeric|min:0',
+                'payer_id' => 'nullable|string|max:100',
             ]);
 
-            // Ensure the staff member exists in salary_structures
-            $structureExists = DB::table('salary_structures')->where('staffId', $validated['staffId'])->exists();
-            if (!$structureExists) {
+            // Ensure the staff member exists in tblper
+            $staffExists = DB::table('tblper')->where('ID', $validated['staffId'])->exists();
+            if (!$staffExists) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'The selected staff member has no salary structure setup.'
+                    'message' => 'The selected staff member does not exist.'
                 ], 422);
             }
 
-            // Update declare_salary column in salary_structures
-            DB::table('salary_structures')
-                ->where('staffId', $validated['staffId'])
+            // Update payer_id in tblper
+            DB::table('tblper')
+                ->where('ID', $validated['staffId'])
                 ->update([
-                    'declare_salary' => $validated['declare_salary'],
+                    'payer_id' => $validated['payer_id'],
                 ]);
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Declared salary updated successfully.'
+                'message' => 'Payer ID updated successfully.'
             ]);
         } catch (\Throwable $th) {
-            Log::error('DeclareSalaryAPI store: ' . $th->getMessage());
+            Log::error('PayerIdAPI store: ' . $th->getMessage());
             return response()->json([
                 'status' => 'error',
                 'message' => $th->getMessage()
@@ -111,8 +99,8 @@ class DeclareSalaryApiController extends Controller
     }
 
     /**
-     * POST /api/nextjs/payroll/declare-salary/import
-     * Bulk update declared salary via Excel/CSV matching staff by staffId.
+     * POST /api/nextjs/payroll/payer-id/import
+     * Bulk update Payer IDs via Excel/CSV matching staff by staffId.
      */
     public function import(Request $request)
     {
@@ -146,19 +134,19 @@ class DeclareSalaryApiController extends Controller
             }, $data[0]);
 
             $staffIdIndex = -1;
-            $declareSalaryIndex = -1;
+            $payerIdIndex = -1;
 
             foreach ($headers as $index => $header) {
                 if (strpos($header, 'staff') !== false || strpos($header, 'id') !== false) {
                     if ($staffIdIndex === -1) $staffIdIndex = $index;
-                } elseif (strpos($header, 'declare') !== false || strpos($header, 'salary') !== false) {
-                    if ($declareSalaryIndex === -1) $declareSalaryIndex = $index;
+                } elseif (strpos($header, 'payer') !== false) {
+                    if ($payerIdIndex === -1) $payerIdIndex = $index;
                 }
             }
 
             // Fallbacks to default column indices
             if ($staffIdIndex === -1) $staffIdIndex = 0;
-            if ($declareSalaryIndex === -1) $declareSalaryIndex = 1;
+            if ($payerIdIndex === -1) $payerIdIndex = 1;
 
             unset($data[0]); // Remove the header row
 
@@ -174,27 +162,20 @@ class DeclareSalaryApiController extends Controller
                 }
 
                 $staffId = intval(trim($row[$staffIdIndex]));
-                $declareVal = (float) (trim($row[$declareSalaryIndex] ?? 0.00));
+                $payerVal = trim($row[$payerIdIndex] ?? '');
 
-                // Check if staff has salary structure
-                $structureExists = DB::table('salary_structures')->where('staffId', $staffId)->exists();
-                if (!$structureExists) {
-                    // Check if staff exists in tblper to give a better warning
-                    $staff = DB::table('tblper')->where('ID', $staffId)->first();
-                    if ($staff) {
-                        $fullName = trim("{$staff->surname} {$staff->first_name} {$staff->othernames}");
-                        $warnings[] = "Row " . ($rowIndex + 1) . ": Staff '{$fullName}' (ID: {$staffId}) has no salary structure setup.";
-                    } else {
-                        $warnings[] = "Row " . ($rowIndex + 1) . ": Staff with identifier '{$staffId}' does not exist.";
-                    }
+                // Check if staff exists in tblper
+                $staff = DB::table('tblper')->where('ID', $staffId)->first();
+                if (!$staff) {
+                    $warnings[] = "Row " . ($rowIndex + 1) . ": Staff with identifier '{$staffId}' does not exist.";
                     continue;
                 }
 
-                // Update declare_salary
-                DB::table('salary_structures')
-                    ->where('staffId', $staffId)
+                // Update payer_id
+                DB::table('tblper')
+                    ->where('ID', $staffId)
                     ->update([
-                        'declare_salary' => $declareVal,
+                        'payer_id' => $payerVal !== '' ? $payerVal : null,
                     ]);
 
                 $updatedCount++;
@@ -211,7 +192,7 @@ class DeclareSalaryApiController extends Controller
 
         } catch (\Throwable $th) {
             DB::rollBack();
-            Log::error('DeclareSalaryAPI import: ' . $th->getMessage());
+            Log::error('PayerIdAPI import: ' . $th->getMessage());
             return response()->json([
                 'status' => 'error',
                 'message' => $th->getMessage()
