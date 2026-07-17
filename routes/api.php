@@ -207,6 +207,13 @@ Route::prefix('nextjs')->group(function () {
             Route::post('/import', [\App\Http\Controllers\Api\DeclareSalaryApiController::class, 'import']);
         });
 
+        // Payer ID
+        Route::prefix('payer-id')->group(function () {
+            Route::get('/',        [\App\Http\Controllers\Api\PayerIdApiController::class, 'index']);
+            Route::post('/',       [\App\Http\Controllers\Api\PayerIdApiController::class, 'store']);
+            Route::post('/import', [\App\Http\Controllers\Api\PayerIdApiController::class, 'import']);
+        });
+
         // Employee Loans
         Route::prefix('loans')->group(function () {
             Route::get('/staff',   [\App\Http\Controllers\Api\EmployeeLoanApiController::class, 'getStaffList']);

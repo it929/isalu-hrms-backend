@@ -31,11 +31,12 @@ class AllBanksExport implements FromView, WithStyles, WithEvents
     {
         return [
             1 => [
-                'font' => ['bold' => true],
+                'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
                 'fill' => [
                     'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['argb' => 'FFCCE5FF'] // Light blue header
-                ]
+                    'startColor' => ['argb' => 'FF008000'] // Green header
+                ],
+                'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER],
             ]
         ];
     }
@@ -67,127 +68,9 @@ class AllBanksExport implements FromView, WithStyles, WithEvents
                 ===================================== */
                 $sheet->getStyle("F2:F{$highestRow}")->getFont()->setBold(true);
 
-                /* =====================================
-                   LOOP THROUGH ALL ROWS TO STYLE THEM
-                ===================================== */
-                for ($row = 2; $row <= $highestRow; $row++) {
-
-                    $purpose = $sheet->getCell("G{$row}")->getValue();
-
-
-
-                    // Deduction Row (Payroll Deduction)
-                    $beneficiary = strtoupper($sheet->getCell("B{$row}")->getValue());
-
-                    if (
-                        str_contains($purpose, "PAYROLL DEDUCTION") ||
-                        in_array($beneficiary, ['NASARAWA STATE TAX', 'NIGER STATE TAX', 'UNION DUES'])
-                    ) {
-                        $sheet->getStyle("A{$row}:G{$row}")->applyFromArray([
-                            'font' => [
-                                'bold' => true,
-                                'color' => ['argb' => 'FFC2185B']
-                            ],
-                            'fill' => [
-                                'fillType' => Fill::FILL_SOLID,
-                                'startColor' => ['argb' => 'FFFCE4EC']
-                            ]
-                        ]);
-                    }
-
-
-                    // Staff Salary Row
-                    if (str_contains($purpose, "Staff Salary")) {
-                        $sheet->getStyle("A{$row}:G{$row}")->applyFromArray([
-                            'fill' => [
-                                'fillType' => Fill::FILL_SOLID,
-                                'startColor' => ['argb' => 'FFE3F2FD'] // Light blue
-                            ]
-                        ]);
-                    }
-
-                    // Justice Salary Row
-                    if (str_contains($purpose, "Justice Allowance")) {
-                        $sheet->getStyle("A{$row}:G{$row}")->applyFromArray([
-                            'font' => [
-                                'bold' => true,
-                                'color' => ['argb' => 'FF1A237E'] // Deep blue text
-                            ],
-                            'fill' => [
-                                'fillType' => Fill::FILL_SOLID,
-                                'startColor' => ['argb' => 'FFBBDEFB'] // Light blue highlight
-                            ],
-                            'borders' => [
-                                'outline' => [
-                                    'borderStyle' => Border::BORDER_MEDIUM,
-                                    'color' => ['argb' => 'FF0D47A1']
-                                ]
-                            ]
-                        ]);
-                    }
-
-                    // Sub Total Row
-                    // if (str_contains($purpose, "Sub Total")) {
-                    //     $sheet->getStyle("A{$row}:G{$row}")->applyFromArray([
-                    //         'font' => ['bold' => true],
-                    //         'fill' => [
-                    //             'fillType' => Fill::FILL_SOLID,
-                    //             'startColor' => ['argb' => 'FFFFF9C4'] // Light Yellow
-                    //         ]
-                    //     ]);
-                    // }
-
-                    // Sub Total Row
-                    if (str_contains($purpose, "Sub Total")) {
-                        $sheet->getStyle("A{$row}:G{$row}")->applyFromArray([
-                            'font' => [
-                                'bold' => true,
-                                'size' => 20, // Bigger font
-                            ],
-                            'fill' => [
-                                'fillType' => Fill::FILL_SOLID,
-                                'startColor' => ['argb' => 'FFFFF59D'] // Stronger Yellow
-                            ],
-                            'borders' => [
-                                'outline' => [
-                                    'borderStyle' => Border::BORDER_MEDIUM,
-                                    'color' => ['argb' => 'FF000000']
-                                ]
-                            ]
-                        ]);
-                    }
-
-                    // Grand Total Row
-                    // if ($purpose === "Total") {
-                    //     $sheet->getStyle("A{$row}:G{$row}")->applyFromArray([
-                    //         'font' => ['bold' => true],
-                    //         'fill' => [
-                    //             'fillType' => Fill::FILL_SOLID,
-                    //             'startColor' => ['argb' => 'FFC8E6C9'] // Light green
-                    //         ]
-                    //     ]);
-                    // }
-
-                    // Grand Total Row
-                    if ($purpose === "Total") {
-                        $sheet->getStyle("A{$row}:G{$row}")->applyFromArray([
-                            'font' => [
-                                'bold' => true,
-                                'size' => 22, // Even bigger font
-                            ],
-                            'fill' => [
-                                'fillType' => Fill::FILL_SOLID,
-                                'startColor' => ['argb' => 'FFA5D6A7'] // Darker Green
-                            ],
-                            'borders' => [
-                                'outline' => [
-                                    'borderStyle' => Border::BORDER_MEDIUM,
-                                    'color' => ['argb' => 'FF000000']
-                                ]
-                            ]
-                        ]);
-                    }
-                }
+                // The styling loop was removed to prevent Maximum Execution Time Exceeded errors.
+                // The bold font styling for Sub Total and Grand Total is automatically handled
+                // by the inline `style="font-weight:bold;"` in the exportAllBanksExcel.blade.php view.
 
                 /* =====================================
                    ADD BORDER TO WHOLE TABLE

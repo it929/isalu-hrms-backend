@@ -6,6 +6,13 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Font;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 
 class NextJsPayrollApiController extends Controller
 {
@@ -115,7 +122,7 @@ class NextJsPayrollApiController extends Controller
 
     /**
      * GET /api/nextjs/payroll/export
-     * Streams the exact 34-column CSV file.
+     * Generates a styled Excel (.xlsx) payroll file.
      */
     public function exportPayroll(Request $request)
     {
@@ -137,74 +144,202 @@ class NextJsPayrollApiController extends Controller
             // Fetch ALL records (no pagination)
             [$records] = $this->fetchPayrollData($month, $year, $divisionID, $bankID, PHP_INT_MAX, 1);
 
-            $headers = [
-                'Content-Type'        => 'text/csv',
-                'Content-Disposition' => "attachment; filename=\"Payroll_{$month}_{$year}.csv\"",
-                'Pragma'              => 'no-cache',
-                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-                'Expires'             => '0',
+            // ── Column definitions ─────────────────────────────────────────────
+            $columns = [
+                'IDNO', 'NAME', 'DEPARTMENT', 'BASIC', 'HOUSING', 'TRANSPORT',
+                'MEDICAL', 'UTILITY', 'MEAL', 'TOTAL INCOME', 'DECLARED INCOME',
+                'PAID DAYS', 'P.TAX', 'IOU', 'RETENTION', 'LOAN', 'SURCHARGES',
+                'PENSION', 'MEDICAL LOAN', 'COOP. SAVING', 'COOP. LOAN RPYT',
+                'ABSENCE PENALTY', 'OTHER DEDUCTION', 'TOTAL DEDUCTION', 'NET PAY',
+                'REVOLVING LOAN BAL', 'COOP. CONTR.', 'COOP. LOAN BAL',
+                'COOP. ASSET', 'COOP. ASSET FIN.', 'MEDICAL DEBT',
+                'ACCOUNT NO.', 'BANK', 'SORT CODE', 'PAYER ID',
             ];
 
-            $columns = [
+            $dataKeys = [
                 'IDNO', 'NAME', 'DEPERTMENT', 'BASIC', 'HOUSING', 'TRANSPORT',
                 'MEDICAL', 'UTILITY', 'MEAL', 'TOTAL INCOME', 'DECLARED INCOME',
                 'PAID DAYS', 'P.TAX', 'IOU', 'RETENTION', 'LOAN', 'SURGHARGES',
                 'PENSION', 'MEDICAL LOAN', 'COOP. SAVING', 'COOP. LOAN RPYT',
                 'ABSENCE PENALTY', 'OTHER DEDUCTION', 'TOTAL DEDUCTION', 'NETPAY',
                 'REVOLVING LOAN BAL', 'COP.CONTR', 'COP. LONE BAL',
-                'COOP.ASSET.', 'COP. ASSET FIN', 'MEDICAL DEBT', 'ACC. NO', 'BANK', 'CODE', 'PAYER ID',
+                'COOP.ASSET.', 'COP. ASSET FIN', 'MEDICAL DEBT',
+                'ACC. NO', 'BANK', 'CODE', 'PAYER ID',
             ];
 
-            $callback = function () use ($records, $columns) {
-                $handle = fopen('php://output', 'w');
-                fputcsv($handle, $columns);
-                foreach ($records as $row) {
-                    fputcsv($handle, [
-                        $row['IDNO'],
-                        $row['NAME'],
-                        $row['DEPERTMENT'],
-                        $row['BASIC'],
-                        $row['HOUSING'],
-                        $row['TRANSPORT'],
-                        $row['MEDICAL'],
-                        $row['UTILITY'],
-                        $row['MEAL'],
-                        $row['TOTAL INCOME'],
-                        $row['DECLARED INCOME'],
-                        $row['PAID DAYS'],
-                        $row['P.TAX'],
-                        $row['IOU'],
-                        $row['RETENTION'],
-                        $row['LOAN'],
-                        $row['SURGHARGES'],
-                        $row['PENSION'],
-                        $row['MEDICAL LOAN'],
-                        $row['COOP. SAVING'],
-                        $row['COOP. LOAN RPYT'],
-                        $row['ABSENCE PENALTY'],
-                        $row['OTHER DEDUCTION'],
-                        $row['TOTAL DEDUCTION'],
-                        $row['NETPAY'],
-                        $row['REVOLVING LOAN BAL'],
-                        $row['COP.CONTR'],
-                        $row['COP. LONE BAL'],
-                        $row['COOP.ASSET.'] ?? '0.00',
-                        $row['COP. ASSET FIN'],
-                        $row['MEDICAL DEBT'],
-                        $row['ACC. NO'],
-                        $row['BANK'],
-                        $row['CODE'],
-                        $row['PAYER ID'],
-                    ]);
-                }
-                fclose($handle);
-            };
+            // Money column indices (1-based within $columns)
+            $moneyColIndices = [4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31];
 
-            return response()->stream($callback, 200, $headers);
+            // ── Build Spreadsheet ──────────────────────────────────────────────
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle(ucfirst(strtolower($month)) . ' ' . $year);
+
+            $totalCols = count($columns);
+            $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($totalCols);
+
+            // ── Row 1: Company Title ───────────────────────────────────────────
+            $sheet->mergeCells("A1:{$lastColLetter}1");
+            $sheet->setCellValue('A1', 'ISALU HRMS — PAYROLL SCHEDULE');
+            $sheet->getStyle('A1')->applyFromArray([
+                'font'      => ['bold' => true, 'size' => 14, 'color' => ['rgb' => 'FFFFFF']],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '008000']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            ]);
+            $sheet->getRowDimension(1)->setRowHeight(28);
+
+            // ── Row 2: Period subtitle ─────────────────────────────────────────
+            $sheet->mergeCells("A2:{$lastColLetter}2");
+            $sheet->setCellValue('A2', 'Period: ' . ucfirst(strtolower($month)) . ' ' . $year);
+            $sheet->getStyle('A2')->applyFromArray([
+                'font'      => ['bold' => true, 'size' => 11, 'color' => ['rgb' => 'FFFFFF']],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '008000']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            ]);
+            $sheet->getRowDimension(2)->setRowHeight(20);
+
+            // ── Row 3: Column Headers ──────────────────────────────────────────
+            foreach ($columns as $i => $colName) {
+                $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+                $sheet->setCellValue("{$colLetter}3", $colName);
+            }
+            $headerRange = "A3:{$lastColLetter}3";
+            $sheet->getStyle($headerRange)->applyFromArray([
+                'font'      => ['bold' => true, 'size' => 9, 'color' => ['rgb' => 'FFFFFF']],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '008000']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+                'borders'   => [
+                    'allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']],
+                ],
+            ]);
+            $sheet->getRowDimension(3)->setRowHeight(28);
+
+            // ── Rows 4+: Data ──────────────────────────────────────────────────
+            $rowNum = 4;
+            foreach ($records as $record) {
+                foreach ($dataKeys as $i => $key) {
+                    $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+                    $cellRef = "{$colLetter}{$rowNum}";
+                    $colIdx  = $i + 1; // 1-based
+
+                    $rawVal = $record[$key] ?? '';
+
+                    if (in_array($colIdx, $moneyColIndices)) {
+                        // Store as numeric for proper Excel formatting
+                        $clean = str_replace(',', '', (string) $rawVal);
+                        $numVal = is_numeric($clean) ? (float) $clean : 0;
+                        $sheet->setCellValue($cellRef, $numVal);
+                    } else {
+                        $sheet->setCellValue($cellRef, $rawVal);
+                    }
+                }
+                $sheet->getRowDimension($rowNum)->setRowHeight(16);
+                $rowNum++;
+            }
+
+            $dataEndRow = $rowNum - 1;
+            
+            // Bulk apply styles to optimize export speed and prevent timeouts
+            if ($dataEndRow >= 4) {
+                $moneyFormat = '#,##0.00';
+                foreach ($moneyColIndices as $colIdx) {
+                    $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx);
+                    $sheet->getStyle("{$colLetter}4:{$colLetter}{$dataEndRow}")->getNumberFormat()->setFormatCode($moneyFormat);
+                    $sheet->getStyle("{$colLetter}4:{$colLetter}{$dataEndRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                }
+                
+                // Center IDNO (A) and PAID DAYS (L)
+                $sheet->getStyle("A4:A{$dataEndRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle("L4:L{$dataEndRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+                // Apply borders and font to the whole data section
+                $sheet->getStyle("A4:{$lastColLetter}{$dataEndRow}")->applyFromArray([
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]],
+                    'font'    => ['size' => 8],
+                ]);
+            }
+
+            // ── Totals Row ─────────────────────────────────────────────────────
+            $totalRow = $rowNum;
+            $sheet->setCellValue("A{$totalRow}", 'TOTAL');
+            $sheet->mergeCells("A{$totalRow}:C{$totalRow}");
+            $sheet->getStyle("A{$totalRow}")->applyFromArray([
+                'font'      => ['bold' => true, 'size' => 9],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]],
+            ]);
+
+            $dataStartRow = 4;
+            foreach ($moneyColIndices as $colIdx) {
+                $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx);
+                $cellRef = "{$colLetter}{$totalRow}";
+                $sheet->setCellValue($cellRef, "=SUM({$colLetter}{$dataStartRow}:{$colLetter}{$dataEndRow})");
+                $sheet->getStyle($cellRef)->applyFromArray([
+                    'font'    => ['bold' => true, 'size' => 9],
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]],
+                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],
+                ]);
+                $sheet->getStyle($cellRef)->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+            $sheet->getRowDimension($totalRow)->setRowHeight(18);
+
+            // ── Column Widths ──────────────────────────────────────────────────
+            $manualWidths = [
+                1  => 8,   // IDNO
+                2  => 28,  // NAME
+                3  => 20,  // DEPARTMENT
+                12 => 9,   // PAID DAYS
+                32 => 18,  // ACCOUNT NO
+                33 => 16,  // BANK
+                34 => 10,  // SORT CODE
+                35 => 14,  // PAYER ID
+            ];
+            for ($c = 1; $c <= $totalCols; $c++) {
+                $cl = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
+                $width = $manualWidths[$c] ?? (in_array($c, $moneyColIndices) ? 14 : 12);
+                $sheet->getColumnDimension($cl)->setWidth($width);
+            }
+
+            // ── Freeze panes (keep title + headers visible) ────────────────────
+            $sheet->freezePane('A4');
+
+            // ── Auto Filter on header row ──────────────────────────────────────
+            $sheet->setAutoFilter("A3:{$lastColLetter}3");
+
+            // ── Output ────────────────────────────────────────────────────────
+            $filename = "Payroll_{$month}_{$year}.xlsx";
+            $writer   = new Xlsx($spreadsheet);
+
+            ob_start();
+            $writer->save('php://output');
+            $content = ob_get_clean();
+
+            return response($content, 200, [
+                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                'Pragma'              => 'no-cache',
+                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires'             => '0',
+            ]);
         } catch (\Throwable $th) {
             Log::error('PayrollAPI exportPayroll: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
+    }
+
+    /**
+     * Helper to format monetary fields for CSV export with commas.
+     */
+    private function formatCsvMoney($val)
+    {
+        if ($val === null || $val === '' || $val === '—') {
+            return '';
+        }
+        $cleanVal = str_replace(',', '', $val);
+        if (!is_numeric($cleanVal)) {
+            return $val;
+        }
+        return number_format((float)$cleanVal, 2, '.', ',');
     }
 
     // ─── Core Data Fetcher ────────────────────────────────────────────────────
@@ -362,7 +497,8 @@ class NextJsPayrollApiController extends Controller
                 'pc.salary_lock',
                 'pc.vstage',
                 'pc.audit_checked',
-                'pc.is_paid'
+                'pc.is_paid',
+                'pc.payer_id'
             )->get();
 
             $mapped = $allRows->map(function ($row) use ($revolvingLoanBalances, $coopLoanBalances, $coopSavingsBalances, $medicalLoanBalances, $coopAssetFinanceBalances, $loanSetupDeductions) {
@@ -403,7 +539,7 @@ class NextJsPayrollApiController extends Controller
                     'ACC. NO'            => $row->AccNo   ?? '',
                     'BANK'               => $row->bankName ?? '',
                     'CODE'               => '',
-                    'PAYER ID'           => '',
+                    'PAYER ID'           => $row->payer_id ?? '',
                     'salary_lock'        => (int)($row->salary_lock ?? 0),
                     'vstage'             => (int)($row->vstage ?? 0),
                     'audit_checked'      => (int)($row->audit_checked ?? 0),
@@ -451,6 +587,7 @@ class NextJsPayrollApiController extends Controller
                 'bl.bank as bankName',
                 'pc.staffid',
                 'pc.divisionID',
+                'p.payer_id',
                 DB::raw("COALESCE(pc.OD, 0) as OD")
             );
 
@@ -556,7 +693,7 @@ class NextJsPayrollApiController extends Controller
                 'ACC. NO'            => $row->AccNo   ?? '',
                 'BANK'               => $row->bankName ?? '',
                 'CODE'               => '',
-                'PAYER ID'           => '',
+                'PAYER ID'           => $row->payer_id ?? '',
             ];
         });
 
@@ -1244,6 +1381,7 @@ class NextJsPayrollApiController extends Controller
                     'staffID'          => $emp->ID,
                     'month'            => $month,
                     'year'             => $year,
+                    'payer_id'         => $emp->payer_id,
                     'basic'            => round($basicProrated, 2),
                     'housing'          => round($housingProrated, 2),
                     'transport'        => round($transportProrated, 2),
