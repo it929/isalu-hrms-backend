@@ -744,7 +744,7 @@ class HrStaffApiController extends Controller
         try {
             $request->validate([
                 'description' => 'required|string',
-                'filename' => 'required|file|mimes:pdf,doc,docx,jpeg,jpg,gif,png,bmp|max:2048',
+                'filename' => 'required|file|mimes:pdf,doc,docx,jpeg,jpg,gif,png,bmp|max:5120',
             ]);
 
             if ($request->hasFile('filename')) {
