@@ -22,6 +22,10 @@ class DatabaseDocumentationController extends Controller
 
     public function basicSetUp($fileNox, $fileNo, $title, $gender, $dateofBirth, $placeofBirth, $empType, $hremptype,  $department,  $departmentID, $designation, $designationID, $presentApptmnt, $officeshift,)
     {
+        $existing = DB::table('tblper')->where('ID', '=', $fileNo)->first();
+        $staff_status = ($existing && $existing->staff_status == 1) ? 1 : 0;
+        $status_value = ($existing && $existing->staff_status == 1) ? ($existing->status_value ?? 'Active Service') : 'new staff';
+
         DB::table('tblper')->where('ID', '=', $fileNo)->update([
             'fileNo' => $fileNox,
             'title' => $title,
@@ -40,8 +44,8 @@ class DatabaseDocumentationController extends Controller
             // 'appointment_date' => $firstApptmnt,
             'date_present_appointment' => $presentApptmnt,
             // 'resumption_date' => $resumptionDate,
-            'staff_status' => 0,
-            'status_value' => "new staff",
+            'staff_status' => $staff_status,
+            'status_value' => $status_value,
             'rank' => 0,
             'divisionID' => 1,
 
