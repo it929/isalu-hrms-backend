@@ -928,6 +928,7 @@ class HrStaffApiController extends Controller
                 ->leftjoin('tblmaritalStatus', 'tblmaritalStatus.ID', '=', 'tblper.maritalstatus')
                 ->leftjoin('tbldivision', 'tbldivision.divisionID', '=', 'tblper.divisionID')
                 ->leftjoin('tblbanklist', 'tblbanklist.bankID', '=', 'tblper.bankID')
+                ->leftjoin('salary_structures', 'salary_structures.staffId', '=', 'tblper.ID')
                 ->select(
                     'tblper.*',
                     'tblper.grade as staffGrade',
@@ -946,7 +947,8 @@ class HrStaffApiController extends Controller
                     'pob_states.State as place_of_birth_name',
                     'tbldepartment.department as department',
                     'tbldesignation.designation as designation',
-                    'tblbanklist.bank as bank'
+                    'tblbanklist.bank as bank',
+                    DB::raw('(COALESCE(salary_structures.basic_salary, 0) + COALESCE(salary_structures.housing_allowance, 0) + COALESCE(salary_structures.transport_allowance, 0) + COALESCE(salary_structures.medical_allowance, 0) + COALESCE(salary_structures.utility_allowance, 0) + COALESCE(salary_structures.meal_allowance, 0)) as gross')
                 )
                 ->where('tblper.ID', '=', $id)
                 ->first();
