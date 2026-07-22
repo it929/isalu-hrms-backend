@@ -54,6 +54,9 @@ class NextJsApiController extends Controller
             $userData = $user->toArray();
             $userData['must_change_password'] = $mustChangePassword;
 
+            $staff = \DB::table('tblper')->where('UserID', $user->id)->first();
+            $userData['passport_url'] = $staff ? $staff->passport_url : null;
+
             // Fetch actual role name from database
             $role = \DB::table('assign_user_role')
                 ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
@@ -389,6 +392,9 @@ class NextJsApiController extends Controller
 
         $userData = $user->toArray();
         $userData['must_change_password'] = false;
+
+        $staff = \DB::table('tblper')->where('UserID', $user->id)->first();
+        $userData['passport_url'] = $staff ? $staff->passport_url : null;
 
         return response()->json([
             'status' => 'success',

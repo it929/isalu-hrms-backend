@@ -23,8 +23,8 @@ class DatabaseDocumentationController extends Controller
     public function basicSetUp($fileNox, $fileNo, $title, $gender, $dateofBirth, $placeofBirth, $empType, $hremptype,  $department,  $departmentID, $designation, $designationID, $presentApptmnt, $officeshift,)
     {
         $existing = DB::table('tblper')->where('ID', '=', $fileNo)->first();
-        $staff_status = ($existing && $existing->staff_status == 1) ? 1 : 0;
-        $status_value = ($existing && $existing->staff_status == 1) ? ($existing->status_value ?? 'Active Service') : 'new staff';
+        $staff_status = 1;
+        $status_value = ($existing && $existing->status_value && stripos($existing->status_value, 'active') !== false) ? $existing->status_value : 'Active Service';
 
         DB::table('tblper')->where('ID', '=', $fileNo)->update([
             'fileNo' => $fileNox,

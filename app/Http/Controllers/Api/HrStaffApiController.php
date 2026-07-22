@@ -326,6 +326,10 @@ class HrStaffApiController extends Controller
                 }
             }
 
+            $existing = DB::table('tblper')->where('ID', $id)->first();
+            $staff_status = 1;
+            $status_value = ($existing && $existing->status_value && stripos($existing->status_value, 'active') !== false) ? $existing->status_value : 'Active Service';
+
             DB::table('tblper')->where('ID', $id)->update([
                 'fileNo' => $fileNox,
                 'title' => $request->title,
@@ -341,8 +345,8 @@ class HrStaffApiController extends Controller
                 'designationID' => $request->designationID,
                 'date_present_appointment' => $request->date_present_appointment,
                 'doj' => $request->date_present_appointment,
-                'staff_status' => 0,
-                'status_value' => "new staff",
+                'staff_status' => $staff_status,
+                'status_value' => $status_value,
                 'rank' => 0,
                 'divisionID' => 1,
                 'progress_regID' => max(7, $currentProgress)
