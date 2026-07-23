@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\Api\ResolveUserContextTrait;
 
 class NextJsApiController extends Controller
 {
+    use ResolveUserContextTrait;
     /**
      * Authenticate user from Next.js
      */
@@ -323,9 +325,147 @@ class NextJsApiController extends Controller
                 }
             }
 
+            $isHod = false;
+            $isHr = false;
+            $activeHrDelegations = collect();
+            $employee = \DB::table('tblper')->where('UserID', $userId)->first();
+            if ($employee) {
+                $activeHrDelegations = \DB::table('hr_delegations')
+                    ->where('delegate_staff_id', $employee->ID)
+                    ->where('status', 'active')
+                    ->where(function($query) {
+                        $query->whereNull('start_date')
+                              ->orWhere('start_date', '<=', now()->toDateString());
+                    })
+                    ->where(function($query) {
+                        $query->whereNull('end_date')
+                              ->orWhere('end_date', '>=', now()->toDateString());
+                    })
+                    ->get();
+            }
+
+            if ($employee && $employee->is_hod == 1) {
+                $isHod = true;
+            } else if ($employee) {
+                $isHod = \DB::table('hod_delegations')
+                    ->where('delegate_staff_id', $employee->ID)
+                    ->where('status', 'active')
+                    ->where(function($query) {
+                        $query->whereNull('start_date')
+                              ->orWhere('start_date', '<=', now()->toDateString());
+                    })
+                    ->where(function($query) {
+                        $query->whereNull('end_date')
+                              ->orWhere('end_date', '>=', now()->toDateString());
+                    })
+                    ->exists();
+            }
+
+            if ($employee) {
+                $isHr = \DB::table('assign_user_role')
+                    ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+                    ->where('assign_user_role.userID', $userId)
+                    ->where(function($query) {
+                        $query->where('assign_user_role.roleID', 48)
+                              ->orWhereRaw('LOWER(user_role.rolename) = ?', ['hr head']);
+                    })
+                    ->exists();
+
+                if ($activeHrDelegations->count() > 0 && !$isTechnical) {
+                    $submoduleIds = [];
+                    foreach ($activeHrDelegations as $activeHrDelegation) {
+                        $delegatedHrPerms = json_decode($activeHrDelegation->permissions, true) ?: [];
+
+                        foreach ($delegatedHrPerms as $perm) {
+                            if (is_numeric($perm)) {
+                                $submoduleIds[] = (int)$perm;
+                            } else {
+                                $mapping = [
+                                    'hr_approve_leave' => [252, 253],
+                                    'hr_approve_loan' => [231, 232],
+                                    'hr_approve_iou' => [242],
+                                    'hr_approve_refund' => [263],
+                                    'hr_approve_resignation' => [264],
+                                ];
+                                if (isset($mapping[$perm])) {
+                                    $submoduleIds = array_merge($submoduleIds, $mapping[$perm]);
+                                }
+                            }
+                        }
+                    }
+                    $submoduleIds = array_unique($submoduleIds);
+
+                    if (count($submoduleIds) > 0) {
+                        $delegatedSubmodules = \DB::table('submodule as s')
+                            ->join('module as m', 'm.moduleID', '=', 's.moduleID')
+                            ->whereIn('s.submoduleID', $submoduleIds)
+                            ->select('s.submoduleID', 's.submodulename', 's.route', 's.moduleID', 'm.modulename', 'm.link_type')
+                            ->orderBy('s.sub_module_rank', 'ASC')
+                            ->get();
+
+                        foreach ($delegatedSubmodules as $sub) {
+                            $modIndex = -1;
+                            foreach ($sidebarData as $idx => $sData) {
+                                if ($sData['moduleID'] == $sub->moduleID) {
+                                    $modIndex = $idx;
+                                    break;
+                                }
+                            }
+
+                            if ($modIndex !== -1) {
+                                $subExists = false;
+                                foreach ($sidebarData[$modIndex]['submodules'] as $existingSub) {
+                                    if ($existingSub['path'] === '/' . ltrim($sub->route, '/')) {
+                                        $subExists = true;
+                                        break;
+                                    }
+                                }
+                                if (!$subExists) {
+                                    $sidebarData[$modIndex]['submodules'][] = [
+                                        'id' => $sub->submoduleID,
+                                        'name' => $sub->submodulename,
+                                        'path' => '/' . ltrim($sub->route, '/'),
+                                    ];
+                                }
+                            } else {
+                                $sidebarData[] = [
+                                    'moduleID' => $sub->moduleID,
+                                    'modulename' => $sub->modulename,
+                                    'link_type' => $sub->link_type,
+                                    'submodules' => [
+                                        [
+                                            'id' => $sub->submoduleID,
+                                            'name' => $sub->submodulename,
+                                            'path' => '/' . ltrim($sub->route, '/'),
+                                        ]
+                                    ]
+                                ];
+                            }
+                        }
+                    }
+
+                    if (in_array(999, $delegatedHrPerms)) {
+                        $sidebarData[] = [
+                            'moduleID' => 'security_roles',
+                            'modulename' => 'SECURITY & ROLES',
+                            'link_type' => 99,
+                            'submodules' => [
+                                [
+                                    'id' => 999,
+                                    'name' => 'Assign User',
+                                    'path' => '/dashboard/roles/assign-user'
+                                ]
+                            ]
+                        ];
+                    }
+                }
+            }
+
             return response()->json([
                 'status' => 'success',
                 'is_admin' => $isTechnical,
+                'is_hod' => $isHod,
+                'is_hr' => $isHr,
                 'sidebar' => $sidebarData
             ]);
 
@@ -555,6 +695,281 @@ class NextJsApiController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Your password has been successfully reset!'
+        ]);
+    }
+
+    /**
+     * GET /api/nextjs/hod-delegations
+     */
+    public function getDelegations(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$ctx['isHod']) {
+            return response()->json(['status' => 'error', 'message' => 'HOD privileges required.'], 403);
+        }
+
+        // Get department staff of the HOD
+        $deptId = $ctx['employee']->departmentID;
+        $staff = \DB::table('tblper')
+            ->where('departmentID', $deptId)
+            ->where('ID', '!=', $ctx['employee']->ID) // exclude the HOD themselves
+            ->select('ID', 'surname', 'first_name', 'othernames')
+            ->get();
+
+        // Get current HOD delegations
+        $delegations = \DB::table('hod_delegations as hd')
+            ->join('tblper as p', 'p.ID', '=', 'hd.delegate_staff_id')
+            ->where('hd.hod_staff_id', $ctx['employee']->ID)
+            ->select(
+                'hd.*',
+                'p.surname',
+                'p.first_name',
+                'p.othernames'
+            )
+            ->orderBy('hd.created_at', 'DESC')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'staff' => $staff,
+            'delegations' => $delegations
+        ]);
+    }
+
+    /**
+     * POST /api/nextjs/hod-delegations
+     */
+    public function saveDelegation(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$ctx['isHod']) {
+            return response()->json(['status' => 'error', 'message' => 'HOD privileges required.'], 403);
+        }
+
+        $request->validate([
+            'delegate_staff_id' => 'required|integer',
+            'permissions' => 'required|array',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+        ]);
+
+        // Verify that the delegate is in the HOD's department
+        $delegate = \DB::table('tblper')
+            ->where('ID', $request->delegate_staff_id)
+            ->where('departmentID', $ctx['employee']->departmentID)
+            ->first();
+
+        if (!$delegate) {
+            return response()->json(['status' => 'error', 'message' => 'Staff member is not in your department.'], 403);
+        }
+
+        // Insert new delegation
+        \DB::table('hod_delegations')->insert([
+            'hod_staff_id' => $ctx['employee']->ID,
+            'delegate_staff_id' => $request->delegate_staff_id,
+            'department_id' => $ctx['employee']->departmentID,
+            'permissions' => json_encode($request->permissions),
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date,
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Role delegation created successfully.'
+        ]);
+    }
+
+    /**
+     * POST /api/nextjs/hod-delegations/toggle/{id}
+     */
+    public function toggleDelegation(Request $request, $id)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$ctx['isHod']) {
+            return response()->json(['status' => 'error', 'message' => 'HOD privileges required.'], 403);
+        }
+
+        $delegation = \DB::table('hod_delegations')
+            ->where('id', $id)
+            ->where('hod_staff_id', $ctx['employee']->ID)
+            ->first();
+
+        if (!$delegation) {
+            return response()->json(['status' => 'error', 'message' => 'Delegation not found.'], 404);
+        }
+
+        $newStatus = $delegation->status === 'active' ? 'inactive' : 'active';
+
+        \DB::table('hod_delegations')
+            ->where('id', $id)
+            ->update([
+                'status' => $newStatus,
+                'updated_at' => now()
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Delegation status updated successfully.',
+            'new_status' => $newStatus
+        ]);
+    }
+
+    /**
+     * GET /api/nextjs/hr-delegations
+     */
+    public function getHrDelegations(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$ctx['isAdminStaff'] || (isset($ctx['isDelegatedHr']) && $ctx['isDelegatedHr'])) {
+            return response()->json(['status' => 'error', 'message' => 'HR Head privileges required.'], 403);
+        }
+
+        if (!$ctx['employee']) {
+            return response()->json(['status' => 'error', 'message' => 'Employee profile not found for this user.'], 400);
+        }
+
+        // Get department staff of the HR manager
+        $deptId = $ctx['employee']->departmentID;
+        $staff = \DB::table('tblper')
+            ->where('departmentID', $deptId)
+            ->where('ID', '!=', $ctx['employee']->ID) // exclude the HR manager themselves
+            ->select('ID', 'UserID', 'surname', 'first_name', 'othernames')
+            ->get();
+
+        // Get current HR delegations
+        $delegations = \DB::table('hr_delegations as hd')
+            ->join('tblper as p', 'p.ID', '=', 'hd.delegate_staff_id')
+            ->where('hd.hr_staff_id', $ctx['employee']->ID)
+            ->select(
+                'hd.*',
+                'p.surname',
+                'p.first_name',
+                'p.othernames'
+            )
+            ->orderBy('hd.created_at', 'DESC')
+            ->get();
+
+        // Get modules and submodules assigned to the HR HEAD's roles
+        $assignedSubmodules = \DB::table('assign_user_role')
+            ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+            ->join('assign_module_role', 'assign_module_role.roleID', '=', 'assign_user_role.roleID')
+            ->join('submodule', 'submodule.submoduleID', '=', 'assign_module_role.submoduleID')
+            ->join('module', 'module.moduleID', '=', 'submodule.moduleID')
+            ->where('assign_user_role.userID', '=', $ctx['userId'])
+            ->select('submodule.submoduleID', 'submodule.submodulename', 'submodule.route', 'module.modulename')
+            ->distinct()
+            ->orderBy('module.modulename', 'ASC')
+            ->orderBy('submodule.submodulename', 'ASC')
+            ->get();
+
+        // Get system roles list
+        $roles = \DB::table('user_role')
+            ->orderBy('rolename', 'ASC')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'staff' => $staff,
+            'delegations' => $delegations,
+            'assignedSubmodules' => $assignedSubmodules,
+            'roles' => $roles
+        ]);
+    }
+
+    /**
+     * POST /api/nextjs/hr-delegations
+     */
+    public function saveHrDelegation(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$ctx['isAdminStaff'] || (isset($ctx['isDelegatedHr']) && $ctx['isDelegatedHr'])) {
+            return response()->json(['status' => 'error', 'message' => 'HR Head privileges required.'], 403);
+        }
+
+        if (!$ctx['employee']) {
+            return response()->json(['status' => 'error', 'message' => 'Employee profile not found for this user.'], 400);
+        }
+
+        $request->validate([
+            'delegate_staff_id' => 'required|integer',
+            'permissions' => 'required|array',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+        ]);
+
+        // Verify that the delegate is in the HR manager's department
+        $delegate = \DB::table('tblper')
+            ->where('ID', $request->delegate_staff_id)
+            ->where('departmentID', $ctx['employee']->departmentID)
+            ->first();
+
+        if (!$delegate) {
+            return response()->json(['status' => 'error', 'message' => 'Staff member is not in your department.'], 403);
+        }
+
+        // Delete any existing delegation records for this delegate to avoid duplicate active scopes
+        \DB::table('hr_delegations')
+            ->where('hr_staff_id', $ctx['employee']->ID)
+            ->where('delegate_staff_id', $request->delegate_staff_id)
+            ->delete();
+
+        // Insert new delegation
+        \DB::table('hr_delegations')->insert([
+            'hr_staff_id' => $ctx['employee']->ID,
+            'delegate_staff_id' => $request->delegate_staff_id,
+            'permissions' => json_encode($request->permissions),
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date,
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'HR role delegated successfully.'
+        ]);
+    }
+
+    /**
+     * POST /api/nextjs/hr-delegations/toggle/{id}
+     */
+    public function toggleHrDelegation(Request $request, $id)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$ctx['isAdminStaff'] || (isset($ctx['isDelegatedHr']) && $ctx['isDelegatedHr'])) {
+            return response()->json(['status' => 'error', 'message' => 'HR Head privileges required.'], 403);
+        }
+
+        if (!$ctx['employee']) {
+            return response()->json(['status' => 'error', 'message' => 'Employee profile not found for this user.'], 400);
+        }
+
+        $delegation = \DB::table('hr_delegations')
+            ->where('id', $id)
+            ->where('hr_staff_id', $ctx['employee']->ID)
+            ->first();
+
+        if (!$delegation) {
+            return response()->json(['status' => 'error', 'message' => 'Delegation not found.'], 404);
+        }
+
+        $newStatus = $delegation->status === 'active' ? 'inactive' : 'active';
+
+        \DB::table('hr_delegations')
+            ->where('id', $id)
+            ->update([
+                'status' => $newStatus,
+                'updated_at' => now()
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Delegation status updated successfully.',
+            'new_status' => $newStatus
         ]);
     }
 }

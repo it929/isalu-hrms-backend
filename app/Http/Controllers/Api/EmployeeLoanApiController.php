@@ -106,7 +106,7 @@ class EmployeeLoanApiController extends Controller
 
             if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
                 // Admins and Audit see all
-            } elseif ($employee && $employee->is_hod == 1) {
+            } elseif ($employee && $ctx['isHod']) {
                 // HOD sees department staff
                 $query->where('p.departmentID', $employee->departmentID);
             } elseif ($employee) {
@@ -448,8 +448,8 @@ class EmployeeLoanApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isHod'])) {
-                return response()->json(['status' => 'error', 'message' => 'Unauthorized – HOD or admin privileges required.'], 401);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$this->hasHodPermission($ctx, 'approve_loan'))) {
+                return response()->json(['status' => 'error', 'message' => 'HOD or delegated administrative privileges required.'], 401);
             }
 
             $loan = DB::table('employee_loans')->where('id', $id)->first();
@@ -489,8 +489,8 @@ class EmployeeLoanApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isHod'])) {
-                return response()->json(['status' => 'error', 'message' => 'Unauthorized – HOD or admin privileges required.'], 401);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$this->hasHodPermission($ctx, 'approve_loan'))) {
+                return response()->json(['status' => 'error', 'message' => 'HOD or delegated administrative privileges required.'], 401);
             }
 
             $loan = DB::table('employee_loans')->where('id', $id)->first();
@@ -597,8 +597,8 @@ class EmployeeLoanApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'])) {
-                return response()->json(['status' => 'error', 'message' => 'Unauthorized – HR or Admin privileges required.'], 401);
+            if (!$ctx || !$this->hasHrPermission($ctx, 'hr_approve_loan')) {
+                return response()->json(['status' => 'error', 'message' => 'HR or delegated administrative privileges required.'], 401);
             }
 
             $loan = DB::table('employee_loans')->where('id', $id)->first();
@@ -630,8 +630,8 @@ class EmployeeLoanApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'])) {
-                return response()->json(['status' => 'error', 'message' => 'Unauthorized – HR or Admin privileges required.'], 401);
+            if (!$ctx || !$this->hasHrPermission($ctx, 'hr_approve_loan')) {
+                return response()->json(['status' => 'error', 'message' => 'HR or delegated administrative privileges required.'], 401);
             }
 
             $loan = DB::table('employee_loans')->where('id', $id)->first();
