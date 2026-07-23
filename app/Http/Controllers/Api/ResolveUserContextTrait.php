@@ -39,14 +39,104 @@ trait ResolveUserContextTrait
 
         $employee = DB::table('tblper')->where('UserID', $userId)->first();
 
+        $isHod = $employee && $employee->is_hod == 1;
+        $isDelegatedHod = false;
+        $delegatedPermissions = [];
+
+        if (!$isHod && $employee) {
+            $delegation = DB::table('hod_delegations')
+                ->where('delegate_staff_id', $employee->ID)
+                ->where('status', 'active')
+                ->where(function($query) {
+                    $query->whereNull('start_date')
+                          ->orWhere('start_date', '<=', now()->toDateString());
+                })
+                ->where(function($query) {
+                    $query->whereNull('end_date')
+                          ->orWhere('end_date', '>=', now()->toDateString());
+                })
+                ->first();
+
+            if ($delegation) {
+                $isHod = true;
+                $isDelegatedHod = true;
+                $delegatedPermissions = json_decode($delegation->permissions, true) ?: [];
+            }
+        }
+
+        $isDelegatedHr = false;
+        $delegatedHrPermissions = [];
+
+        if (!$adminStaff && $employee) {
+            $hrDelegation = DB::table('hr_delegations')
+                ->where('delegate_staff_id', $employee->ID)
+                ->where('status', 'active')
+                ->where(function($query) {
+                    $query->whereNull('start_date')
+                          ->orWhere('start_date', '<=', now()->toDateString());
+                })
+                ->where(function($query) {
+                    $query->whereNull('end_date')
+                          ->orWhere('end_date', '>=', now()->toDateString());
+                })
+                ->first();
+
+            if ($hrDelegation) {
+                $adminStaff = true;
+                $isDelegatedHr = true;
+                $delegatedHrPermissions = json_decode($hrDelegation->permissions, true) ?: [];
+            }
+        }
+
         return [
-            'userId'         => $userId,
-            'isSuperAdmin'   => $isSuperAdmin,
-            'isAdminStaff'   => $adminStaff,
-            'isAuditStaff'   => $isAuditStaff,
-            'isFinanceStaff' => $isFinanceStaff,
-            'employee'       => $employee,
-            'isHod'          => $employee && $employee->is_hod == 1,
+            'userId'                 => $userId,
+            'isSuperAdmin'           => $isSuperAdmin,
+            'isAdminStaff'           => $adminStaff,
+            'isAuditStaff'           => $isAuditStaff,
+            'isFinanceStaff'         => $isFinanceStaff,
+            'employee'               => $employee,
+            'isHod'                  => $isHod,
+            'isDelegatedHod'         => $isDelegatedHod,
+            'delegatedPermissions'   => $delegatedPermissions,
+            'isDelegatedHr'          => $isDelegatedHr,
+            'delegatedHrPermissions' => $delegatedHrPermissions,
         ];
+    }
+
+    /**
+     * Check if the user has a specific HOD permission (direct HOD, admin, or delegated).
+     */
+    private function hasHodPermission($ctx, $permission)
+    {
+        if (!$ctx) return false;
+        if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) return true;
+        if ($ctx['employee'] && $ctx['employee']->is_hod == 1) return true;
+
+        if (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) {
+            return in_array($permission, $ctx['delegatedPermissions']);
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if the user has a specific HR permission (direct HR, admin, or delegated).
+     */
+    private function hasHrPermission($ctx, $permission)
+    {
+        if (!$ctx) return false;
+        if ($ctx['isSuperAdmin']) return true;
+
+        // If they are regular HR staff (not delegated)
+        if ($ctx['isAdminStaff'] && (!isset($ctx['isDelegatedHr']) || !$ctx['isDelegatedHr'])) {
+            return true;
+        }
+
+        // If they are delegated HR staff
+        if (isset($ctx['isDelegatedHr']) && $ctx['isDelegatedHr']) {
+            return in_array($permission, $ctx['delegatedHrPermissions']);
+        }
+
+        return false;
     }
 }

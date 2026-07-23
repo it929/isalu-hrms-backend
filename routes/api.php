@@ -33,6 +33,12 @@ Route::prefix('nextjs')->group(function () {
     Route::get('/hod-assignments', [\App\Http\Controllers\Api\NextJsApiController::class, 'getHodAssignments']);
     Route::get('/staff-by-department/{dept}', [\App\Http\Controllers\Api\NextJsApiController::class, 'getStaffByDepartment']);
     Route::post('/assign-hod', [\App\Http\Controllers\Api\NextJsApiController::class, 'assignHod']);
+    Route::get('/hod-delegations', [\App\Http\Controllers\Api\NextJsApiController::class, 'getDelegations']);
+    Route::post('/hod-delegations', [\App\Http\Controllers\Api\NextJsApiController::class, 'saveDelegation']);
+    Route::post('/hod-delegations/toggle/{id}', [\App\Http\Controllers\Api\NextJsApiController::class, 'toggleDelegation']);
+    Route::get('/hr-delegations', [\App\Http\Controllers\Api\NextJsApiController::class, 'getHrDelegations']);
+    Route::post('/hr-delegations', [\App\Http\Controllers\Api\NextJsApiController::class, 'saveHrDelegation']);
+    Route::post('/hr-delegations/toggle/{id}', [\App\Http\Controllers\Api\NextJsApiController::class, 'toggleHrDelegation']);
 
     // Roles management
     Route::get('/roles', [\App\Http\Controllers\Api\UserRoleApiController::class, 'index']);

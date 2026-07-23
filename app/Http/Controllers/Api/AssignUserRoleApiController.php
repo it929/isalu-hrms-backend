@@ -37,6 +37,24 @@ class AssignUserRoleApiController extends Controller
         ]);
     }
 
+    private function canAssignRoles($ctx)
+    {
+        if (!$ctx) return false;
+        if ($ctx['isSuperAdmin']) return true;
+        
+        // Direct HR Head
+        if ($ctx['isAdminStaff'] && (!isset($ctx['isDelegatedHr']) || !$ctx['isDelegatedHr'])) {
+            return true;
+        }
+
+        // Delegated HR staff with submodule ID 999
+        if (isset($ctx['isDelegatedHr']) && $ctx['isDelegatedHr']) {
+            return in_array(999, $ctx['delegatedHrPermissions']);
+        }
+
+        return false;
+    }
+
     /**
      * GET /api/nextjs/user-assign/metadata
      * Load roles and non-technical users lists.
@@ -45,8 +63,8 @@ class AssignUserRoleApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx) {
-                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            if (!$this->canAssignRoles($ctx)) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized - HR or Admin privileges required.'], 403);
             }
 
             // Fetch roles
@@ -92,8 +110,8 @@ class AssignUserRoleApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx) {
-                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            if (!$this->canAssignRoles($ctx)) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized - HR or Admin privileges required.'], 403);
             }
 
             $perPage = (int)$request->input('perPage', 20);
@@ -159,12 +177,8 @@ class AssignUserRoleApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx) {
-                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
-            }
-
-            if (!$ctx['isSuperAdmin']) {
-                return response()->json(['status' => 'error', 'message' => 'Access denied: Only Super Administrators can manage user role assignments.'], 403);
+            if (!$this->canAssignRoles($ctx)) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized - HR or Admin privileges required.'], 403);
             }
 
             $validated = $request->validate([
@@ -174,6 +188,14 @@ class AssignUserRoleApiController extends Controller
 
             $userID = (int) $validated['userID'];
             $roleID = (int) $validated['roleID'];
+
+            // If not a Super Admin, verify that the target user is in the HR manager's department
+            if (!$ctx['isSuperAdmin']) {
+                $targetStaff = DB::table('tblper')->where('UserID', $userID)->first();
+                if (!$targetStaff || $targetStaff->departmentID != $ctx['employee']->departmentID) {
+                    return response()->json(['status' => 'error', 'message' => 'Access denied: You can only assign roles to staff in your department.'], 403);
+                }
+            }
 
             DB::beginTransaction();
 

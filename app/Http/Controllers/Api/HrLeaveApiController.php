@@ -113,7 +113,7 @@ class HrLeaveApiController extends Controller
 
         if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
             $records = $baseQuery->get();
-        } elseif ($employee && $employee->is_hod == 1) {
+        } elseif ($employee && $ctx['isHod']) {
             $records = $baseQuery
                 ->where('tblper.departmentID', $employee->departmentID)
                 ->get();
@@ -297,29 +297,67 @@ class HrLeaveApiController extends Controller
     // ── Approval / Rejection Actions ─────────────────────────────────────────
 
     /** GET /api/nextjs/hr/apply-leave/hod-approve/{id} */
-    public function hodApprove($id)
+    public function hodApprove(\Illuminate\Http\Request $request, $id)
     {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$this->hasHodPermission($ctx, 'approve_leave')) {
+            return response()->json(['status' => 'error', 'message' => 'HOD or delegated leave approval privileges required.'], 403);
+        }
+
+        if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
+            $record = DB::table('leave_record')->where('id', $id)->first();
+            if ($record) {
+                $employee = DB::table('tblper')->where('ID', $record->employee_id)->first();
+                if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
+                    return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
+                }
+            }
+        }
+
         DB::table('leave_record')->where('id', $id)->update(['status' => 1]);
         return response()->json(['status' => 'success', 'message' => 'Leave approved by HOD.']);
     }
 
     /** GET /api/nextjs/hr/apply-leave/hod-reject/{id} */
-    public function hodReject($id)
+    public function hodReject(\Illuminate\Http\Request $request, $id)
     {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$this->hasHodPermission($ctx, 'approve_leave')) {
+            return response()->json(['status' => 'error', 'message' => 'HOD or delegated leave approval privileges required.'], 403);
+        }
+
+        if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
+            $record = DB::table('leave_record')->where('id', $id)->first();
+            if ($record) {
+                $employee = DB::table('tblper')->where('ID', $record->employee_id)->first();
+                if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
+                    return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
+                }
+            }
+        }
+
         DB::table('leave_record')->where('id', $id)->update(['status' => 3]);
         return response()->json(['status' => 'success', 'message' => 'Leave rejected by HOD.']);
     }
 
     /** GET /api/nextjs/hr/apply-leave/admin-approve/{id} */
-    public function adminApprove($id)
+    public function adminApprove(\Illuminate\Http\Request $request, $id)
     {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$this->hasHrPermission($ctx, 'hr_approve_leave')) {
+            return response()->json(['status' => 'error', 'message' => 'HR or delegated leave approval privileges required.'], 403);
+        }
         DB::table('leave_record')->where('id', $id)->update(['status' => 2]);
         return response()->json(['status' => 'success', 'message' => 'Leave fully approved by HR.']);
     }
 
     /** GET /api/nextjs/hr/apply-leave/admin-reject/{id} */
-    public function adminReject($id)
+    public function adminReject(\Illuminate\Http\Request $request, $id)
     {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$this->hasHrPermission($ctx, 'hr_approve_leave')) {
+            return response()->json(['status' => 'error', 'message' => 'HR or delegated leave approval privileges required.'], 403);
+        }
         DB::table('leave_record')->where('id', $id)->update(['status' => 4]);
         return response()->json(['status' => 'success', 'message' => 'Leave rejected by Admin.']);
     }
@@ -479,7 +517,7 @@ class HrLeaveApiController extends Controller
 
         if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
             $records = $baseQuery->get();
-        } elseif ($employee && $employee->is_hod == 1) {
+        } elseif ($employee && $ctx['isHod']) {
             $records = $baseQuery
                 ->where('tblper.departmentID', $employee->departmentID)
                 ->get();
@@ -587,29 +625,67 @@ class HrLeaveApiController extends Controller
     }
 
     /** GET /api/nextjs/hr/apply-loa/hod-approve/{id} */
-    public function hodApproveLoa($id)
+    public function hodApproveLoa(\Illuminate\Http\Request $request, $id)
     {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$this->hasHodPermission($ctx, 'approve_leave')) {
+            return response()->json(['status' => 'error', 'message' => 'HOD or delegated leave approval privileges required.'], 403);
+        }
+
+        if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
+            $record = DB::table('leave_of_absent')->where('id', $id)->first();
+            if ($record) {
+                $employee = DB::table('tblper')->where('ID', $record->employee_id)->first();
+                if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
+                    return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
+                }
+            }
+        }
+
         DB::table('leave_of_absent')->where('id', $id)->update(['status' => 1]);
         return response()->json(['status' => 'success', 'message' => 'Leave of absence approved by HOD.']);
     }
 
     /** GET /api/nextjs/hr/apply-loa/hod-reject/{id} */
-    public function hodRejectLoa($id)
+    public function hodRejectLoa(\Illuminate\Http\Request $request, $id)
     {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$this->hasHodPermission($ctx, 'approve_leave')) {
+            return response()->json(['status' => 'error', 'message' => 'HOD or delegated leave approval privileges required.'], 403);
+        }
+
+        if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
+            $record = DB::table('leave_of_absent')->where('id', $id)->first();
+            if ($record) {
+                $employee = DB::table('tblper')->where('ID', $record->employee_id)->first();
+                if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
+                    return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
+                }
+            }
+        }
+
         DB::table('leave_of_absent')->where('id', $id)->update(['status' => 3]);
         return response()->json(['status' => 'success', 'message' => 'Leave of absence rejected by HOD.']);
     }
 
     /** GET /api/nextjs/hr/apply-loa/admin-approve/{id} */
-    public function adminApproveLoa($id)
+    public function adminApproveLoa(\Illuminate\Http\Request $request, $id)
     {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$this->hasHrPermission($ctx, 'hr_approve_leave')) {
+            return response()->json(['status' => 'error', 'message' => 'HR or delegated leave approval privileges required.'], 403);
+        }
         DB::table('leave_of_absent')->where('id', $id)->update(['status' => 2]);
         return response()->json(['status' => 'success', 'message' => 'Leave of absence fully approved by HR.']);
     }
 
     /** GET /api/nextjs/hr/apply-loa/admin-reject/{id} */
-    public function adminRejectLoa($id)
+    public function adminRejectLoa(\Illuminate\Http\Request $request, $id)
     {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || !$this->hasHrPermission($ctx, 'hr_approve_leave')) {
+            return response()->json(['status' => 'error', 'message' => 'HR or delegated leave approval privileges required.'], 403);
+        }
         DB::table('leave_of_absent')->where('id', $id)->update(['status' => 4]);
         return response()->json(['status' => 'success', 'message' => 'Leave of absence rejected by Admin.']);
     }

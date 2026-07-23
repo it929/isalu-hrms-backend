@@ -113,7 +113,7 @@ class RefundApiController extends Controller
 
             if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isFinanceStaff'] || $ctx['isAuditStaff']) {
                 // Administrative staff see all requests
-            } elseif ($employee && $employee->is_hod == 1) {
+            } elseif ($employee && $ctx['isHod']) {
                 // HOD sees department staff requests
                 $query->where('p.departmentID', $employee->departmentID);
             } elseif ($employee) {
@@ -289,8 +289,8 @@ class RefundApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isHod'])) {
-                return response()->json(['status' => 'error', 'message' => 'HOD or administrative privileges required.'], 401);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$this->hasHodPermission($ctx, 'approve_refund'))) {
+                return response()->json(['status' => 'error', 'message' => 'HOD or delegated administrative privileges required.'], 401);
             }
 
             $record = DB::table('refund_requests')->where('id', $id)->first();
@@ -333,8 +333,8 @@ class RefundApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isHod'])) {
-                return response()->json(['status' => 'error', 'message' => 'HOD or administrative privileges required.'], 401);
+            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$this->hasHodPermission($ctx, 'approve_refund'))) {
+                return response()->json(['status' => 'error', 'message' => 'HOD or delegated administrative privileges required.'], 401);
             }
 
             $record = DB::table('refund_requests')->where('id', $id)->first();
@@ -377,8 +377,8 @@ class RefundApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'])) {
-                return response()->json(['status' => 'error', 'message' => 'Administrative head privileges required.'], 401);
+            if (!$ctx || !$this->hasHrPermission($ctx, 'hr_approve_refund')) {
+                return response()->json(['status' => 'error', 'message' => 'HR or delegated administrative privileges required.'], 401);
             }
 
             $record = DB::table('refund_requests')->where('id', $id)->first();
@@ -413,8 +413,8 @@ class RefundApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'])) {
-                return response()->json(['status' => 'error', 'message' => 'Administrative head privileges required.'], 401);
+            if (!$ctx || !$this->hasHrPermission($ctx, 'hr_approve_refund')) {
+                return response()->json(['status' => 'error', 'message' => 'HR or delegated administrative privileges required.'], 401);
             }
  
             $record = DB::table('refund_requests')->where('id', $id)->first();
