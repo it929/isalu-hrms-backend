@@ -93,6 +93,7 @@ class HrStaffStatusApiController extends Controller
                 ->leftJoin('tbldivision', 'tbldivision.divisionID', '=', 'tblper.divisionID')
                 ->select(
                     'tblper.ID',
+                    'tblper.ID as staffID',
                     'tblper.fileNo',
                     'tblper.surname',
                     'tblper.first_name',
