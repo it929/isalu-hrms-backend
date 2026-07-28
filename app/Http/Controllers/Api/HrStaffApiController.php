@@ -333,6 +333,9 @@ class HrStaffApiController extends Controller
             DB::table('tblper')->where('ID', $id)->update([
                 'fileNo' => $fileNox,
                 'title' => $request->title,
+                'surname' => $request->surname,
+                'first_name' => $request->first_name,
+                'othernames' => $request->othernames,
                 'gender' => $request->gender,
                 'dob' => $request->dob,
                 'placeofbirth' => $request->placeofbirth,

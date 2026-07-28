@@ -256,7 +256,6 @@ class NextJsApiController extends Controller
                 ['label' => 'Total Employees', 'value' => number_format($totalStaff), 'icon' => 'Users', 'color' => 'var(--primary)'],
                 ['label' => 'Male Staff', 'value' => number_format($maleStaff), 'icon' => 'Users', 'color' => '#10b981'],
                 ['label' => 'Female Staff', 'value' => number_format($femaleStaff), 'icon' => '#f59e0b', 'color' => '#f59e0b'],
-                ['label' => 'Open Positions', 'value' => '12', 'icon' => 'Briefcase', 'color' => '#8b5cf6'],
             ],
             'departments' => $departments
         ]);
