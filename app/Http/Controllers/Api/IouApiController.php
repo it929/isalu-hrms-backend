@@ -223,6 +223,7 @@ class IouApiController extends Controller
                     'p.first_name',
                     'p.othernames',
                     'd.department',
+                    'p.departmentID as department_id',
                     'u_hod.name as hod_name',
                     'u_admin.name as admin_name',
                     'u_audit.name as audit_name',
@@ -250,8 +251,9 @@ class IouApiController extends Controller
             if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isFinanceStaff'] || $ctx['isAuditStaff']) {
                 // Admins, Finance, and Audit see all IOU applications
             } elseif ($employee && $ctx['isHod']) {
-                // HOD sees staff in their department
-                $query->where('p.departmentID', $employee->departmentID);
+                // HOD sees staff in their department (or delegated department)
+                $deptId = (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) ? $ctx['delegated_department_id'] : $employee->departmentID;
+                $query->where('p.departmentID', $deptId);
             } elseif ($employee) {
                 // Regular staff see only their own
                 $query->where('ir.staff_id', $employee->ID);
