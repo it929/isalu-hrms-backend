@@ -65,12 +65,26 @@ class HrLeaveApiController extends Controller
         $leaveTypes = DB::table('tblleave_type')->orderBy('id', 'DESC')->get();
         
         if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
-            $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames')->get();
+            $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames')->get()->map(function($emp) {
+                $emp->has_uploaded_education = DB::table('tbleducations')
+                    ->where('staffid', $emp->ID)
+                    ->whereNotNull('document')
+                    ->where('document', '!=', '')
+                    ->exists();
+                return $emp;
+            });
         } else {
             $employees  = collect();
         }
 
         $employee = $ctx['employee'];
+        if ($employee) {
+            $employee->has_uploaded_education = DB::table('tbleducations')
+                ->where('staffid', $employee->ID)
+                ->whereNotNull('document')
+                ->where('document', '!=', '')
+                ->exists();
+        }
 
         return response()->json([
             'status'        => 'success',
@@ -471,12 +485,26 @@ class HrLeaveApiController extends Controller
         }
 
         if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
-            $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames')->get();
+            $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames')->get()->map(function($emp) {
+                $emp->has_uploaded_education = DB::table('tbleducations')
+                    ->where('staffid', $emp->ID)
+                    ->whereNotNull('document')
+                    ->where('document', '!=', '')
+                    ->exists();
+                return $emp;
+            });
         } else {
             $employees  = collect();
         }
 
         $employee = $ctx['employee'];
+        if ($employee) {
+            $employee->has_uploaded_education = DB::table('tbleducations')
+                ->where('staffid', $employee->ID)
+                ->whereNotNull('document')
+                ->where('document', '!=', '')
+                ->exists();
+        }
 
         return response()->json([
             'status'        => 'success',

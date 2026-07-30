@@ -79,6 +79,7 @@ Route::prefix('nextjs')->group(function () {
     Route::post('/hr/add-staff/import', [\App\Http\Controllers\Api\HrStaffApiController::class, 'importStaff']);
     // HR - Staff Documentation Wizard
     Route::prefix('hr/documentation')->group(function () {
+        Route::get('/reports/education-status', [\App\Http\Controllers\Api\HrStaffApiController::class, 'getStaffEducationStatus']);
         Route::get('/{id}', [\App\Http\Controllers\Api\HrStaffApiController::class, 'getDocumentation']);
         Route::post('/{id}/basic', [\App\Http\Controllers\Api\HrStaffApiController::class, 'saveBasicInfo']);
         Route::post('/{id}/origin', [\App\Http\Controllers\Api\HrStaffApiController::class, 'saveOrigin']);

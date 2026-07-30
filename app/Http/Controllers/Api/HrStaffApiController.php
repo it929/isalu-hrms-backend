@@ -260,6 +260,88 @@ class HrStaffApiController extends Controller
     }
 
     /**
+     * Get staff divided by education file upload status.
+     */
+    public function getStaffEducationStatus(Request $request)
+    {
+        try {
+            $uploaded = DB::table('tblper')
+                ->where('isAdmin', 1)
+                ->whereExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('tbleducations')
+                        ->whereColumn('tbleducations.staffid', 'tblper.ID')
+                        ->whereNotNull('tbleducations.document')
+                        ->where('tbleducations.document', '!=', '');
+                })
+                ->leftJoin('tbldepartment', 'tblper.departmentID', '=', 'tbldepartment.id')
+                ->leftJoin('tbldesignation', 'tblper.designationID', '=', 'tbldesignation.id')
+                ->select(
+                    'tblper.ID as id',
+                    'tblper.fileNo',
+                    'tblper.title',
+                    'tblper.surname',
+                    'tblper.first_name',
+                    'tblper.othernames',
+                    'tbldepartment.department',
+                    'tbldesignation.designation',
+                    'tblper.email',
+                    'tblper.phone'
+                )
+                ->orderBy('tblper.surname', 'asc')
+                ->get();
+
+            foreach ($uploaded as $staff) {
+                $staff->education_files = DB::table('tbleducations')
+                    ->leftJoin('tbleducation_category', 'tbleducations.categoryID', '=', 'tbleducation_category.edu_categoryID')
+                    ->select('tbleducations.*', 'tbleducation_category.category')
+                    ->where('staffid', $staff->id)
+                    ->whereNotNull('document')
+                    ->where('document', '!=', '')
+                    ->orderBy('categoryID', 'asc')
+                    ->get();
+            }
+
+            $notUploaded = DB::table('tblper')
+                ->where('isAdmin', 1)
+                ->whereNotExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('tbleducations')
+                        ->whereColumn('tbleducations.staffid', 'tblper.ID')
+                        ->whereNotNull('tbleducations.document')
+                        ->where('tbleducations.document', '!=', '');
+                })
+                ->leftJoin('tbldepartment', 'tblper.departmentID', '=', 'tbldepartment.id')
+                ->leftJoin('tbldesignation', 'tblper.designationID', '=', 'tbldesignation.id')
+                ->select(
+                    'tblper.ID as id',
+                    'tblper.fileNo',
+                    'tblper.title',
+                    'tblper.surname',
+                    'tblper.first_name',
+                    'tblper.othernames',
+                    'tbldepartment.department',
+                    'tbldesignation.designation',
+                    'tblper.email',
+                    'tblper.phone'
+                )
+                ->orderBy('tblper.surname', 'asc')
+                ->get();
+
+            return response()->json([
+                'status' => 'success',
+                'uploaded' => $uploaded,
+                'not_uploaded' => $notUploaded
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get all documentation data for a specific staff member.
      */
     public function getDocumentation($id)

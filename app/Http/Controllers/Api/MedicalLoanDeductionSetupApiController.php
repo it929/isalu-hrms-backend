@@ -125,14 +125,31 @@ class MedicalLoanDeductionSetupApiController extends Controller
             $loanAmount = (float) $validated['loan_amount'];
             $balanceRemaining = isset($validated['balance_remaining']) ? (float) $validated['balance_remaining'] : $loanAmount;
 
+            $durationMonths = (int) $validated['duration_months'];
+            $monthlyDeduction = (float) $validated['monthly_deduction'];
+
+            // Recalculate end_month matching the calculated duration
+            $startMonth = $validated['start_month'];
+            $endMonth = $startMonth;
+            if ($startMonth && $durationMonths > 0) {
+                $parts = explode('-', $startMonth);
+                if (count($parts) === 2) {
+                    $y = (int)$parts[0];
+                    $m = (int)$parts[1];
+                    $startDate = new \DateTime("$y-$m-01");
+                    $startDate->modify("+" . ($durationMonths - 1) . " month");
+                    $endMonth = $startDate->format('Y-m');
+                }
+            }
+
             $data = [
                 'staffId' => $validated['staffId'],
                 'loan_amount' => $loanAmount,
-                'duration_months' => (int) $validated['duration_months'],
-                'monthly_deduction' => (float) $validated['monthly_deduction'],
+                'duration_months' => $durationMonths,
+                'monthly_deduction' => $monthlyDeduction,
                 'balance_remaining' => $balanceRemaining,
-                'start_month' => $validated['start_month'],
-                'end_month' => $validated['end_month'],
+                'start_month' => $startMonth,
+                'end_month' => $endMonth,
                 'is_active' => $validated['is_active'] ?? 1,
                 'updated_at' => now(),
             ];
@@ -421,7 +438,12 @@ class MedicalLoanDeductionSetupApiController extends Controller
                     }
                 }
 
-                // Calculate end month
+                // Recalculate duration and monthly deduction based on new rules
+                $calc = $this->calculateDeductionAndDuration($loanAmount);
+                $durationMonths = $calc['duration_months'];
+                $monthlyDeduction = $calc['monthly_deduction'];
+
+                // Calculate end month matching the calculated duration
                 $endMonth = $startMonth;
                 if ($startMonth && $durationMonths > 0) {
                     $parts = explode('-', $startMonth);
@@ -433,8 +455,6 @@ class MedicalLoanDeductionSetupApiController extends Controller
                         $endMonth = $startDate->format('Y-m');
                     }
                 }
-
-                $monthlyDeduction = round($loanAmount / $durationMonths, 2);
 
                 DB::table('medical_loan_deduction_setups')->updateOrInsert(
                     ['staffId' => $staff->ID],
@@ -471,5 +491,71 @@ class MedicalLoanDeductionSetupApiController extends Controller
                 'message' => $th->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Helper to compute dynamic deduction and duration months based on loan amount.
+     */
+    private function calculateDeductionAndDuration($loanAmount)
+    {
+        $loanAmount = (float)$loanAmount;
+        if ($loanAmount <= 0) {
+            return ['monthly_deduction' => 0.00, 'duration_months' => 0];
+        }
+
+        $deduction = 0.00;
+        if ($loanAmount < 5000) {
+            $deduction = $loanAmount;
+        } elseif ($loanAmount >= 5000 && $loanAmount <= 10000) {
+            $deduction = 5000;
+        } elseif ($loanAmount > 10000 && $loanAmount <= 30000) {
+            $deduction = 10000;
+        } elseif ($loanAmount > 30000 && $loanAmount <= 60000) {
+            $deduction = 15000;
+        } elseif ($loanAmount > 60000 && $loanAmount <= 120000) {
+            $deduction = 20000;
+        } elseif ($loanAmount > 120000 && $loanAmount <= 160000) {
+            $deduction = 25000;
+        } elseif ($loanAmount > 160000 && $loanAmount <= 300000) {
+            $deduction = 30000;
+        } elseif ($loanAmount > 300000 && $loanAmount <= 600000) {
+            $deduction = 35000;
+        } else {
+            $deduction = 50000;
+        }
+
+        $tempBal = $loanAmount;
+        $durationMonths = 0;
+        while ($tempBal > 0) {
+            $currentDeduct = 0.00;
+            if ($tempBal < 5000) {
+                $currentDeduct = $tempBal;
+            } elseif ($tempBal >= 5000 && $tempBal <= 10000) {
+                $currentDeduct = 5000;
+            } elseif ($tempBal > 10000 && $tempBal <= 30000) {
+                $currentDeduct = 10000;
+            } elseif ($tempBal > 30000 && $tempBal <= 60000) {
+                $currentDeduct = 15000;
+            } elseif ($tempBal > 60000 && $tempBal <= 120000) {
+                $currentDeduct = 20000;
+            } elseif ($tempBal > 120000 && $tempBal <= 160000) {
+                $currentDeduct = 25000;
+            } elseif ($tempBal > 160000 && $tempBal <= 300000) {
+                $currentDeduct = 30000;
+            } elseif ($tempBal > 300000 && $tempBal <= 600000) {
+                $currentDeduct = 35000;
+            } else {
+                $currentDeduct = 50000;
+            }
+            
+            if ($currentDeduct <= 0) break;
+            $tempBal -= $currentDeduct;
+            $durationMonths++;
+        }
+
+        return [
+            'monthly_deduction' => $deduction,
+            'duration_months' => $durationMonths
+        ];
     }
 }
