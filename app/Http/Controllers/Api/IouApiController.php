@@ -72,15 +72,22 @@ class IouApiController extends Controller
                 $maxIouAmount = (float)($row->max_iou_amount ?? 0.00);
                 $maxIou = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.50);
 
+                $hasUploadedEducation = DB::table('tbleducations')
+                    ->where('staffid', $row->id)
+                    ->whereNotNull('document')
+                    ->where('document', '!=', '')
+                    ->exists();
+
                 return [
-                    'id'             => $row->id,
-                    'fileNo'         => $row->fileNo ?? '',
-                    'name'           => $fullName,
-                    'label'          => $fullName,
-                    'salary'         => $grossSalary,
-                    'max_iou'        => $maxIou,
-                    'can_take_iou'   => $canTakeIou,
-                    'max_iou_amount' => $maxIouAmount,
+                    'id'                     => $row->id,
+                    'fileNo'                 => $row->fileNo ?? '',
+                    'name'                   => $fullName,
+                    'label'                  => $fullName,
+                    'salary'                 => $grossSalary,
+                    'max_iou'                => $maxIou,
+                    'can_take_iou'           => $canTakeIou,
+                    'max_iou_amount'         => $maxIouAmount,
+                    'has_uploaded_education' => $hasUploadedEducation,
                 ];
             });
 
