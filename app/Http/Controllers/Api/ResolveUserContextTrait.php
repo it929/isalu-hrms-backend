@@ -57,10 +57,12 @@ trait ResolveUserContextTrait
                 })
                 ->first();
 
+            $delegatedDepartmentId = null;
             if ($delegation) {
                 $isHod = true;
                 $isDelegatedHod = true;
                 $delegatedPermissions = json_decode($delegation->permissions, true) ?: [];
+                $delegatedDepartmentId = $delegation->department_id;
             }
         }
 
@@ -98,6 +100,7 @@ trait ResolveUserContextTrait
             'isHod'                  => $isHod,
             'isDelegatedHod'         => $isDelegatedHod,
             'delegatedPermissions'   => $delegatedPermissions,
+            'delegated_department_id'=> $delegatedDepartmentId,
             'isDelegatedHr'          => $isDelegatedHr,
             'delegatedHrPermissions' => $delegatedHrPermissions,
         ];
