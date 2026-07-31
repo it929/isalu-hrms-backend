@@ -49,9 +49,12 @@ class IouApiController extends Controller
                 )
                 ->orderBy('p.surname', 'asc');
 
-            // Non-admins can only select themselves
+            // Non-admins can only select themselves, but HODs can select department staff
             if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                if ($ctx['employee']) {
+                if ($ctx['isHod']) {
+                    $deptId = (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) ? $ctx['delegated_department_id'] : $ctx['employee']->departmentID;
+                    $query->where('p.departmentID', $deptId);
+                } elseif ($ctx['employee']) {
                     $query->where('p.ID', $ctx['employee']->ID);
                 } else {
                     $query->where('p.ID', 0); // fallback empty
@@ -284,6 +287,8 @@ class IouApiController extends Controller
                 'isFinanceStaff' => $ctx['isFinanceStaff'],
                 'isAuditStaff'   => $ctx['isAuditStaff'],
                 'isHod'          => $ctx['isHod'],
+                'isDelegatedHod' => $ctx['isDelegatedHod'] ?? false,
+                'delegated_department_id' => $ctx['delegated_department_id'] ?? null,
                 'employee'       => $employee,
             ]);
         } catch (\Throwable $th) {

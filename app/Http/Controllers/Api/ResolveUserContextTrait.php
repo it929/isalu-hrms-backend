@@ -42,6 +42,7 @@ trait ResolveUserContextTrait
         $isHod = $employee && $employee->is_hod == 1;
         $isDelegatedHod = false;
         $delegatedPermissions = [];
+        $delegatedDepartmentId = null;
 
         if (!$isHod && $employee) {
             $delegation = DB::table('hod_delegations')
@@ -57,7 +58,6 @@ trait ResolveUserContextTrait
                 })
                 ->first();
 
-            $delegatedDepartmentId = null;
             if ($delegation) {
                 $isHod = true;
                 $isDelegatedHod = true;

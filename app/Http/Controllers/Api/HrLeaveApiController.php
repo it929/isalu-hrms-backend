@@ -321,7 +321,7 @@ class HrLeaveApiController extends Controller
         if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
             $record = DB::table('leave_record')->where('id', $id)->first();
             if ($record) {
-                $employee = DB::table('tblper')->where('ID', $record->employee_id)->first();
+                $employee = DB::table('tblper')->where('ID', $record->staffId)->first();
                 if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
                     return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
                 }
@@ -343,7 +343,7 @@ class HrLeaveApiController extends Controller
         if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
             $record = DB::table('leave_record')->where('id', $id)->first();
             if ($record) {
-                $employee = DB::table('tblper')->where('ID', $record->employee_id)->first();
+                $employee = DB::table('tblper')->where('ID', $record->staffId)->first();
                 if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
                     return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
                 }
@@ -663,7 +663,7 @@ class HrLeaveApiController extends Controller
         if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
             $record = DB::table('leave_of_absent')->where('id', $id)->first();
             if ($record) {
-                $employee = DB::table('tblper')->where('ID', $record->employee_id)->first();
+                $employee = DB::table('tblper')->where('ID', $record->staffId)->first();
                 if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
                     return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
                 }
@@ -685,7 +685,7 @@ class HrLeaveApiController extends Controller
         if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
             $record = DB::table('leave_of_absent')->where('id', $id)->first();
             if ($record) {
-                $employee = DB::table('tblper')->where('ID', $record->employee_id)->first();
+                $employee = DB::table('tblper')->where('ID', $record->staffId)->first();
                 if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
                     return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
                 }
