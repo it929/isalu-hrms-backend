@@ -29,16 +29,17 @@ class BankUpdateApiController extends Controller
                 ->get();
 
             $staff = DB::table('tblper')
-                ->where('rank', '!=', 2)
-                ->where('staff_status', 1)
-                ->select('ID as id', 'fileNo', 'surname', 'first_name', 'othernames')
-                ->orderBy('surname', 'asc')
+                ->leftJoin('tbldepartment', 'tblper.departmentID', '=', 'tbldepartment.id')
+                ->where('tblper.rank', '!=', 2)
+                ->where('tblper.staff_status', 1)
+                ->select('tblper.ID as id', 'tblper.surname', 'tblper.first_name', 'tblper.othernames', 'tbldepartment.department')
+                ->orderBy('tblper.surname', 'asc')
                 ->get()
                 ->map(function ($row) {
                     $fullName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                     return [
                         'id' => $row->id,
-                        'fileNo' => $row->fileNo ?? '',
+                        'department' => $row->department ?? '',
                         'name' => $fullName,
                     ];
                 });
@@ -199,6 +200,56 @@ class BankUpdateApiController extends Controller
         } catch (\Throwable $th) {
             DB::rollBack();
             Log::error('BankUpdateApiController importBulk: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Fetch staff list with bank account details, department, bank name and payer_id.
+     */
+    public function getBankDetailsList(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+        }
+
+        try {
+            $staff = DB::table('tblper')
+                ->leftJoin('tbldepartment', 'tblper.departmentID', '=', 'tbldepartment.id')
+                ->leftJoin('tblbanklist', 'tblper.bankID', '=', 'tblbanklist.bankID')
+                ->where('tblper.rank', '!=', 2)
+                ->where('tblper.staff_status', 1)
+                ->select(
+                    'tblper.ID as id',
+                    'tblper.surname',
+                    'tblper.first_name',
+                    'tblper.othernames',
+                    'tbldepartment.department',
+                    'tblbanklist.bank as bank_name',
+                    'tblper.AccNo as account_number',
+                    'tblper.payer_id'
+                )
+                ->orderBy('tblper.surname', 'asc')
+                ->get()
+                ->map(function ($row) {
+                    $fullName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                    return [
+                        'id' => $row->id,
+                        'name' => $fullName,
+                        'department' => $row->department ?? '—',
+                        'bank_name' => $row->bank_name ?? '—',
+                        'account_number' => $row->account_number ?? '—',
+                        'payer_id' => $row->payer_id ?? '—',
+                    ];
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'staff' => $staff
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('BankUpdateApiController getBankDetailsList: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
     }
