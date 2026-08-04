@@ -445,20 +445,8 @@ class NextJsApiController extends Controller
                         }
                     }
 
-                    if (in_array(999, $delegatedHrPerms)) {
-                        $sidebarData[] = [
-                            'moduleID' => 'security_roles',
-                            'modulename' => 'SECURITY & ROLES',
-                            'link_type' => 99,
-                            'submodules' => [
-                                [
-                                    'id' => 999,
-                                    'name' => 'Assign User',
-                                    'path' => '/dashboard/roles/assign-user'
-                                ]
-                            ]
-                        ];
-                    }
+
+
                 }
                 if ($activeHodDelegations->count() > 0 && !$isTechnical) {
                     $hodSubmoduleIds = [];
