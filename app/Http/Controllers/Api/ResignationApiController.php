@@ -35,9 +35,12 @@ class ResignationApiController extends Controller
                 )
                 ->orderBy('p.surname', 'asc');
 
-            // Non-admins can only select themselves
+            // Non-admins can only select themselves (unless they are HODs, who can select staff in their department)
             if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                if ($ctx['employee']) {
+                if ($ctx['isHod']) {
+                    $hodDeptId = ($ctx['isDelegatedHod'] ?? false) ? $ctx['delegated_department_id'] : ($ctx['employee'] ? $ctx['employee']->departmentID : null);
+                    $query->where('p.departmentID', $hodDeptId);
+                } elseif ($ctx['employee']) {
                     $query->where('p.ID', $ctx['employee']->ID);
                 } else {
                     $query->where('p.ID', 0);
@@ -109,16 +112,46 @@ class ResignationApiController extends Controller
 
             $employee = $ctx['employee'];
 
-            if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isFinanceStaff'] || $ctx['isAuditStaff']) {
+            if ($ctx['isSuperAdmin'] || $ctx['isFinanceStaff'] || $ctx['isAuditStaff']) {
                 // Admins, Finance and Audit see all requests
-            } elseif ($employee && $ctx['isHod']) {
-                // HOD sees department staff requests
-                $query->where('p.departmentID', $employee->departmentID);
-            } elseif ($employee) {
-                // Regular staff see only their own requests
-                $query->where('rr.staff_id', $employee->ID);
             } else {
-                $query->where('rr.id', 0); // fallback empty
+                $query->where(function ($q) use ($ctx, $employee) {
+                    $hasCondition = false;
+
+                    // 1. Own records
+                    if ($employee) {
+                        $q->where('rr.staff_id', $employee->ID);
+                        $hasCondition = true;
+                    }
+
+                    // 2. HR HEAD sees HOD approved (hod_status = 1) or processed (admin_status != 0) records
+                    if ($ctx['isAdminStaff']) {
+                        if ($hasCondition) {
+                            $q->orWhere('rr.hod_status', 1)->orWhere('rr.admin_status', '!=', 0);
+                        } else {
+                            $q->where(function($sub) {
+                                $sub->where('rr.hod_status', 1)->orWhere('rr.admin_status', '!=', 0);
+                            });
+                        }
+                        $hasCondition = true;
+                    }
+
+                    // 3. HOD sees department staff requests
+                    if ($employee && $ctx['isHod']) {
+                        $hodDeptId = ($ctx['isDelegatedHod'] ?? false) ? $ctx['delegated_department_id'] : $employee->departmentID;
+                        if ($hasCondition) {
+                            $q->orWhere('p.departmentID', $hodDeptId);
+                        } else {
+                            $q->where('p.departmentID', $hodDeptId);
+                        }
+                        $hasCondition = true;
+                    }
+
+                    // Fallback if no roles matched
+                    if (!$hasCondition) {
+                        $q->where('rr.id', 0);
+                    }
+                });
             }
 
             $records = $query->orderBy('rr.id', 'desc')->get()->map(function ($row) {

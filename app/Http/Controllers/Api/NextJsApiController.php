@@ -343,10 +343,11 @@ class NextJsApiController extends Controller
                     ->get();
             }
 
+            $activeHodDelegations = collect();
             if ($employee && $employee->is_hod == 1) {
                 $isHod = true;
             } else if ($employee) {
-                $isHod = \DB::table('hod_delegations')
+                $activeHodDelegations = \DB::table('hod_delegations')
                     ->where('delegate_staff_id', $employee->ID)
                     ->where('status', 'active')
                     ->where(function($query) {
@@ -357,7 +358,8 @@ class NextJsApiController extends Controller
                         $query->whereNull('end_date')
                               ->orWhere('end_date', '>=', now()->toDateString());
                     })
-                    ->exists();
+                    ->get();
+                $isHod = $activeHodDelegations->isNotEmpty();
             }
 
             if ($employee) {
@@ -456,6 +458,67 @@ class NextJsApiController extends Controller
                                 ]
                             ]
                         ];
+                    }
+                }
+                if ($activeHodDelegations->count() > 0 && !$isTechnical) {
+                    $hodSubmoduleIds = [];
+                    foreach ($activeHodDelegations as $activeHodDelegation) {
+                        $delegatedHodPerms = json_decode($activeHodDelegation->permissions, true) ?: [];
+                        foreach ($delegatedHodPerms as $perm) {
+                            if (is_numeric($perm)) {
+                                $hodSubmoduleIds[] = (int)$perm;
+                            }
+                        }
+                    }
+                    $hodSubmoduleIds = array_unique($hodSubmoduleIds);
+
+                    if (count($hodSubmoduleIds) > 0) {
+                        $delegatedHodSubmodules = \DB::table('submodule as s')
+                            ->join('module as m', 'm.moduleID', '=', 's.moduleID')
+                            ->whereIn('s.submoduleID', $hodSubmoduleIds)
+                            ->select('s.submoduleID', 's.submodulename', 's.route', 's.moduleID', 'm.modulename', 'm.link_type')
+                            ->orderBy('s.sub_module_rank', 'ASC')
+                            ->get();
+
+                        foreach ($delegatedHodSubmodules as $sub) {
+                            $modIndex = -1;
+                            foreach ($sidebarData as $idx => $sData) {
+                                if ($sData['moduleID'] == $sub->moduleID) {
+                                    $modIndex = $idx;
+                                    break;
+                                }
+                            }
+
+                            if ($modIndex !== -1) {
+                                $subExists = false;
+                                foreach ($sidebarData[$modIndex]['submodules'] as $existingSub) {
+                                    if ($existingSub['path'] === '/' . ltrim($sub->route, '/')) {
+                                        $subExists = true;
+                                        break;
+                                    }
+                                }
+                                if (!$subExists) {
+                                    $sidebarData[$modIndex]['submodules'][] = [
+                                        'id' => $sub->submoduleID,
+                                        'name' => $sub->submodulename,
+                                        'path' => '/' . ltrim($sub->route, '/'),
+                                    ];
+                                }
+                            } else {
+                                $sidebarData[] = [
+                                    'moduleID' => $sub->moduleID,
+                                    'modulename' => $sub->modulename,
+                                    'link_type' => $sub->link_type,
+                                    'submodules' => [
+                                        [
+                                            'id' => $sub->submoduleID,
+                                            'name' => $sub->submodulename,
+                                            'path' => '/' . ltrim($sub->route, '/'),
+                                        ]
+                                    ]
+                                ];
+                            }
+                        }
                     }
                 }
             }
@@ -577,12 +640,11 @@ class NextJsApiController extends Controller
         }
         $randomPass = implode('', $pass);
 
-        $token = md5($user->username) . md5($randomPass);
-
         try {
             \DB::table('users')->where('id', '=', $userid)->update([
-                'resettoken' => $token,
-                'token_status' => '1'
+                'password' => bcrypt($randomPass),
+                'resettoken' => null,
+                'token_status' => '0'
             ]);
         } catch (\Throwable $e) {
             return response()->json([
@@ -592,30 +654,10 @@ class NextJsApiController extends Controller
         }
 
         $to = $email;
-        $subject = "Password Reset";
+        $subject = "Password Recovered";
         $sender = config('mail.from.address') ?: "info@mbrcomputers.net";
 
-        $header = "From:" . $sender . "\r\n";
-        $header .= "MIME-Version: 1.0 \r\n";
-        $header .= "Content-type: text/html \r\n";
-
-        // Determine Next.js frontend URL dynamically from the request's Referer header
-        $referer = $request->headers->get('referer');
-        if ($referer) {
-            $parsedUrl = parse_url($referer);
-            $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'http';
-            $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'localhost';
-            $port = isset($parsedUrl['port']) ? ':' . $parsedUrl['port'] : '';
-            $frontendUrl = "$scheme://$host$port";
-        } else {
-            $host = $request->getHost();
-            $scheme = $request->isSecure() ? 'https' : 'http';
-            $frontendUrl = env('NEXTJS_FRONTEND_URL', "$scheme://$host:3000");
-        }
-        
-        $resetUrl = rtrim($frontendUrl, '/') . "/password-reset/resets/$token";
-
-        $message = "Dear $staffname, <br> Kindly click on <a href='$resetUrl'>here</a> to change your password.";
+        $message = "Dear $staffname, <br><br> Your password has been successfully reset. <br><br> Your new password is: <strong>$randomPass</strong> <br><br> Please log in using this password and make sure to change it in your account settings.";
         
         try {
             // Send email using Laravel's Mail facade to respect .env mail settings
@@ -626,7 +668,7 @@ class NextJsApiController extends Controller
             });
         } catch (\Throwable $e) {
             // Log the mail sending failure and details to laravel.log so it can be verified locally
-            \Illuminate\Support\Facades\Log::error("Failed to send password reset email via Mailer: " . $e->getMessage(), [
+            \Illuminate\Support\Facades\Log::error("Failed to send password recovery email via Mailer: " . $e->getMessage(), [
                 'to' => $to,
                 'subject' => $subject,
                 'message' => $message
@@ -640,7 +682,7 @@ class NextJsApiController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'success' => "Dear $staffname, a message has been sent to your email address: $email for password reset. Kindly check your email."
+            'success' => "Dear $staffname, your password has been reset and sent to your email address: $email. Kindly check your email."
         ]);
     }
 
@@ -728,10 +770,69 @@ class NextJsApiController extends Controller
             ->orderBy('hd.created_at', 'DESC')
             ->get();
 
+        // Get modules and submodules assigned to the HOD's roles or delegated to HOD by HR
+        $hrDelegatedSubmoduleIds = [];
+        $hrDelegation = \DB::table('hr_delegations')
+            ->where('delegate_staff_id', $ctx['employee']->ID)
+            ->where('status', 'active')
+            ->where(function($query) {
+                $query->whereNull('start_date')
+                      ->orWhere('start_date', '<=', now()->toDateString());
+            })
+            ->where(function($query) {
+                $query->whereNull('end_date')
+                      ->orWhere('end_date', '>=', now()->toDateString());
+            })
+            ->first();
+        if ($hrDelegation) {
+            $perms = json_decode($hrDelegation->permissions, true) ?: [];
+            foreach ($perms as $perm) {
+                if (is_numeric($perm)) {
+                    $hrDelegatedSubmoduleIds[] = (int)$perm;
+                } else {
+                    $mapping = [
+                        'hr_approve_leave' => [252, 253],
+                        'hr_approve_loan' => [231, 232],
+                        'hr_approve_iou' => [242],
+                        'hr_approve_refund' => [263],
+                        'hr_approve_resignation' => [264],
+                    ];
+                    if (isset($mapping[$perm])) {
+                        $hrDelegatedSubmoduleIds = array_merge($hrDelegatedSubmoduleIds, $mapping[$perm]);
+                    }
+                }
+            }
+        }
+
+        $query = \DB::table('assign_user_role')
+            ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+            ->join('assign_module_role', 'assign_module_role.roleID', '=', 'assign_user_role.roleID')
+            ->join('submodule', 'submodule.submoduleID', '=', 'assign_module_role.submoduleID')
+            ->join('module', 'module.moduleID', '=', 'submodule.moduleID')
+            ->where('assign_user_role.userID', '=', $ctx['userId'])
+            ->select('submodule.submoduleID', 'submodule.submodulename', 'submodule.route', 'module.modulename');
+
+        if (!empty($hrDelegatedSubmoduleIds)) {
+            $delegatedSubmodulesQuery = \DB::table('submodule')
+                ->join('module', 'module.moduleID', '=', 'submodule.moduleID')
+                ->whereIn('submodule.submoduleID', $hrDelegatedSubmoduleIds)
+                ->select('submodule.submoduleID', 'submodule.submodulename', 'submodule.route', 'module.modulename');
+            
+            $assignedSubmodules = $query->union($delegatedSubmodulesQuery)->get();
+        } else {
+            $assignedSubmodules = $query->distinct()
+                ->orderBy('module.modulename', 'ASC')
+                ->orderBy('submodule.submodulename', 'ASC')
+                ->get();
+        }
+
+        $assignedSubmodules = $assignedSubmodules->unique('submoduleID')->values();
+
         return response()->json([
             'status' => 'success',
             'staff' => $staff,
-            'delegations' => $delegations
+            'delegations' => $delegations,
+            'assignedSubmodules' => $assignedSubmodules
         ]);
     }
 

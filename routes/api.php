@@ -195,6 +195,7 @@ Route::prefix('nextjs')->group(function () {
         // Bank updates
         Route::prefix('bank-updates')->group(function () {
             Route::get('/metadata', [\App\Http\Controllers\Api\BankUpdateApiController::class, 'getMetadata']);
+            Route::get('/list', [\App\Http\Controllers\Api\BankUpdateApiController::class, 'getBankDetailsList']);
             Route::post('/individual', [\App\Http\Controllers\Api\BankUpdateApiController::class, 'updateIndividual']);
             Route::post('/bulk', [\App\Http\Controllers\Api\BankUpdateApiController::class, 'importBulk']);
         });

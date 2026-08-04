@@ -65,7 +65,7 @@ class HrLeaveApiController extends Controller
         $leaveTypes = DB::table('tblleave_type')->orderBy('id', 'DESC')->get();
         
         if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
-            $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames')->get()->map(function($emp) {
+            $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames', 'office_shift')->get()->map(function($emp) {
                 $emp->has_uploaded_education = DB::table('tbleducations')
                     ->where('staffid', $emp->ID)
                     ->whereNotNull('document')
@@ -118,6 +118,7 @@ class HrLeaveApiController extends Controller
                 'tblper.surname',
                 'tblper.first_name',
                 'tblper.othernames',
+                'tblper.office_shift',
                 'tbldepartment.department',
                 'tblleave_type.leaveType'
             )
@@ -125,25 +126,66 @@ class HrLeaveApiController extends Controller
 
         $employee = $ctx['employee'];
 
-        if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
+        if ($ctx['isSuperAdmin']) {
             $records = $baseQuery->get();
-        } elseif ($employee && $ctx['isHod']) {
-            $records = $baseQuery
-                ->where('tblper.departmentID', $employee->departmentID)
-                ->get();
-        } elseif ($employee) {
-            $records = $baseQuery
-                ->where('leave_record.staffId', $employee->ID)
-                ->get();
         } else {
-            $records = collect();
+            $baseQuery->where(function ($query) use ($ctx, $employee) {
+                $hasCondition = false;
+
+                // 1. Own records
+                if ($employee) {
+                    $query->where('leave_record.staffId', $employee->ID);
+                    $hasCondition = true;
+                }
+
+                // 2. HR Head sees HOD-approved (1) or finalized (2, 4) records
+                if ($ctx['isAdminStaff']) {
+                    if ($hasCondition) {
+                        $query->orWhereIn('leave_record.status', [1, 2, 4]);
+                    } else {
+                        $query->whereIn('leave_record.status', [1, 2, 4]);
+                    }
+                    $hasCondition = true;
+                }
+
+                // 3. HOD sees records of staff in their department
+                if ($employee && $ctx['isHod']) {
+                    $hodDeptId = ($ctx['isDelegatedHod'] ?? false) ? $ctx['delegated_department_id'] : $employee->departmentID;
+                    if ($hasCondition) {
+                        $query->orWhere('tblper.departmentID', $hodDeptId);
+                    } else {
+                        $query->where('tblper.departmentID', $hodDeptId);
+                    }
+                    $hasCondition = true;
+                }
+
+                // Fallback if no roles matched
+                if (!$hasCondition) {
+                    $query->where('leave_record.id', 0);
+                }
+            });
+            $records = $baseQuery->get();
         }
 
         // Augment each record with computed duration & formatted date
         $records = $records->map(function ($r) {
             $start = Carbon::parse($r->start_date);
             $end   = Carbon::parse($r->end_date);
-            $r->duration_days = $start->diffInDays($end) + 1;
+            
+            if ($r->office_shift == 1) {
+                $days = 0;
+                $current = $start->copy();
+                while ($current->lte($end)) {
+                    if (!$current->isWeekend()) {
+                        $days++;
+                    }
+                    $current->addDay();
+                }
+                $r->duration_days = $days;
+            } else {
+                $r->duration_days = $start->diffInDays($end) + 1;
+            }
+            
             $r->date_applied  = Carbon::parse($r->created_at)->format('d M, Y');
             return $r;
         });
@@ -537,30 +579,73 @@ class HrLeaveApiController extends Controller
                 'tblper.surname',
                 'tblper.first_name',
                 'tblper.othernames',
+                'tblper.office_shift',
                 'tbldepartment.department'
             )
             ->orderBy('leave_of_absent.id', 'DESC');
 
         $employee = $ctx['employee'];
 
-        if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
-            $records = $baseQuery->get();
-        } elseif ($employee && $ctx['isHod']) {
-            $records = $baseQuery
-                ->where('tblper.departmentID', $employee->departmentID)
-                ->get();
-        } elseif ($employee) {
-            $records = $baseQuery
-                ->where('leave_of_absent.staffId', $employee->ID)
-                ->get();
+        if ($ctx['isSuperAdmin']) {
+            // Super Admin sees all records
         } else {
-            $records = collect();
+            $baseQuery->where(function ($query) use ($ctx, $employee) {
+                $hasCondition = false;
+
+                // 1. Own records
+                if ($employee) {
+                    $query->where('leave_of_absent.staffId', $employee->ID);
+                    $hasCondition = true;
+                }
+
+                // 2. HR Head sees HOD-approved (1) or finalized (2, 4) records
+                if ($ctx['isAdminStaff']) {
+                    if ($hasCondition) {
+                        $query->orWhereIn('leave_of_absent.status', [1, 2, 4]);
+                    } else {
+                        $query->whereIn('leave_of_absent.status', [1, 2, 4]);
+                    }
+                    $hasCondition = true;
+                }
+
+                // 3. HOD sees records of staff in their department
+                if ($employee && $ctx['isHod']) {
+                    $hodDeptId = ($ctx['isDelegatedHod'] ?? false) ? $ctx['delegated_department_id'] : $employee->departmentID;
+                    if ($hasCondition) {
+                        $query->orWhere('tblper.departmentID', $hodDeptId);
+                    } else {
+                        $query->where('tblper.departmentID', $hodDeptId);
+                    }
+                    $hasCondition = true;
+                }
+
+                // Fallback if no roles matched
+                if (!$hasCondition) {
+                    $query->where('leave_of_absent.id', 0);
+                }
+            });
         }
+
+        $records = $baseQuery->get();
 
         $records = $records->map(function ($r) {
             $start = Carbon::parse($r->start_date);
             $end   = Carbon::parse($r->end_date);
-            $r->duration_days = $start->diffInDays($end) + 1;
+            
+            if ($r->office_shift == 1) {
+                $days = 0;
+                $current = $start->copy();
+                while ($current->lte($end)) {
+                    if (!$current->isWeekend()) {
+                        $days++;
+                    }
+                    $current->addDay();
+                }
+                $r->duration_days = $days;
+            } else {
+                $r->duration_days = $start->diffInDays($end) + 1;
+            }
+            
             $r->date_applied  = Carbon::parse($r->created_at)->format('d M, Y');
             return $r;
         });
@@ -664,7 +749,11 @@ class HrLeaveApiController extends Controller
             $record = DB::table('leave_of_absent')->where('id', $id)->first();
             if ($record) {
                 $employee = DB::table('tblper')->where('ID', $record->staffId)->first();
-                if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
+                $activeDeptId = (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) 
+                    ? $ctx['delegated_department_id'] 
+                    : ($ctx['employee'] ? $ctx['employee']->departmentID : null);
+
+                if (!$employee || $employee->departmentID != $activeDeptId) {
                     return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
                 }
             }
@@ -686,7 +775,11 @@ class HrLeaveApiController extends Controller
             $record = DB::table('leave_of_absent')->where('id', $id)->first();
             if ($record) {
                 $employee = DB::table('tblper')->where('ID', $record->staffId)->first();
-                if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
+                $activeDeptId = (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) 
+                    ? $ctx['delegated_department_id'] 
+                    : ($ctx['employee'] ? $ctx['employee']->departmentID : null);
+
+                if (!$employee || $employee->departmentID != $activeDeptId) {
                     return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
                 }
             }
