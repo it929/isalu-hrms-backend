@@ -36,9 +36,9 @@ class ComputeController extends ParentController
         return response()->json($get);
     }
 
-    public function getStaff(Request $request)
+    public function getStaff($id = null)
     {
-        $div     = $request['divisionID'];
+        $div     = is_object($id) && method_exists($id, 'input') ? $id->input('divisionID') : ($id ?: request('divisionID'));
         $get     = DB::table('tblper')->where('divisionID','=', $div)->get();
         return response()->json($get);
     }

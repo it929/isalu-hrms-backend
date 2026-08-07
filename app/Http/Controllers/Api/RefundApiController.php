@@ -93,6 +93,7 @@ class RefundApiController extends Controller
                     'p.surname',
                     'p.first_name',
                     'p.othernames',
+                    'p.departmentID',
                     'd.department',
                     'u_hod.name as hod_name',
                     'u_admin.name as admin_name',
@@ -111,16 +112,55 @@ class RefundApiController extends Controller
 
             $employee = $ctx['employee'];
 
-            if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isFinanceStaff'] || $ctx['isAuditStaff']) {
-                // Administrative staff see all requests
-            } elseif ($employee && $ctx['isHod']) {
-                // HOD sees department staff requests
-                $query->where('p.departmentID', $employee->departmentID);
-            } elseif ($employee) {
-                // Regular employees only see their own requests
-                $query->where('rr.staff_id', $employee->ID);
+            if ($ctx['isSuperAdmin']) {
+                // Super Admin sees all requests
             } else {
-                $query->where('rr.id', 0); // fallback empty
+                $query->where(function ($q) use ($ctx, $employee) {
+                    $hasCondition = false;
+
+                    // 1. HOD sees requests of staff in their department
+                    if ($ctx['isHod'] && $employee) {
+                        $q->orWhere('p.departmentID', $employee->departmentID);
+                        $hasCondition = true;
+                    }
+
+                    // 2. HR Head / HR Admin sees requests from all departments that have been approved by HOD (or acted on by HR)
+                    if ($ctx['isAdminStaff']) {
+                        $q->orWhere(function ($sub) {
+                            $sub->where('rr.hod_status', 1)
+                                ->orWhere('rr.admin_status', '!=', 0);
+                        });
+                        $hasCondition = true;
+                    }
+
+                    // 3. Audit sees requests recommended by HR Admin (or acted on by Audit)
+                    if ($ctx['isAuditStaff']) {
+                        $q->orWhere(function ($sub) {
+                            $sub->where('rr.admin_status', 1)
+                                ->orWhere('rr.audit_status', '!=', 0);
+                        });
+                        $hasCondition = true;
+                    }
+
+                    // 4. Finance sees requests recommended by Audit (or acted on by Finance)
+                    if ($ctx['isFinanceStaff']) {
+                        $q->orWhere(function ($sub) {
+                            $sub->where('rr.audit_status', 1)
+                                ->orWhere('rr.finance_status', '!=', 0);
+                        });
+                        $hasCondition = true;
+                    }
+
+                    // 5. Regular employees see their own requests
+                    if ($employee) {
+                        $q->orWhere('rr.staff_id', $employee->ID);
+                        $hasCondition = true;
+                    }
+
+                    if (!$hasCondition) {
+                        $q->where('rr.id', 0);
+                    }
+                });
             }
 
             $records = $query->orderBy('rr.id', 'desc')->get()->map(function ($row) {

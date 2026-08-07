@@ -19,8 +19,8 @@ class NextJsApiController extends Controller
         $username = trim($request->input('username'));
         $password = $request->input('password');
 
-        // 1. Try finding user by username directly
-        $user = \App\Models\User::where('username', $username)->first();
+        // 1. Try finding user by username or email directly
+        $user = \App\Models\User::where('username', $username)->orWhere('email', $username)->first();
 
         // 2. If not found, look up the staff by fileNo (PF Number) in tblper
         if (!$user) {
@@ -325,6 +325,7 @@ class NextJsApiController extends Controller
             }
 
             $isHod = false;
+            $isActualHod = false;
             $isHr = false;
             $activeHrDelegations = collect();
             $employee = \DB::table('tblper')->where('UserID', $userId)->first();
@@ -346,6 +347,7 @@ class NextJsApiController extends Controller
             $activeHodDelegations = collect();
             if ($employee && $employee->is_hod == 1) {
                 $isHod = true;
+                $isActualHod = true;
             } else if ($employee) {
                 $activeHodDelegations = \DB::table('hod_delegations')
                     ->where('delegate_staff_id', $employee->ID)
@@ -515,6 +517,7 @@ class NextJsApiController extends Controller
                 'status' => 'success',
                 'is_admin' => $isTechnical,
                 'is_hod' => $isHod,
+                'is_actual_hod' => $isActualHod,
                 'is_hr' => $isHr,
                 'sidebar' => $sidebarData
             ]);
@@ -733,7 +736,7 @@ class NextJsApiController extends Controller
     public function getDelegations(Request $request)
     {
         $ctx = $this->getUserContext($request);
-        if (!$ctx || !$ctx['isHod']) {
+        if (!$ctx || !$ctx['isHod'] || $ctx['isDelegatedHod']) {
             return response()->json(['status' => 'error', 'message' => 'HOD privileges required.'], 403);
         }
 
@@ -830,7 +833,7 @@ class NextJsApiController extends Controller
     public function saveDelegation(Request $request)
     {
         $ctx = $this->getUserContext($request);
-        if (!$ctx || !$ctx['isHod']) {
+        if (!$ctx || !$ctx['isHod'] || $ctx['isDelegatedHod']) {
             return response()->json(['status' => 'error', 'message' => 'HOD privileges required.'], 403);
         }
 
@@ -876,7 +879,7 @@ class NextJsApiController extends Controller
     public function toggleDelegation(Request $request, $id)
     {
         $ctx = $this->getUserContext($request);
-        if (!$ctx || !$ctx['isHod']) {
+        if (!$ctx || !$ctx['isHod'] || $ctx['isDelegatedHod']) {
             return response()->json(['status' => 'error', 'message' => 'HOD privileges required.'], 403);
         }
 

@@ -18,6 +18,20 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
+// AI Document & Letter Generator Root Level & Next.js Level
+Route::prefix('hr/letters')->group(function () {
+    Route::get('/templates', [\App\Http\Controllers\Api\AiLetterApiController::class, 'getTemplates']);
+    Route::post('/generate', [\App\Http\Controllers\Api\AiLetterApiController::class, 'generateLetter']);
+});
+Route::prefix('nextjs/hr/letters')->group(function () {
+    Route::get('/templates', [\App\Http\Controllers\Api\AiLetterApiController::class, 'getTemplates']);
+    Route::post('/generate', [\App\Http\Controllers\Api\AiLetterApiController::class, 'generateLetter']);
+});
+
+// AI Natural Language Data Analyst Endpoint
+Route::post('/ai/query', [\App\Http\Controllers\Api\AiQueryApiController::class, 'askQuestion']);
+Route::post('/nextjs/ai/query', [\App\Http\Controllers\Api\AiQueryApiController::class, 'askQuestion']);
+
 // Next.js Frontend APIs
 Route::prefix('nextjs')->group(function () {
     Route::get('/uploads/{path}', [\App\Http\Controllers\Api\HrStaffApiController::class, 'serveUploadedFile'])->where('path', '.*');
@@ -198,6 +212,12 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/list', [\App\Http\Controllers\Api\BankUpdateApiController::class, 'getBankDetailsList']);
             Route::post('/individual', [\App\Http\Controllers\Api\BankUpdateApiController::class, 'updateIndividual']);
             Route::post('/bulk', [\App\Http\Controllers\Api\BankUpdateApiController::class, 'importBulk']);
+        });
+
+        // AI Document & Letter Generator
+        Route::prefix('hr/letters')->group(function () {
+            Route::get('/templates', [\App\Http\Controllers\Api\AiLetterApiController::class, 'getTemplates']);
+            Route::post('/generate', [\App\Http\Controllers\Api\AiLetterApiController::class, 'generateLetter']);
         });
 
         // Salary Structures

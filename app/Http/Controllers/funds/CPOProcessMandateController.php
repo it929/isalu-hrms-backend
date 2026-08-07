@@ -14,7 +14,7 @@ use DB;
 use QrCode; 
 
 
-class LiabilityController extends function24Controller
+class CPOProcessMandateController extends function24Controller
 {
     
     public function __construct()

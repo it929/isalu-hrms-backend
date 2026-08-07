@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\hr;
-use App\Http\Controllers\ParentController;
+use App\Http\Controllers\payroll\ParentController;
 use Illuminate\Http\Request;
 use Session;
 use App\Http\Requests;

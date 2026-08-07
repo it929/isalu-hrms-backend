@@ -8,7 +8,7 @@ use App\Notifications\SentFile;
 use App\Notifications\RecordAdded;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
-use App\Http\Controllers\ParentController;
+use App\Http\Controllers\payroll\ParentController;
 use App\Http\Controllers\SelfServiceController;
 
 class StaffDisciplineController extends ParentController

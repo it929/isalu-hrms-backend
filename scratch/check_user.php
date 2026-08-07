@@ -6,11 +6,29 @@ $kernel->handle(Illuminate\Http\Request::capture());
 
 use Illuminate\Support\Facades\DB;
 
-$user = DB::table('users')->where('id', 10214)->first();
-echo "User 10214 Email: " . $user->email . "\n";
-echo "User 10214 Username: " . $user->username . "\n";
-// Let's set the password to 'password' (bcrypt) so we can log in
-DB::table('users')->where('id', 10214)->update([
-    'password' => password_hash('password', PASSWORD_BCRYPT)
-]);
-echo "Password reset to 'password' successfully.\n";
+$users = DB::table('users')
+    ->leftJoin('assign_user_role', 'assign_user_role.userID', '=', 'users.id')
+    ->leftJoin('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+    ->select('users.id', 'users.username', 'users.user_type', 'assign_user_role.roleID', 'user_role.rolename')
+    ->get();
+
+use App\Http\Controllers\Api\RefundApiController;
+use Illuminate\Http\Request;
+
+$columns = Schema::getColumnListing('service_termination');
+echo "COLUMNS IN service_termination TABLE:\n";
+print_r($columns);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
