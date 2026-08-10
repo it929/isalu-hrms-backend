@@ -27,6 +27,12 @@
           <!-- Department -->
           <td>{{ $list->department }}</td>
 
+          <!-- Start Date -->
+          <td>{{ \Carbon\Carbon::parse($list->start_date)->format('d M, Y') }}</td>
+
+          <!-- End Date -->
+          <td>{{ \Carbon\Carbon::parse($list->end_date)->format('d M, Y') }}</td>
+
           <!-- Leave Type -->
           {{-- <td>{{ $list->leaveType }}</td> --}}
 

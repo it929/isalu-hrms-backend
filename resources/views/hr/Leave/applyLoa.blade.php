@@ -117,6 +117,8 @@
                                             <th>S/N</th>
                                             <th>Staff Name</th>
                                             <th>Department</th>
+                                            <th>Start Date</th>
+                                            <th>End Date</th>
                                             {{-- <th>Leave Type</th> --}}
                                             {{-- <th>Reason</th> --}}
                                             <th>Duration</th>
