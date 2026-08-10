@@ -475,16 +475,16 @@ Route::group(['middleware' => ['auth', 'force.password.change']], function () {
 
 
     /****File Communication***/
-    Route::get('/communication/create', 'FileCommunication\CommunicationController@create')->name('creatTask');
-    Route::post('/communication/create', 'FileCommunication\CommunicationController@store')->name('storeTask');
-    Route::post('/communication/create-comment', 'FileCommunication\CommunicationController@storeComment')->name('storeComment');
-    Route::get('/communication/create-comment', 'FileCommunication\CommunicationController@create');
-    Route::get('/communication/list-task', 'FileCommunication\CommunicationController@listTask')->name('allTask');
-    Route::get('/communication/add-comment', 'FileCommunication\CommunicationController@createComment')->name('createAddComment');
-    Route::post('/communication/add-comment', 'FileCommunication\CommunicationController@addComment')->name('processComment');
-    Route::get('/communication/archive', 'FileCommunication\CommunicationController@createArchive')->name('createArchive');
-    Route::post('/communication/archive', 'FileCommunication\CommunicationController@restoreArchive')->name('restoreArchiveTask');
-    Route::get('/communication/remove/{id?}', 'FileCommunication\CommunicationController@deleteTask')->name('removeTask');
+    // Route::get('/communication/create', 'FileCommunication\CommunicationController@create')->name('creatTask');
+    // Route::post('/communication/create', 'FileCommunication\CommunicationController@store')->name('storeTask');
+    // Route::post('/communication/create-comment', 'FileCommunication\CommunicationController@storeComment')->name('storeComment');
+    // Route::get('/communication/create-comment', 'FileCommunication\CommunicationController@create');
+    // Route::get('/communication/list-task', 'FileCommunication\CommunicationController@listTask')->name('allTask');
+    // Route::get('/communication/add-comment', 'FileCommunication\CommunicationController@createComment')->name('createAddComment');
+    // Route::post('/communication/add-comment', 'FileCommunication\CommunicationController@addComment')->name('processComment');
+    // Route::get('/communication/archive', 'FileCommunication\CommunicationController@createArchive')->name('createArchive');
+    // Route::post('/communication/archive', 'FileCommunication\CommunicationController@restoreArchive')->name('restoreArchiveTask');
+    // Route::get('/communication/remove/{id?}', 'FileCommunication\CommunicationController@deleteTask')->name('removeTask');
     /****File COmmunication***/
 
     /*******Test Connection****/
@@ -494,14 +494,14 @@ Route::group(['middleware' => ['auth', 'force.password.change']], function () {
     // Route::get('/delete-test-connection/{id?}',         'FileCommunication\TestConnectionController@deleteTestFile')->name('deleteTestConn');
 
     /*********Audit Log *********/
-    Route::get('/system-audit-log', 'SystemAuditLog\AuditLogController@createAuditLog')->name('createAudit');
-    Route::post('/system-audit-log', 'SystemAuditLog\AuditLogController@searchAuditLog')->name('postAudit');
+    Route::get('/system-audit-log', 'AuditLogController@createAuditLog')->name('createAudit');
+    Route::post('/system-audit-log', 'AuditLogController@searchAuditLog')->name('postAudit');
 
     /*********Password Reset*********/
-    Route::get('/password-reset', 'PasswordReset\PasswordResetController@createReset')->name('createPasswordReset');
-    Route::post('/password-reset', 'PasswordReset\PasswordResetController@storeReset')->name('postPasswordReset');
-    Route::get('/suspend-user', 'PasswordReset\PasswordResetController@createReset');
-    Route::post('/suspend-user', 'PasswordReset\PasswordResetController@storeSuspend')->name('postSuspend');
+    // Route::get('/password-reset', 'PasswordReset\PasswordResetController@createReset')->name('createPasswordReset');
+    // Route::post('/password-reset', 'PasswordReset\PasswordResetController@storeReset')->name('postPasswordReset');
+    // Route::get('/suspend-user', 'PasswordReset\PasswordResetController@createReset');
+    // Route::post('/suspend-user', 'PasswordReset\PasswordResetController@storeSuspend')->name('postSuspend');
 
     /********** Capital Mandate **********/
     Route::get('/view/capital-mandate/{id?}', [CPOController::class, 'capitalMandateTest']);

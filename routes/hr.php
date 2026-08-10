@@ -156,13 +156,13 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('/division/changeDivision', 'DivisionController@changeDivisionCreate');
     Route::post('/division/changeDivisionStore', 'DivisionController@changeDivisionStore');
 
-    Route::get('user/register', '\App\Http\Controllers\Auth\RegisterController@registerUser');
-    Route::post('user/store', '\App\Http\Controllers\Auth\RegisterController@storeUser');
+    Route::get('user/register', '\App\Http\Controllers\Auth\UserController@registerUser');
+    Route::post('user/store', '\App\Http\Controllers\Auth\UserController@storeUser');
 
     //edit user account
-    Route::get('/user/editAccount', '\App\Http\Controllers\Auth\RegisterController@editAccount');
-    Route::post('user/editAccount', '\App\Http\Controllers\Auth\RegisterController@editAccountStore');
-    Route::get('logout', '\App\Http\Controllers\Auth\LoginController@logout');
+    Route::get('/user/editAccount', '\App\Http\Controllers\Auth\UserController@editAccount');
+    Route::post('user/editAccount', '\App\Http\Controllers\Auth\UserController@editAccountStore');
+    Route::get('logout', '\App\Http\Controllers\Auth\AuthController@logout');
     //CREATE NEW STAFF / BIO-DATA
     Route::get('/staff/create', 'CreateStaffController@create');
     Route::post('/staff/store', 'CreateStaffController@store');
@@ -942,33 +942,30 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('court/add-court/delete{id}', 'AddCourtController@destroy');
 
     //payroll:- salary setup
-    Route::get('/salary/create', 'payroll\SalarySetupController@Create');
-    //Route::post('/salary/create', 'payroll\SalarySetupController@display');
-    Route::post('/salary/create', 'payroll\SalarySetupController@saveSalary');
+    Route::get('/salary/create', '\App\Http\Controllers\payroll\SalarySetupController@Create');
+    //Route::post('/salary/create', '\App\Http\Controllers\payroll\SalarySetupController@display');
+    Route::post('/salary/create', '\App\Http\Controllers\payroll\SalarySetupController@saveSalary');
 
     //payroll:- Consolidated salary setup
-    Route::get('/con-salary/create', 'payroll\ConSalarySetupController@Create');
-    //Route::post('/con-salary/create', 'payroll\ConSalarySetupController@display');
-    Route::post('/con-salary/create', 'payroll\ConSalarySetupController@saveSalary');
+    Route::get('/con-salary/create', '\App\Http\Controllers\payroll\ConSalarySetupController@Create');
+    //Route::post('/con-salary/create', '\App\Http\Controllers\payroll\ConSalarySetupController@display');
+    Route::post('/con-salary/create', '\App\Http\Controllers\payroll\ConSalarySetupController@saveSalary');
     Route::any('/structure-upload', 'BasicParameterController@Setup');
 
     //New salary structure setup
     Route::get('/new-salary/structure', 'NewSalaryStructureController@Create');
     Route::post('/new-salary/structure', 'NewSalaryStructureController@saveSalary');
 
-    Route::get('/deduction', 'payroll\Earningdeduction@Show');
-    Route::post('/deduction', 'payroll\Earningdeduction@Show');
-    Route::post('/deduction', 'payroll\Earningdeduction@show');
-    Route::post('/deduction/delete', 'payroll\Earningdeduction@deleteEarning');
-    //Route::post('/salary/create', 'payroll\arningdeduction@display');
-    //Route::post('/salary/create',   'payroll\arningdeduction@saveSalary');
+    Route::get('/deduction', '\App\Http\Controllers\payroll\EarningDeductionController@Show');
+    Route::post('/deduction', '\App\Http\Controllers\payroll\EarningDeductionController@Show');
+    Route::post('/deduction/delete', '\App\Http\Controllers\payroll\EarningDeductionController@deleteEarning');
 
     //payroll:- Salary Scale
-    Route::get('/salaryScale', 'payroll\SalaryScaleController@index');
-    Route::post('/salaryScale', 'payroll\SalaryScaleController@getSalary');
-    Route::get('/salaryScale/{type}/{court}', 'payroll\SalaryScaleController@customPaging');
-    Route::post('/courts/retrieve', 'payroll\ControlVariableController@getDivisions');
-    Route::post('/cv/session', 'payroll\ControlVariableController@getDStaffInfo');
+    Route::get('/salaryScale', '\App\Http\Controllers\payroll\SalaryScaleController@index');
+    Route::post('/salaryScale', '\App\Http\Controllers\payroll\SalaryScaleController@getSalary');
+    Route::get('/salaryScale/{type}/{court}', '\App\Http\Controllers\payroll\SalaryScaleController@customPaging');
+    Route::post('/courts/retrieve', '\App\Http\Controllers\payroll\ControlVariableController@getDivisions');
+    Route::post('/cv/session', '\App\Http\Controllers\payroll\ControlVariableController@getDStaffInfo');
 
     //payroll:- Control Variables
     Route::post('/courts/retrieve', 'ControlVariableController@getDivisions');
@@ -1091,16 +1088,14 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::get('/payrollReport/arrears/{court}/{fileNo}/{year}/{month}', 'PayrollReportController@arrearsOearn');
 
     //consolited payroll report
-    Route::post('/con-payrollReport/bulk-report', 'ConPayrollReportController@BulkPayRoll');
-    Route::post('/con-payrollReport/getBank', 'ConPayrollReportController@getBank');
-    // Route::get('/con-payrollReport/arrears/{court}/{fileNo}/{year}/{month}', 'ConPayrollReportController@arrearsOearn');
-    // Route::get('/con-payrollReport/arrears-test/{court}/{fileNo}/{year}/{month}', 'ConPayrollReportController@arrearsOearnTest');
+    Route::post('/con-payrollReport/bulk-report', '\App\Http\Controllers\payroll\ConPayrollReportController@BulkPayRoll');
+    Route::post('/con-payrollReport/getBank', '\App\Http\Controllers\payroll\ConPayrollReportController@getBank');
 
-    Route::get('/payroll-breakdown/create', 'ConPayrollReportController@payrollBreakdown');
-    Route::post('/payroll-breakdown/create', 'ConPayrollReportController@payrollBreakdownReport');
+    Route::get('/payroll-breakdown/create', '\App\Http\Controllers\payroll\ConPayrollReportController@payrollBreakdown');
+    Route::post('/payroll-breakdown/create', '\App\Http\Controllers\payroll\ConPayrollReportController@payrollBreakdownReport');
 
-    Route::any('/new-payroll', 'ConPayrollReportController@newPayrollIndex');
-    Route::post('/new-payroll', 'ConPayrollReportController@newPayrollReport');
+    Route::any('/new-payroll', '\App\Http\Controllers\payroll\ConPayrollReportController@newPayrollIndex');
+    Route::post('/new-payroll', '\App\Http\Controllers\payroll\ConPayrollReportController@newPayrollReport');
 
     //Add Title
     Route::get('/title', 'AddTitleController@index');
@@ -1232,9 +1227,9 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
     Route::post('/contact/mail', 'ContactController@mailPost');
 
     //payroll:- consolidated Salary Scale
-    Route::get('/consol/salaryScale', 'payroll\ConSalaryScaleController@index');
-    Route::post('/consol/salaryScale', 'payroll\ConSalaryScaleController@getSalary');
-    Route::get('consol/salaryScale/{type}/{court}', 'payroll\ConSalaryScaleController@customPaging');
+    Route::get('/consol/salaryScale', '\App\Http\Controllers\payroll\ConSalaryScaleController@index');
+    Route::post('/consol/salaryScale', '\App\Http\Controllers\payroll\ConSalaryScaleController@getSalary');
+    Route::get('consol/salaryScale/{type}/{court}', '\App\Http\Controllers\payroll\ConSalaryScaleController@customPaging');
 
     //payroll:- New Salary Scale
     Route::get('/new/salaryScale', 'NewSalaryStructureController@viewStructure');
@@ -1496,8 +1491,8 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
 
     Route::get('/variation-list', 'ProcessVariationController@variationList');
     Route::post('/variation/list', 'ProcessVariationController@saveVariation');
-    Route::any('/con-payrollReport/compare-earning', 'ConPayrollReportController@CompareEarning');
-    Route::any('/con-payrollReport/compare-pension', 'ConPayrollReportController@ComparePension');
+    Route::any('/con-payrollReport/compare-earning', '\App\Http\Controllers\payroll\ConPayrollReportController@CompareEarning');
+    Route::any('/con-payrollReport/compare-pension', '\App\Http\Controllers\payroll\ConPayrollReportController@ComparePension');
 
     Route::any('/arrear-computation/create', 'PayrollArrearOnlyController@ArrearsComputation');
 
@@ -1583,42 +1578,42 @@ Route::group(['middleware' => ['auth', 'force.password.change', 'permission']], 
 
     // Salary Approval process Testing
 
-    Route::get('/approval-process-test', 'SalaryApprovalProcessControllerTest@salaryPush');
-    Route::post('/approval-process-test', 'SalaryApprovalProcessControllerTest@process');
-    Route::post('/process-to-variation-test', 'SalaryApprovalProcessControllerTest@processToVariationControl');
-    Route::post('/rejection-test', 'SalaryApprovalProcessControllerTest@rejection');
+    // Route::get('/approval-process-test', 'SalaryApprovalProcessControllerTest@salaryPush');
+    // Route::post('/approval-process-test', 'SalaryApprovalProcessControllerTest@process');
+    // Route::post('/process-to-variation-test', 'SalaryApprovalProcessControllerTest@processToVariationControl');
+    // Route::post('/rejection-test', 'SalaryApprovalProcessControllerTest@rejection');
 
-    Route::get('/main-payroll-test', 'SalaryApprovalProcessControllerTest@create');
-    Route::post('/main-payroll-test', 'SalaryApprovalProcessControllerTest@Retrieve');
-    Route::get('payroll-analysis-test', 'SalaryApprovalProcessControllerTest@analysis');
-    Route::post('payroll-analysis-test', 'SalaryApprovalProcessControllerTest@analysisDisplay');
+    // Route::get('/main-payroll-test', 'SalaryApprovalProcessControllerTest@create');
+    // Route::post('/main-payroll-test', 'SalaryApprovalProcessControllerTest@Retrieve');
+    // Route::get('payroll-analysis-test', 'SalaryApprovalProcessControllerTest@analysis');
+    // Route::post('payroll-analysis-test', 'SalaryApprovalProcessControllerTest@analysisDisplay');
 
-    Route::get('/payroll-summary-test', 'SalaryApprovalProcessControllerTest@payrollSummary');
-    Route::post('/payroll-summary-test', 'SalaryApprovalProcessControllerTest@viewPayrollSummary');
-    Route::get('/view-pecard-test', 'SalaryApprovalProcessControllerTest@checkCard');
-    Route::post('/view-pecard-test', 'SalaryApprovalProcessControllerTest@viewCard');
+    // Route::get('/payroll-summary-test', 'SalaryApprovalProcessControllerTest@payrollSummary');
+    // Route::post('/payroll-summary-test', 'SalaryApprovalProcessControllerTest@viewPayrollSummary');
+    // Route::get('/view-pecard-test', 'SalaryApprovalProcessControllerTest@checkCard');
+    // Route::post('/view-pecard-test', 'SalaryApprovalProcessControllerTest@viewCard');
 
-    Route::get('treasury209-view-test', 'SalaryApprovalProcessControllerTest@loadView');
-    Route::post('treasury209-view-test', 'SalaryApprovalProcessControllerTest@view');
-    Route::get('/display/minutes-test/{year}/{month}', 'SalaryApprovalProcessControllerTest@displayComments');
+    // Route::get('treasury209-view-test', 'SalaryApprovalProcessControllerTest@loadView');
+    // Route::post('treasury209-view-test', 'SalaryApprovalProcessControllerTest@view');
+    // Route::get('/display/minutes-test/{year}/{month}', 'SalaryApprovalProcessControllerTest@displayComments');
 
     //bank schedule
-    Route::get('/bankshedule/view-test', 'SalaryApprovalProcessControllerTest@bankSchedule');
-    Route::post('/bankshedule/view-test', 'SalaryApprovalProcessControllerTest@postBankSchedule');
+    // Route::get('/bankshedule/view-test', 'SalaryApprovalProcessControllerTest@bankSchedule');
+    // Route::post('/bankshedule/view-test', 'SalaryApprovalProcessControllerTest@postBankSchedule');
 
     //Mandate Approval
-    Route::get('/salary/view-test', 'SalaryMandateApprovalControllerTest@salaryAction');
-    Route::post('/salary/view-test', 'SalaryMandateApprovalControllerTest@salaryHeadComment');
+    // Route::get('/salary/view-test', 'SalaryMandateApprovalControllerTest@salaryAction');
+    // Route::post('/salary/view-test', 'SalaryMandateApprovalControllerTest@salaryHeadComment');
 
-    Route::get('/mandate/view-test', 'SalaryMandateApprovalControllerTest@mandateView');
-    Route::post('/mandate/view-test', 'SalaryMandateApprovalControllerTest@mandateComment');
+    // Route::get('/mandate/view-test', 'SalaryMandateApprovalControllerTest@mandateView');
+    // Route::post('/mandate/view-test', 'SalaryMandateApprovalControllerTest@mandateComment');
 
-    Route::get('/mandate-test/{year}/{month}', 'SalaryMandateApprovalControllerTest@mandate');
+    // Route::get('/mandate-test/{year}/{month}', 'SalaryMandateApprovalControllerTest@mandate');
 
-    Route::get('/display/comments-test/{year}/{month}', 'SalaryMandateApprovalControllerTest@displayComments');
+    // Route::get('/display/comments-test/{year}/{month}', 'SalaryMandateApprovalControllerTest@displayComments');
 
-    Route::get('/es/view-test', 'SalaryMandateApprovalControllerTest@ESView');
-    Route::post('/es/view-test', 'SalaryMandateApprovalControllerTest@ESComment');
+    // Route::get('/es/view-test', 'SalaryMandateApprovalControllerTest@ESView');
+    // Route::post('/es/view-test', 'SalaryMandateApprovalControllerTest@ESComment');
 
     //staff designation
     // Route::get('staff/designation', 'StaffDesignationController@displayForm');

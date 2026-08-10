@@ -533,8 +533,8 @@ Route::group(['middleware' => ['auth', 'force.password.change']], function () {
 
 
     //Bank Route
-    Route::resource('banks', BanksController::class);
-    Route::resource('status', 'StatusController');
+    Route::resource('banks', 'BanksController');
+    // Route::resource('status', 'StatusController');
 
 
     //Secretary approval section

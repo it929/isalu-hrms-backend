@@ -147,6 +147,8 @@
                                             <th>Staff Name</th>
                                             <th>Department</th>
                                             <th>Leave Type</th>
+                                            <th>Start Date</th>
+                                            <th>End Date</th>
                                             {{-- <th>Reason</th> --}}
                                             <th>Duration</th>
                                             <th>Date Applied</th>
@@ -170,6 +172,12 @@
 
                                                 <!-- Leave Type -->
                                                 <td>{{ $list->leaveType }}</td>
+
+                                                <!-- Start Date -->
+                                                <td>{{ \Carbon\Carbon::parse($list->start_date)->format('d M, Y') }}</td>
+
+                                                <!-- End Date -->
+                                                <td>{{ \Carbon\Carbon::parse($list->end_date)->format('d M, Y') }}</td>
 
                                                 <!-- Leave Reason -->
                                                 {{-- <td>{{ $list->reason_of_leave }}</td> --}}
@@ -366,7 +374,7 @@
 
                                         @empty
                                             <tr>
-                                                <td colspan="9" class="text-center">No Record Found!</td>
+                                                <td colspan="10" class="text-center">No Record Found!</td>
                                             </tr>
                                         @endforelse
                                     </tbody>
