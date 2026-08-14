@@ -441,6 +441,7 @@ Route::prefix('nextjs')->group(function () {
         Route::prefix('retention-activation')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\RetentionActivationApiController::class, 'index']);
             Route::post('/toggle', [\App\Http\Controllers\Api\RetentionActivationApiController::class, 'toggleRetention']);
+            Route::post('/bulk-toggle', [\App\Http\Controllers\Api\RetentionActivationApiController::class, 'bulkToggleRetention']);
             Route::post('/import', [\App\Http\Controllers\Api\RetentionActivationApiController::class, 'importRetention']);
         });
 

@@ -71,5 +71,40 @@ class MedicalLoanDeductionSetupApiTest extends TestCase
         $response = $this->deleteJson("/api/nextjs/payroll/medical-loan-deduction-setups/{$setup->id}", [], $headers);
         $response->assertStatus(200);
         $this->assertDatabaseMissing('medical_loan_deduction_setups', ['id' => $setup->id]);
+
+        // Test Template Download
+        $templateResponse = $this->get('/api/nextjs/payroll/medical-loan-deduction-setups/template');
+        $templateResponse->assertStatus(200);
+
+        // Test Import with 2-column CSV (Staff ID and Loan Amount)
+        $csvContent = "Staff ID,Loan Amount\n{$user->ID},\"120,000.00\"\n";
+        $tempFile = tempnam(sys_get_temp_dir(), 'med_loan_csv');
+        file_put_contents($tempFile, $csvContent);
+
+        $uploadedFile = new \Illuminate\Http\UploadedFile(
+            $tempFile,
+            'medical_loan_import.csv',
+            'text/csv',
+            null,
+            true
+        );
+
+        $importResponse = $this->postJson('/api/nextjs/payroll/medical-loan-deduction-setups/import', [
+            'file' => $uploadedFile
+        ], $headers);
+
+        $importResponse->assertStatus(200)
+            ->assertJson(['status' => 'success']);
+
+        // For loan amount 120,000, fixed monthly deduction tier is 20,000 and calculated tiered duration is 9 months
+        $this->assertDatabaseHas('medical_loan_deduction_setups', [
+            'staffId' => $user->ID,
+            'loan_amount' => 120000.00,
+            'monthly_deduction' => 20000.00,
+            'duration_months' => 9,
+            'is_active' => 1
+        ]);
+
+        unlink($tempFile);
     }
 }

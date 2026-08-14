@@ -163,7 +163,7 @@ class IouApiController extends Controller
 
             $maxLimit = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.50);
 
-            // Sum already used amount for this month and year (excluding rejected status = 2)
+            // Sum already used amount for this month and year (all non-rejected: status != 2)
             $query = DB::table('iou_records')
                 ->where('staff_id', $staffId)
                 ->where('status', '!=', 2)
@@ -274,8 +274,24 @@ class IouApiController extends Controller
                                (float)($row->utility_allowance ?? 0.00) +
                                (float)($row->meal_allowance ?? 0.00);
 
+                $dateStr = !empty($row->iou_date) ? $row->iou_date : (!empty($row->created_at) ? $row->created_at : null);
+                $time = $dateStr ? strtotime($dateStr) : time();
+                $month = (int) date('m', $time);
+                $year = (int) date('Y', $time);
+
+                // Sum only HR-approved IOUs for this staff member in the same month
+                $totalMonthIou = (float) DB::table('iou_records')
+                    ->where('staff_id', $row->staff_id)
+                    ->where('admin_status', 1)
+                    ->whereYear('iou_date', $year)
+                    ->whereMonth('iou_date', $month)
+                    ->sum('amount');
+
+
                 $row->gross_salary = $grossSalary;
                 $row->percentage_of_salary = $grossSalary > 0 ? round(((float)$row->amount / $grossSalary) * 100, 2) : 0;
+                $row->total_collected_month = $totalMonthIou;
+                $row->total_month_percentage = $grossSalary > 0 ? round(($totalMonthIou / $grossSalary) * 100, 2) : 0;
                 return $row;
             });
 
@@ -366,7 +382,7 @@ class IouApiController extends Controller
             $month = date('m', $time);
             $year = date('Y', $time);
 
-            // Calculate other active requests for this month (excluding rejected status = 2)
+            // Calculate active requests for this month (excluding rejected status = 2)
             $query = DB::table('iou_records')
                 ->where('staff_id', $validated['staff_id'])
                 ->where('status', '!=', 2)
@@ -419,6 +435,14 @@ class IouApiController extends Controller
                         'status'  => 'error',
                         'message' => 'IOU record not found.'
                     ], 404);
+                }
+
+                // Block editing once HOD has approved — regardless of role
+                if ((int)$existing->hod_status === 1) {
+                    return response()->json([
+                        'status'  => 'error',
+                        'message' => 'This IOU application has been approved by the HOD and can no longer be edited.'
+                    ], 403);
                 }
 
                 // Non-admins can only edit pending applications
