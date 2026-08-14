@@ -278,8 +278,8 @@ class MedicalLoanDeductionSetupApiController extends Controller
                 'Expires'             => '0',
             ];
 
-            $columns = ['Staff ID', 'Loan Amount', 'Duration Months', 'Start Month (YYYY-MM)'];
-            $exampleRow = ['1024', '120000.00', '12', '2026-06'];
+            $columns = ['Staff ID', 'Loan Amount'];
+            $exampleRow = ['1024', '120000.00'];
 
             $callback = function () use ($columns, $exampleRow) {
                 $handle = fopen('php://output', 'w');
@@ -318,10 +318,18 @@ class MedicalLoanDeductionSetupApiController extends Controller
             }
 
             $request->validate([
-                'file' => 'required|file|mimes:xlsx,xls,csv'
+                'file' => 'required|file'
             ]);
 
             $file = $request->file('file');
+            $ext = strtolower($file->getClientOriginalExtension());
+            if (!in_array($ext, ['xlsx', 'xls', 'csv'])) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Invalid file format. Only .xlsx, .xls, and .csv files are allowed.'
+                ], 422);
+            }
+
             $rows = Excel::toArray([], $file)[0];
 
             if (empty($rows) || count($rows) <= 1) {
@@ -330,6 +338,14 @@ class MedicalLoanDeductionSetupApiController extends Controller
                     'message' => 'The uploaded file is empty or contains no records.'
                 ], 422);
             }
+
+            $cleanMoney = function ($val) {
+                if ($val === null || $val === false) return 0.0;
+                $str = trim((string)$val);
+                if ($str === '' || $str === '-' || strtolower($str) === 'nil' || strtolower($str) === 'null' || strtolower($str) === 'n/a') return 0.0;
+                $cleaned = preg_replace('/[^0-9.-]/', '', $str);
+                return is_numeric($cleaned) ? (float)$cleaned : 0.0;
+            };
 
             // Normalize headers
             $headers = array_map(function ($h) {
@@ -343,15 +359,16 @@ class MedicalLoanDeductionSetupApiController extends Controller
             $startIdx = -1;
 
             foreach ($headers as $index => $header) {
-                if (strpos($header, 'staff id') !== false || strpos($header, 'staff_id') !== false || $header === 'id' || $header === 'staffid') {
+                $h = strtolower(preg_replace('/[^a-z0-9]/', '', (string)$header));
+                if (in_array($h, ['staffid', 'id', 'staff', 'employeeid', 'empid', 'staffno'])) {
                     $staffIdIdx = $index;
-                } elseif (strpos($header, 'file') !== false || $header === 'fileno' || $header === 'file_no') {
+                } elseif (in_array($h, ['fileno', 'file', 'filenumber', 'file_no'])) {
                     $fileNoIdx = $index;
-                } elseif (strpos($header, 'amount') !== false || strpos($header, 'loan') !== false) {
+                } elseif (in_array($h, ['loanamount', 'amount', 'loan', 'medicalloanamount', 'medicalloan'])) {
                     $amountIdx = $index;
-                } elseif (strpos($header, 'duration') !== false || strpos($header, 'month') !== false) {
+                } elseif (in_array($h, ['durationmonths', 'duration', 'months'])) {
                     $durationIdx = $index;
-                } elseif (strpos($header, 'start') !== false || strpos($header, 'period') !== false) {
+                } elseif (in_array($h, ['startmonth', 'start', 'period'])) {
                     $startIdx = $index;
                 }
             }
@@ -359,8 +376,6 @@ class MedicalLoanDeductionSetupApiController extends Controller
             // Fallback checking by column position
             if ($staffIdIdx === -1 && $fileNoIdx === -1) $staffIdIdx = 0;
             if ($amountIdx === -1) $amountIdx = 1;
-            if ($durationIdx === -1) $durationIdx = 2;
-            if ($startIdx === -1) $startIdx = 3;
 
             $importedCount = 0;
             $warnings = [];
@@ -380,46 +395,57 @@ class MedicalLoanDeductionSetupApiController extends Controller
                 if ($isEmptyRow) continue;
 
                 $staff = null;
+                $rawStaffId = ($staffIdIdx !== -1 && isset($row[$staffIdIdx])) ? trim((string)$row[$staffIdIdx]) : '';
 
                 // Match by Staff ID
-                if ($staffIdIdx !== -1 && isset($row[$staffIdIdx]) && trim($row[$staffIdIdx]) !== '') {
-                    $val = trim($row[$staffIdIdx]);
-                    $staff = DB::table('tblper')->where('ID', $val)->first();
+                if ($rawStaffId !== '') {
+                    if (is_numeric($rawStaffId)) {
+                        $staff = DB::table('tblper')->where('ID', intval($rawStaffId))->first();
+                    }
+                    if (!$staff) {
+                        $staff = DB::table('tblper')->where('fileNo', $rawStaffId)->first();
+                    }
+                    if (!$staff) {
+                        $digits = preg_replace('/\D/', '', $rawStaffId);
+                        if ($digits !== '') {
+                            $staff = DB::table('tblper')->where('ID', intval($digits))->orWhere('fileNo', $digits)->first();
+                        }
+                    }
                 }
 
-                // Match by File Number
-                if (!$staff && $fileNoIdx !== -1 && isset($row[$fileNoIdx]) && trim($row[$fileNoIdx]) !== '') {
-                    $val = trim($row[$fileNoIdx]);
-                    $staff = DB::table('tblper')->where('fileNo', $val)->first();
-                }
-
-                // Fallback matching
-                if (!$staff && $staffIdIdx !== -1 && isset($row[$staffIdIdx]) && trim($row[$staffIdIdx]) !== '') {
-                    $val = trim($row[$staffIdIdx]);
+                // Match by File Number if separate column
+                if (!$staff && $fileNoIdx !== -1 && isset($row[$fileNoIdx]) && trim((string)$row[$fileNoIdx]) !== '') {
+                    $val = trim((string)$row[$fileNoIdx]);
                     $staff = DB::table('tblper')->where('fileNo', $val)->first();
                 }
 
                 if (!$staff) {
-                    $warnings[] = "Row " . ($r + 1) . ": Employee ID/File Number not found.";
+                    $searchVal = $rawStaffId !== '' ? $rawStaffId : "Row " . ($r + 1);
+                    $warnings[] = "Row " . ($r + 1) . ": Staff with identifier '{$searchVal}' not found.";
                     continue;
                 }
 
                 // Parse loan amount
-                $loanAmount = isset($row[$amountIdx]) ? (float)trim(str_replace([',', '₦', '$'], '', $row[$amountIdx])) : 0.00;
+                $loanAmount = ($amountIdx !== -1 && isset($row[$amountIdx])) ? $cleanMoney($row[$amountIdx]) : 0.00;
                 if ($loanAmount <= 0) {
-                    $warnings[] = "Row " . ($r + 1) . ": Invalid loan amount.";
+                    $warnings[] = "Row " . ($r + 1) . ": Invalid loan amount for staff '{$staff->surname} {$staff->first_name}'.";
                     continue;
                 }
 
-                // Parse duration months
-                $durationMonths = isset($row[$durationIdx]) ? (int)trim($row[$durationIdx]) : 12;
-                if ($durationMonths <= 0) {
-                    $warnings[] = "Row " . ($r + 1) . ": Invalid duration months.";
-                    continue;
+                // Automatically calculate fixed monthly deduction and duration based on loan amount tiers
+                $calc = $this->calculateDeductionAndDuration($loanAmount);
+                $durationMonths = $calc['duration_months'];
+                $monthlyDeduction = $calc['monthly_deduction'];
+
+                if ($durationIdx !== -1 && isset($row[$durationIdx]) && trim((string)$row[$durationIdx]) !== '') {
+                    $customDuration = (int) $cleanMoney($row[$durationIdx]);
+                    if ($customDuration > 0) {
+                        $durationMonths = $customDuration;
+                    }
                 }
 
-                // Parse start month
-                $startMonth = isset($row[$startIdx]) ? trim($row[$startIdx]) : '';
+                // Parse start month (defaults to current month)
+                $startMonth = ($startIdx !== -1 && isset($row[$startIdx])) ? trim((string)$row[$startIdx]) : '';
                 if ($startMonth === '') {
                     $startMonth = date('Y-m');
                 } else {
@@ -438,11 +464,6 @@ class MedicalLoanDeductionSetupApiController extends Controller
                     }
                 }
 
-                // Recalculate duration and monthly deduction based on new rules
-                $calc = $this->calculateDeductionAndDuration($loanAmount);
-                $durationMonths = $calc['duration_months'];
-                $monthlyDeduction = $calc['monthly_deduction'];
-
                 // Calculate end month matching the calculated duration
                 $endMonth = $startMonth;
                 if ($startMonth && $durationMonths > 0) {
@@ -456,9 +477,26 @@ class MedicalLoanDeductionSetupApiController extends Controller
                     }
                 }
 
-                DB::table('medical_loan_deduction_setups')->updateOrInsert(
-                    ['staffId' => $staff->ID],
-                    [
+                $existing = DB::table('medical_loan_deduction_setups')
+                    ->where('staffId', $staff->ID)
+                    ->first();
+
+                if ($existing) {
+                    DB::table('medical_loan_deduction_setups')
+                        ->where('id', $existing->id)
+                        ->update([
+                            'loan_amount' => $loanAmount,
+                            'duration_months' => $durationMonths,
+                            'monthly_deduction' => $monthlyDeduction,
+                            'balance_remaining' => $loanAmount,
+                            'start_month' => $startMonth,
+                            'end_month' => $endMonth,
+                            'is_active' => 1,
+                            'updated_at' => now(),
+                        ]);
+                } else {
+                    DB::table('medical_loan_deduction_setups')->insert([
+                        'staffId' => $staff->ID,
                         'loan_amount' => $loanAmount,
                         'duration_months' => $durationMonths,
                         'monthly_deduction' => $monthlyDeduction,
@@ -466,10 +504,10 @@ class MedicalLoanDeductionSetupApiController extends Controller
                         'start_month' => $startMonth,
                         'end_month' => $endMonth,
                         'is_active' => 1,
+                        'created_at' => now(),
                         'updated_at' => now(),
-                        'created_at' => now()
-                    ]
-                );
+                    ]);
+                }
 
                 $importedCount++;
             }
@@ -478,11 +516,10 @@ class MedicalLoanDeductionSetupApiController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => "Bulk import completed. {$importedCount} medical loan setups imported successfully.",
+                'message' => "Successfully imported and configured medical loan setups for {$importedCount} staff.",
+                'imported_count' => $importedCount,
                 'warnings' => $warnings,
-                'imported_count' => $importedCount
             ]);
-
         } catch (\Throwable $th) {
             DB::rollBack();
             Log::error('MedicalLoanDeductionSetupApiController import: ' . $th->getMessage());

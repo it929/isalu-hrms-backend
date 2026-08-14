@@ -92,7 +92,10 @@ class RetentionActivationApiTest extends TestCase
                         'othernames',
                         'name',
                         'reten_act',
-                        'basic_salary'
+                        'basic_salary',
+                        'num_rente_months',
+                        'remaining_months',
+                        'total_retention_deducted'
                     ]
                 ]
             ]);
@@ -161,8 +164,10 @@ class RetentionActivationApiTest extends TestCase
             ['reten_act' => 0]
         );
 
-        // Create temporary CSV content
-        $csvContent = "staffId,gross_salary,num_reten_months,reten_act\n{$this->testEmployeeId},200000.00,0,1\n";
+        // Create temporary CSV content with new column headers
+        // First salary 200,000 => monthly retention is 10,000 (5%).
+        // Total deducted = 20,000.00 => 2 months deducted. Balance = 180,000.00 => 18 months remaining.
+        $csvContent = "staffId,first_salary,total_deducted,balance_to_be_deduct\n{$this->testEmployeeId},200000.00,20000.00,180000.00\n";
         $tempFile = tempnam(sys_get_temp_dir(), 'test_csv');
         file_put_contents($tempFile, $csvContent);
  
@@ -193,10 +198,37 @@ class RetentionActivationApiTest extends TestCase
             'utility_allowance' => 40000.00,
             'meal_allowance' => 40000.00,
             'reten_act' => 1,
-            'num_rente_months' => 0
+            'num_rente_months' => 2
         ]);
  
         unlink($tempFile);
+
+        // Test 2: Balance '-' or empty means retention is completed (20 months)
+        $csvContent2 = "staffId,first_salary,total_deducted,balance_to_be_deducted\n{$this->testEmployeeId},\"250,000.00\",\"250,000.00\",-\n";
+        $tempFile2 = tempnam(sys_get_temp_dir(), 'test_csv2');
+        file_put_contents($tempFile2, $csvContent2);
+
+        $uploadedFile2 = new UploadedFile(
+            $tempFile2,
+            'import_retention_completed.csv',
+            'text/csv',
+            null,
+            true
+        );
+
+        $response2 = $this->postJson('/api/nextjs/payroll/retention-activation/import', [
+            'excel_file' => $uploadedFile2
+        ], $headers);
+
+        $response2->assertStatus(200);
+
+        $this->assertDatabaseHas('first_salary_structure', [
+            'staffId' => $this->testEmployeeId,
+            'reten_act' => 1,
+            'num_rente_months' => 20
+        ]);
+
+        unlink($tempFile2);
     }
 
     /**
