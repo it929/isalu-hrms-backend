@@ -949,7 +949,11 @@ class SalaryBreakdownApiController extends Controller
             foreach ($moneyColIndices as $colIdx) {
                 $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx);
                 $cellRef = "{$colLetter}{$totalRow}";
-                $sheet->setCellValue($cellRef, "=SUM({$colLetter}{$dataStartRow}:{$colLetter}{$dataEndRow})");
+                if ($dataEndRow >= $dataStartRow) {
+                    $sheet->setCellValue($cellRef, "=SUM({$colLetter}{$dataStartRow}:{$colLetter}{$dataEndRow})");
+                } else {
+                    $sheet->setCellValue($cellRef, 0);
+                }
                 
                 $fontColor = '000000';
                 if ($colIdx === 25) {
@@ -989,49 +993,23 @@ class SalaryBreakdownApiController extends Controller
             $sheet->setAutoFilter("A3:{$lastColLetter}3");
 
             $filename = "Payroll_{$monthName}_{$year}.xlsx";
+            $writer = new Xlsx($spreadsheet);
 
-            // Clean any existing output buffer to prevent corrupted binary stream
             if (ob_get_length()) {
                 ob_clean();
             }
 
-            try {
-                $writer = new Xlsx($spreadsheet);
-                ob_start();
-                $writer->save('php://output');
-                $content = ob_get_clean();
+            ob_start();
+            $writer->save('php://output');
+            $content = ob_get_clean();
 
-                return response($content, 200, [
-                    'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-                    'Pragma'              => 'no-cache',
-                    'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-                    'Expires'             => '0',
-                ]);
-            } catch (\Throwable $xlsxErr) {
-                Log::warning('SalaryBreakdownApiController exportAllStaffSheet Xlsx write fallback to CSV: ' . $xlsxErr->getMessage());
-                $csvFilename = "Payroll_{$monthName}_{$year}.csv";
-                $out = fopen('php://temp', 'r+');
-                fputcsv($out, $columns);
-                foreach ($records as $record) {
-                    $row = [];
-                    foreach ($dataKeys as $k) {
-                        $row[] = $record[$k] ?? '';
-                    }
-                    fputcsv($out, $row);
-                }
-                rewind($out);
-                $csvContent = stream_get_contents($out);
-                fclose($out);
-
-                return response($csvContent, 200, [
-                    'Content-Type'        => 'text/csv; charset=UTF-8',
-                    'Content-Disposition' => "attachment; filename=\"{$csvFilename}\"",
-                    'Pragma'              => 'no-cache',
-                    'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-                    'Expires'             => '0',
-                ]);
-            }
+            return response($content, 200, [
+                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                'Pragma'              => 'no-cache',
+                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires'             => '0',
+            ]);
         } catch (\Throwable $th) {
             Log::error('SalaryBreakdownApiController exportAllStaffSheet: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
@@ -1246,14 +1224,15 @@ class SalaryBreakdownApiController extends Controller
             }
 
             $manualWidths = [
-                1  => 8,
-                2  => 28,
-                3  => 20,
-                12 => 9,
-                32 => 18,
-                33 => 16,
-                34 => 10,
-                35 => 14,
+                1  => 8,   // IDNO
+                2  => 28,  // NAME
+                3  => 20,  // DEPARTMENT
+                12 => 9,   // PAID DAYS
+                23 => 14,  // LOA.DEDN
+                33 => 18,  // ACCOUNT NO
+                34 => 16,  // BANK
+                35 => 10,  // SORT CODE
+                36 => 14,  // PAYER ID
             ];
             for ($c = 1; $c <= $totalCols; $c++) {
                 $cl = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
@@ -1266,49 +1245,23 @@ class SalaryBreakdownApiController extends Controller
 
             $safeStaffName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $staffName);
             $filename = "Payroll_{$safeStaffName}_{$monthName}_{$year}.xlsx";
+            $writer = new Xlsx($spreadsheet);
 
-            // Clean any existing output buffer to prevent corrupted binary stream
             if (ob_get_length()) {
                 ob_clean();
             }
 
-            try {
-                $writer = new Xlsx($spreadsheet);
-                ob_start();
-                $writer->save('php://output');
-                $content = ob_get_clean();
+            ob_start();
+            $writer->save('php://output');
+            $content = ob_get_clean();
 
-                return response($content, 200, [
-                    'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-                    'Pragma'              => 'no-cache',
-                    'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-                    'Expires'             => '0',
-                ]);
-            } catch (\Throwable $xlsxErr) {
-                Log::warning('SalaryBreakdownApiController exportStaffSheet Xlsx write fallback to CSV: ' . $xlsxErr->getMessage());
-                $csvFilename = "Payroll_{$safeStaffName}_{$monthName}_{$year}.csv";
-                $out = fopen('php://temp', 'r+');
-                fputcsv($out, $columns);
-                foreach ($records as $record) {
-                    $row = [];
-                    foreach ($dataKeys as $k) {
-                        $row[] = $record[$k] ?? '';
-                    }
-                    fputcsv($out, $row);
-                }
-                rewind($out);
-                $csvContent = stream_get_contents($out);
-                fclose($out);
-
-                return response($csvContent, 200, [
-                    'Content-Type'        => 'text/csv; charset=UTF-8',
-                    'Content-Disposition' => "attachment; filename=\"{$csvFilename}\"",
-                    'Pragma'              => 'no-cache',
-                    'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-                    'Expires'             => '0',
-                ]);
-            }
+            return response($content, 200, [
+                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                'Pragma'              => 'no-cache',
+                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires'             => '0',
+            ]);
         } catch (\Throwable $th) {
             Log::error('SalaryBreakdownApiController exportStaffSheet: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
@@ -1336,7 +1289,10 @@ class SalaryBreakdownApiController extends Controller
             }
         } catch (\Throwable $e) { /* ignore */ }
 
-        $isComputed = ($run !== null && \Illuminate\Support\Facades\Schema::hasTable('payroll_conpt'));
+        $isComputed = false;
+        if ($run !== null && \Illuminate\Support\Facades\Schema::hasTable('payroll_conpt')) {
+            $isComputed = DB::table('payroll_conpt')->where('payroll_run_id', $run->id)->exists();
+        }
 
         // Fetch departments list for filter dropdown
         $departments = collect();
@@ -1507,8 +1463,15 @@ class SalaryBreakdownApiController extends Controller
             ->leftJoin('tbldepartment as dept', 'dept.id', '=', 'p.departmentID')
             ->leftJoin('tbldesignation as des', 'des.id', '=', 'p.designation')
             ->leftJoin('tblbanklist as bl', 'bl.bankID', '=', 'p.bankID')
-            ->where('p.rank', '!=', 2)
-            ->where('p.staff_status', 1);
+            ->where(function($q) {
+                $q->where('p.rank', '!=', 2)
+                  ->orWhereNull('p.rank');
+            })
+            ->where(function($q) {
+                $q->where('p.staff_status', 1)
+                  ->orWhere('p.staff_status', '1')
+                  ->orWhereNull('p.staff_status');
+            });
 
         if (!empty($departmentId)) {
             $staffQuery->where('p.departmentID', $departmentId);
