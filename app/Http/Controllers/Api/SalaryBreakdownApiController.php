@@ -989,19 +989,49 @@ class SalaryBreakdownApiController extends Controller
             $sheet->setAutoFilter("A3:{$lastColLetter}3");
 
             $filename = "Payroll_{$monthName}_{$year}.xlsx";
-            $writer = new Xlsx($spreadsheet);
 
-            ob_start();
-            $writer->save('php://output');
-            $content = ob_get_clean();
+            // Clean any existing output buffer to prevent corrupted binary stream
+            if (ob_get_length()) {
+                ob_clean();
+            }
 
-            return response($content, 200, [
-                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-                'Pragma'              => 'no-cache',
-                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-                'Expires'             => '0',
-            ]);
+            try {
+                $writer = new Xlsx($spreadsheet);
+                ob_start();
+                $writer->save('php://output');
+                $content = ob_get_clean();
+
+                return response($content, 200, [
+                    'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                    'Pragma'              => 'no-cache',
+                    'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                    'Expires'             => '0',
+                ]);
+            } catch (\Throwable $xlsxErr) {
+                Log::warning('SalaryBreakdownApiController exportAllStaffSheet Xlsx write fallback to CSV: ' . $xlsxErr->getMessage());
+                $csvFilename = "Payroll_{$monthName}_{$year}.csv";
+                $out = fopen('php://temp', 'r+');
+                fputcsv($out, $columns);
+                foreach ($records as $record) {
+                    $row = [];
+                    foreach ($dataKeys as $k) {
+                        $row[] = $record[$k] ?? '';
+                    }
+                    fputcsv($out, $row);
+                }
+                rewind($out);
+                $csvContent = stream_get_contents($out);
+                fclose($out);
+
+                return response($csvContent, 200, [
+                    'Content-Type'        => 'text/csv; charset=UTF-8',
+                    'Content-Disposition' => "attachment; filename=\"{$csvFilename}\"",
+                    'Pragma'              => 'no-cache',
+                    'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                    'Expires'             => '0',
+                ]);
+            }
         } catch (\Throwable $th) {
             Log::error('SalaryBreakdownApiController exportAllStaffSheet: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
@@ -1017,16 +1047,27 @@ class SalaryBreakdownApiController extends Controller
         try {
             $ctx = $this->getUserContext($request);
             if (!$ctx) {
-                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
             $currentUser = $ctx['employee'];
             $requestedStaffId = $request->query('staff_id');
 
-            // Determine effective staff ID
+            // Determine effective staff ID based on role permissions
             $staffId = null;
             if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff'] || $ctx['isFinanceStaff']) {
                 $staffId = $requestedStaffId ? (int)$requestedStaffId : ($currentUser ? $currentUser->ID : null);
+            } elseif ($currentUser && $currentUser->is_hod == 1) {
+                if ($requestedStaffId) {
+                    $targetStaff = DB::table('tblper')->where('ID', (int)$requestedStaffId)->first();
+                    if ($targetStaff && $targetStaff->departmentID == $currentUser->departmentID) {
+                        $staffId = (int)$requestedStaffId;
+                    } else {
+                        $staffId = $currentUser->ID;
+                    }
+                } else {
+                    $staffId = $currentUser->ID;
+                }
             } else {
                 $staffId = $currentUser ? $currentUser->ID : null;
             }
@@ -1225,19 +1266,49 @@ class SalaryBreakdownApiController extends Controller
 
             $safeStaffName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $staffName);
             $filename = "Payroll_{$safeStaffName}_{$monthName}_{$year}.xlsx";
-            $writer = new Xlsx($spreadsheet);
 
-            ob_start();
-            $writer->save('php://output');
-            $content = ob_get_clean();
+            // Clean any existing output buffer to prevent corrupted binary stream
+            if (ob_get_length()) {
+                ob_clean();
+            }
 
-            return response($content, 200, [
-                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-                'Pragma'              => 'no-cache',
-                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-                'Expires'             => '0',
-            ]);
+            try {
+                $writer = new Xlsx($spreadsheet);
+                ob_start();
+                $writer->save('php://output');
+                $content = ob_get_clean();
+
+                return response($content, 200, [
+                    'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                    'Pragma'              => 'no-cache',
+                    'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                    'Expires'             => '0',
+                ]);
+            } catch (\Throwable $xlsxErr) {
+                Log::warning('SalaryBreakdownApiController exportStaffSheet Xlsx write fallback to CSV: ' . $xlsxErr->getMessage());
+                $csvFilename = "Payroll_{$safeStaffName}_{$monthName}_{$year}.csv";
+                $out = fopen('php://temp', 'r+');
+                fputcsv($out, $columns);
+                foreach ($records as $record) {
+                    $row = [];
+                    foreach ($dataKeys as $k) {
+                        $row[] = $record[$k] ?? '';
+                    }
+                    fputcsv($out, $row);
+                }
+                rewind($out);
+                $csvContent = stream_get_contents($out);
+                fclose($out);
+
+                return response($csvContent, 200, [
+                    'Content-Type'        => 'text/csv; charset=UTF-8',
+                    'Content-Disposition' => "attachment; filename=\"{$csvFilename}\"",
+                    'Pragma'              => 'no-cache',
+                    'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                    'Expires'             => '0',
+                ]);
+            }
         } catch (\Throwable $th) {
             Log::error('SalaryBreakdownApiController exportStaffSheet: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
@@ -1257,19 +1328,33 @@ class SalaryBreakdownApiController extends Controller
         // Check if payroll run exists and is completed for this period
         $run = null;
         try {
-            $run = DB::table('payroll_runs')
-                ->where('month', $month)
-                ->where('year', $year)
-                ->first();
+            if (\Illuminate\Support\Facades\Schema::hasTable('payroll_runs')) {
+                $run = DB::table('payroll_runs')
+                    ->where('month', $month)
+                    ->where('year', $year)
+                    ->first();
+            }
         } catch (\Throwable $e) { /* ignore */ }
 
-        $isComputed = ($run !== null);
+        $isComputed = ($run !== null && \Illuminate\Support\Facades\Schema::hasTable('payroll_conpt'));
 
         // Fetch departments list for filter dropdown
-        $departments = DB::table('tbldepartment')
-            ->select('id', 'department as name')
-            ->orderBy('department', 'asc')
-            ->get();
+        $departments = collect();
+        if (\Illuminate\Support\Facades\Schema::hasTable('tbldepartment')) {
+            $departments = DB::table('tbldepartment')
+                ->select('id', 'department as name')
+                ->orderBy('department', 'asc')
+                ->get();
+        }
+
+        $hasPayerIdTblper = \Illuminate\Support\Facades\Schema::hasColumn('tblper', 'payer_id');
+        $hasPayerIdPc = \Illuminate\Support\Facades\Schema::hasColumn('payroll_conpt', 'payer_id');
+        $hasRetentionPc = \Illuminate\Support\Facades\Schema::hasColumn('payroll_conpt', 'retention');
+        $hasSurchargesPc = \Illuminate\Support\Facades\Schema::hasColumn('payroll_conpt', 'surcharges');
+        $hasMedicalLoanPc = \Illuminate\Support\Facades\Schema::hasColumn('payroll_conpt', 'medical_loan');
+        $hasCoopLoanRpytPc = \Illuminate\Support\Facades\Schema::hasColumn('payroll_conpt', 'coop_loan_rpyt');
+        $hasCoopAssetPc = \Illuminate\Support\Facades\Schema::hasColumn('payroll_conpt', 'coop_asset_finance');
+        $hasLoaPc = \Illuminate\Support\Facades\Schema::hasColumn('payroll_conpt', 'leave_of_absence_deduction');
 
         if ($isComputed) {
             // Fetch directly from computed payroll_conpt table
@@ -1292,7 +1377,7 @@ class SalaryBreakdownApiController extends Controller
                 });
             }
 
-            $rows = $query->select(
+            $selectFields = [
                 'pc.staffID as id',
                 'p.fileNo as file_no',
                 DB::raw("CONCAT(p.surname, ' ', p.first_name, ' ', COALESCE(p.othernames, '')) as name"),
@@ -1312,28 +1397,30 @@ class SalaryBreakdownApiController extends Controller
                 'pc.pension',
                 'pc.coop_savings',
                 'pc.other_deductions',
-                'pc.retention',
-                'pc.surcharges',
-                'pc.medical_loan',
-                'pc.coop_loan_rpyt as coop_loan',
-                DB::raw('COALESCE(pc.coop_asset_finance, 0) as coop_asset_finance'),
+                $hasRetentionPc ? 'pc.retention' : DB::raw('0 as retention'),
+                $hasSurchargesPc ? 'pc.surcharges' : DB::raw('0 as surcharges'),
+                $hasMedicalLoanPc ? 'pc.medical_loan' : DB::raw('0 as medical_loan'),
+                $hasCoopLoanRpytPc ? 'pc.coop_loan_rpyt as coop_loan' : DB::raw('0 as coop_loan'),
+                $hasCoopAssetPc ? DB::raw('COALESCE(pc.coop_asset_finance, 0) as coop_asset_finance') : DB::raw('0 as coop_asset_finance'),
                 'pc.iou',
                 'pc.absence_penalty',
-                'pc.leave_of_absence_deduction as leave_of_absence',
+                $hasLoaPc ? 'pc.leave_of_absence_deduction as leave_of_absence' : DB::raw('0 as leave_of_absence'),
                 'pc.total_deductions',
                 'pc.net_pay',
                 'p.AccNo as account_number',
                 'bl.bank as bank_name',
-                'pc.payer_id'
-            )->orderBy('p.surname', 'asc')->get();
+                $hasPayerIdPc ? 'pc.payer_id' : ($hasPayerIdTblper ? 'p.payer_id' : DB::raw("'' as payer_id")),
+            ];
+
+            $rows = $query->select($selectFields)->orderBy('p.surname', 'asc')->get();
 
             $staffIds = $rows->pluck('id')->toArray();
-            $loanBals = DB::table('loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray();
-            $empLoanBals = DB::table('employee_loans')->whereIn('staffId', $staffIds)->whereRaw("LOWER(status) = 'approved'")->pluck('balance', 'staffId')->toArray();
-            $coopSavingsBals = DB::table('coop_savings_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('saving_balance', 'staffId')->toArray();
-            $coopLoanBals = DB::table('coop_loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray();
-            $coopAssetBals = DB::table('coop_asset_finance_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray();
-            $medLoanBals = DB::table('medical_loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray();
+            $loanBals = \Illuminate\Support\Facades\Schema::hasTable('loan_deduction_setups') ? DB::table('loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray() : [];
+            $empLoanBals = \Illuminate\Support\Facades\Schema::hasTable('employee_loans') ? DB::table('employee_loans')->whereIn('staffId', $staffIds)->whereRaw("LOWER(status) = 'approved'")->pluck('balance', 'staffId')->toArray() : [];
+            $coopSavingsBals = \Illuminate\Support\Facades\Schema::hasTable('coop_savings_setups') ? DB::table('coop_savings_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('saving_balance', 'staffId')->toArray() : [];
+            $coopLoanBals = \Illuminate\Support\Facades\Schema::hasTable('coop_loan_deduction_setups') ? DB::table('coop_loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray() : [];
+            $coopAssetBals = \Illuminate\Support\Facades\Schema::hasTable('coop_asset_finance_deduction_setups') ? DB::table('coop_asset_finance_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray() : [];
+            $medLoanBals = \Illuminate\Support\Facades\Schema::hasTable('medical_loan_deduction_setups') ? DB::table('medical_loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray() : [];
 
             $mapped = $rows->map(function($r) use ($loanBals, $empLoanBals, $coopSavingsBals, $coopLoanBals, $coopAssetBals, $medLoanBals) {
                 $sid = $r->id;
@@ -1343,7 +1430,7 @@ class SalaryBreakdownApiController extends Controller
                 $revolvingLoanBal = isset($loanBals[$sid]) ? (float)$loanBals[$sid] : (isset($empLoanBals[$sid]) ? (float)$empLoanBals[$sid] : 0.00);
                 $coopContr = (float)($coopSavingsBals[$sid] ?? 0.00);
                 $coopLoanBal = (float)($coopLoanBals[$sid] ?? 0.00);
-                $coopAssetDeduct = (float)$r->coop_asset_finance;
+                $coopAssetDeduct = (float)($r->coop_asset_finance ?? 0);
                 $coopAssetFin = (float)($coopAssetBals[$sid] ?? 0.00);
                 $medDebt = (float)($medLoanBals[$sid] ?? 0.00);
                 $paidDays = isset($r->paid_days) ? (int)$r->paid_days : 30;
@@ -1369,7 +1456,7 @@ class SalaryBreakdownApiController extends Controller
                     'medical_loan' => (float)$r->medical_loan,
                     'coop_loan' => (float)$r->coop_loan,
                     'coop_savings' => (float)$r->coop_savings,
-                    'coop_asset_finance' => (float)$r->coop_asset_finance,
+                    'coop_asset_finance' => (float)($r->coop_asset_finance ?? 0),
                     'surcharges' => (float)$r->surcharges,
                     'absence_penalty' => (float)$r->absence_penalty,
                     'leave_of_absence' => (float)$r->leave_of_absence,
@@ -1434,7 +1521,7 @@ class SalaryBreakdownApiController extends Controller
             });
         }
 
-        $allStaff = $staffQuery->select(
+        $allStaff = $staffQuery->select([
             'p.ID as id',
             'p.fileNo as file_no',
             DB::raw("CONCAT(p.surname, ' ', p.first_name, ' ', COALESCE(p.othernames, '')) as name"),
@@ -1442,27 +1529,21 @@ class SalaryBreakdownApiController extends Controller
             'des.designation',
             'p.AccNo as account_number',
             'bl.bank as bank_name',
-            'p.payer_id'
-        )->orderBy('p.surname', 'asc')->get();
+            $hasPayerIdTblper ? 'p.payer_id' : DB::raw("'' as payer_id"),
+        ])->orderBy('p.surname', 'asc')->get();
 
         $staffIds = $allStaff->pluck('id')->toArray();
 
         // 2. Fetch salary structures
-        $structures = DB::table('salary_structures')
-            ->whereIn('staffId', $staffIds)
-            ->get()
-            ->keyBy('staffId');
+        $structures = \Illuminate\Support\Facades\Schema::hasTable('salary_structures') ? DB::table('salary_structures')->whereIn('staffId', $staffIds)->get()->keyBy('staffId') : collect();
 
         // 3. Fetch first salary structures (for retention)
-        $firstStructures = DB::table('first_salary_structure')
-            ->whereIn('staffId', $staffIds)
-            ->get()
-            ->keyBy('staffId');
+        $firstStructures = \Illuminate\Support\Facades\Schema::hasTable('first_salary_structure') ? DB::table('first_salary_structure')->whereIn('staffId', $staffIds)->get()->keyBy('staffId') : collect();
 
         // 4. Fetch variable earnings from staffEarningAndDeduction
         $earningVarsByStaff = [];
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('staffEarningAndDeduction')) {
+        if (\Illuminate\Support\Facades\Schema::hasTable('staffEarningAndDeduction')) {
+            try {
                 $eVars = DB::table('staffEarningAndDeduction')
                     ->whereIn('staffID', $staffIds)
                     ->where('status', 1)
@@ -1471,117 +1552,64 @@ class SalaryBreakdownApiController extends Controller
                     $sid = $ev->staffID;
                     $earningVarsByStaff[$sid] = ($earningVarsByStaff[$sid] ?? 0.00) + (float)$ev->amount;
                 }
-            }
-        } catch (\Throwable $e) { /* ignore */ }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
 
         // 5. Fetch IOUs for selected month
         $iousByStaff = [];
-        try {
-            $ious = DB::table('iou_records')
-                ->whereIn('staff_id', $staffIds)
-                ->where('status', 1)
-                ->whereBetween('iou_date', [$firstDay, $lastDay])
-                ->groupBy('staff_id')
-                ->select('staff_id', DB::raw('SUM(amount) as total_iou'))
-                ->get();
-            foreach ($ious as $i) {
-                $iousByStaff[$i->staff_id] = (float)$i->total_iou;
-            }
-        } catch (\Throwable $e) { /* ignore */ }
+        if (\Illuminate\Support\Facades\Schema::hasTable('iou_records')) {
+            try {
+                $ious = DB::table('iou_records')
+                    ->whereIn('staff_id', $staffIds)
+                    ->where('status', 1)
+                    ->whereBetween('iou_date', [$firstDay, $lastDay])
+                    ->groupBy('staff_id')
+                    ->select('staff_id', DB::raw('SUM(amount) as total_iou'))
+                    ->get();
+                foreach ($ious as $i) {
+                    $iousByStaff[$i->staff_id] = (float)$i->total_iou;
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
 
         // 6. Fetch Medical Loan setups
-        $medLoanSetups = DB::table('medical_loan_deduction_setups')
-            ->whereIn('staffId', $staffIds)
-            ->where('is_active', 1)
-            ->where('balance_remaining', '>', 0)
-            ->where('start_month', '<=', $currentMonthStr)
-            ->where('end_month', '>=', $currentMonthStr)
-            ->get()
-            ->keyBy('staffId');
+        $medLoanSetups = \Illuminate\Support\Facades\Schema::hasTable('medical_loan_deduction_setups') ? DB::table('medical_loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->where('balance_remaining', '>', 0)->where('start_month', '<=', $currentMonthStr)->where('end_month', '>=', $currentMonthStr)->get()->keyBy('staffId') : collect();
 
         // 7. Fetch Coop Loan setups
-        $coopLoanSetups = DB::table('coop_loan_deduction_setups')
-            ->whereIn('staffId', $staffIds)
-            ->where('is_active', 1)
-            ->where('balance_remaining', '>', 0)
-            ->where('start_month', '<=', $currentMonthStr)
-            ->where('end_month', '>=', $currentMonthStr)
-            ->get()
-            ->keyBy('staffId');
+        $coopLoanSetups = \Illuminate\Support\Facades\Schema::hasTable('coop_loan_deduction_setups') ? DB::table('coop_loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->where('balance_remaining', '>', 0)->where('start_month', '<=', $currentMonthStr)->where('end_month', '>=', $currentMonthStr)->get()->keyBy('staffId') : collect();
 
         // 8. Fetch Coop Savings setups
-        $coopSavingsSetups = DB::table('coop_savings_setups')
-            ->whereIn('staffId', $staffIds)
-            ->where('is_active', 1)
-            ->where('start_month', '<=', $currentMonthStr)
-            ->get()
-            ->keyBy('staffId');
+        $coopSavingsSetups = \Illuminate\Support\Facades\Schema::hasTable('coop_savings_setups') ? DB::table('coop_savings_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->where('start_month', '<=', $currentMonthStr)->get()->keyBy('staffId') : collect();
 
         // 9. Fetch Coop Asset Finance setups
-        $coopAssetSetups = DB::table('coop_asset_finance_deduction_setups')
-            ->whereIn('staffId', $staffIds)
-            ->where('is_active', 1)
-            ->where('balance_remaining', '>', 0)
-            ->where('start_month', '<=', $currentMonthStr)
-            ->where(function($q) use ($currentMonthStr) {
-                $q->whereNull('end_month')
-                  ->orWhere('end_month', '=', '')
-                  ->orWhere('end_month', '>=', $currentMonthStr);
-            })
-            ->get()
-            ->keyBy('staffId');
+        $coopAssetSetups = \Illuminate\Support\Facades\Schema::hasTable('coop_asset_finance_deduction_setups') ? DB::table('coop_asset_finance_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->where('balance_remaining', '>', 0)->where('start_month', '<=', $currentMonthStr)->where(function($q) use ($currentMonthStr) { $q->whereNull('end_month')->orWhere('end_month', '=', '')->orWhere('end_month', '>=', $currentMonthStr); })->get()->keyBy('staffId') : collect();
 
         // 10. Fetch Surcharge setups
-        $surchargeSetups = DB::table('surcharge_deduction_setups')
-            ->whereIn('staffId', $staffIds)
-            ->where('is_active', 1)
-            ->where('balance_remaining', '>', 0)
-            ->where('start_month', '<=', $currentMonthStr)
-            ->where(function($q) use ($currentMonthStr) {
-                $q->whereNull('end_month')
-                  ->orWhere('end_month', '=', '')
-                  ->orWhere('end_month', '>=', $currentMonthStr);
-            })
-            ->get()
-            ->keyBy('staffId');
+        $surchargeSetups = \Illuminate\Support\Facades\Schema::hasTable('surcharge_deduction_setups') ? DB::table('surcharge_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->where('balance_remaining', '>', 0)->where('start_month', '<=', $currentMonthStr)->where(function($q) use ($currentMonthStr) { $q->whereNull('end_month')->orWhere('end_month', '=', '')->orWhere('end_month', '>=', $currentMonthStr); })->get()->keyBy('staffId') : collect();
 
         // 11. Fetch Absence Penalty setups
-        $absencePenaltySetups = DB::table('absence_penalty_deduction_setups')
-            ->whereIn('staffId', $staffIds)
-            ->where('is_active', 1)
-            ->where(function($q) {
-                $q->where('balance_remaining', '>', 0)
-                  ->orWhere('total_amount', '>', 0);
-            })
-            ->where('start_month', '<=', $currentMonthStr)
-            ->where(function($q) use ($currentMonthStr) {
-                $q->whereNull('end_month')
-                  ->orWhere('end_month', '=', '')
-                  ->orWhere('end_month', '>=', $currentMonthStr);
-            })
-            ->get()
-            ->keyBy('staffId');
+        $absencePenaltySetups = \Illuminate\Support\Facades\Schema::hasTable('absence_penalty_deduction_setups') ? DB::table('absence_penalty_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->where(function($q) { $q->where('balance_remaining', '>', 0)->orWhere('total_amount', '>', 0); })->where('start_month', '<=', $currentMonthStr)->where(function($q) use ($currentMonthStr) { $q->whereNull('end_month')->orWhere('end_month', '=', '')->orWhere('end_month', '>=', $currentMonthStr); })->get()->keyBy('staffId') : collect();
 
         // 12. Fetch Loan Deduction Setups & Employee Loans
-        $loanSetups = DB::table('loan_deduction_setups')
+        $loanSetups = \Illuminate\Support\Facades\Schema::hasTable('loan_deduction_setups') ? DB::table('loan_deduction_setups')
             ->whereIn('staffId', $staffIds)
             ->where('is_active', 1)
             ->where('balance_remaining', '>', 0)
             ->where('start_month', '<=', $currentMonthStr)
             ->where('end_month', '>=', $currentMonthStr)
             ->get()
-            ->keyBy('staffId');
+            ->keyBy('staffId') : collect();
 
-        $empLoans = DB::table('employee_loans')
+        $empLoans = \Illuminate\Support\Facades\Schema::hasTable('employee_loans') ? DB::table('employee_loans')
             ->whereIn('staffId', $staffIds)
             ->whereRaw("LOWER(status) = 'approved'")
             ->where('balance', '>', 0)
             ->orderBy('id', 'desc')
             ->get()
-            ->keyBy('staffId');
+            ->keyBy('staffId') : collect();
 
         // 13. Fetch Other Deduction Setups
-        $otherDeductSetups = DB::table('other_deduction_setups')
+        $otherDeductSetups = \Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups') ? DB::table('other_deduction_setups')
             ->whereIn('staffId', $staffIds)
             ->where('is_active', 1)
             ->where(function($q) {
@@ -1595,7 +1623,7 @@ class SalaryBreakdownApiController extends Controller
                   ->orWhere('end_month', '>=', $currentMonthStr);
             })
             ->get()
-            ->keyBy('staffId');
+            ->keyBy('staffId') : collect();
 
         // 14. Fetch LOA days
         $loaDaysByStaff = [];
