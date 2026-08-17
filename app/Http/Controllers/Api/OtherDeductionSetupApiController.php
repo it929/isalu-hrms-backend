@@ -136,7 +136,9 @@ class OtherDeductionSetupApiController extends Controller
                 $endMonth = $validated['end_month'];
             }
 
-            $balanceRemaining = isset($validated['balance_remaining']) ? (float) $validated['balance_remaining'] : $totalAmount;
+            $balanceRemaining = (isset($validated['balance_remaining']) && (float)$validated['balance_remaining'] > 0)
+                ? (float) $validated['balance_remaining']
+                : $totalAmount;
 
             $data = [
                 'staffId' => $validated['staffId'],
