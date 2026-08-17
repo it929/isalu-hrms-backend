@@ -88,7 +88,7 @@ class NextJsPayrollApiController extends Controller
             $year       = trim($request->input('year', ''));
             $divisionID = trim($request->input('divisionID', ''));
             $bankID     = trim($request->input('bankID', ''));
-            $perPage    = (int) $request->input('perPage', 50);
+            $perPage    = (int) $request->input('perPage', -1);
             $page       = (int) $request->input('page', 1);
 
             if (!$month || !$year) {
@@ -106,7 +106,7 @@ class NextJsPayrollApiController extends Controller
                 'total'    => $total,
                 'perPage'  => $perPage,
                 'page'     => $page,
-                'lastPage' => (int) ceil($total / $perPage),
+                'lastPage' => $perPage > 0 ? (int) ceil($total / $perPage) : 1,
                 'userCtx'  => [
                     'isAuditStaff'   => (bool)($userCtx['isAuditStaff'] ?? false),
                     'isSuperAdmin'   => (bool)($userCtx['isSuperAdmin'] ?? false),
@@ -150,7 +150,7 @@ class NextJsPayrollApiController extends Controller
                 'MEDICAL', 'UTILITY', 'MEAL', 'TOTAL INCOME', 'DECLARED INCOME',
                 'PAID DAYS', 'P.TAX', 'IOU', 'RETENTION', 'LOAN', 'SURCHARGES',
                 'PENSION', 'MEDICAL LOAN', 'COOP. SAVING', 'COOP. LOAN RPYT',
-                'ABSENCE PENALTY', 'OTHER DEDUCTION', 'TOTAL DEDUCTION', 'NET PAY',
+                'ABSENCE PENALTY', 'LOA.DEDN', 'OTHER DEDUCTION', 'TOTAL DEDUCTION', 'NET PAY',
                 'REVOLVING LOAN BAL', 'COOP. CONTR.', 'COOP. LOAN BAL',
                 'COOP. ASSET', 'COOP. ASSET FIN.', 'MEDICAL DEBT',
                 'ACCOUNT NO.', 'BANK', 'SORT CODE', 'PAYER ID',
@@ -161,14 +161,14 @@ class NextJsPayrollApiController extends Controller
                 'MEDICAL', 'UTILITY', 'MEAL', 'TOTAL INCOME', 'DECLARED INCOME',
                 'PAID DAYS', 'P.TAX', 'IOU', 'RETENTION', 'LOAN', 'SURGHARGES',
                 'PENSION', 'MEDICAL LOAN', 'COOP. SAVING', 'COOP. LOAN RPYT',
-                'ABSENCE PENALTY', 'OTHER DEDUCTION', 'TOTAL DEDUCTION', 'NETPAY',
+                'ABSENCE PENALTY', 'LEAVE OF ABSENCE DEDUCTION', 'OTHER DEDUCTION', 'TOTAL DEDUCTION', 'NETPAY',
                 'REVOLVING LOAN BAL', 'COP.CONTR', 'COP. LONE BAL',
                 'COOP.ASSET.', 'COP. ASSET FIN', 'MEDICAL DEBT',
                 'ACC. NO', 'BANK', 'CODE', 'PAYER ID',
             ];
 
             // Money column indices (1-based within $columns)
-            $moneyColIndices = [4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31];
+            $moneyColIndices = [4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32];
 
             // ── Build Spreadsheet ──────────────────────────────────────────────
             $spreadsheet = new Spreadsheet();
@@ -183,7 +183,7 @@ class NextJsPayrollApiController extends Controller
             $sheet->setCellValue('A1', 'ISALU HRMS — PAYROLL SCHEDULE');
             $sheet->getStyle('A1')->applyFromArray([
                 'font'      => ['bold' => true, 'size' => 14, 'color' => ['rgb' => 'FFFFFF']],
-                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '008000']],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '000000']],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
             ]);
             $sheet->getRowDimension(1)->setRowHeight(28);
@@ -193,7 +193,7 @@ class NextJsPayrollApiController extends Controller
             $sheet->setCellValue('A2', 'Period: ' . ucfirst(strtolower($month)) . ' ' . $year);
             $sheet->getStyle('A2')->applyFromArray([
                 'font'      => ['bold' => true, 'size' => 11, 'color' => ['rgb' => 'FFFFFF']],
-                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '008000']],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '000000']],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
             ]);
             $sheet->getRowDimension(2)->setRowHeight(20);
@@ -206,7 +206,7 @@ class NextJsPayrollApiController extends Controller
             $headerRange = "A3:{$lastColLetter}3";
             $sheet->getStyle($headerRange)->applyFromArray([
                 'font'      => ['bold' => true, 'size' => 9, 'color' => ['rgb' => 'FFFFFF']],
-                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '008000']],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '000000']],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
                 'borders'   => [
                     'allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']],
@@ -257,6 +257,16 @@ class NextJsPayrollApiController extends Controller
                     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]],
                     'font'    => ['size' => 8],
                 ]);
+
+                // Highlight Total Deductions in Red (Column Y / index 25)
+                $sheet->getStyle("Y4:Y{$dataEndRow}")->applyFromArray([
+                    'font' => ['color' => ['rgb' => 'DC2626'], 'bold' => true, 'size' => 8],
+                ]);
+
+                // Highlight Net Pay in Green (Column Z / index 26)
+                $sheet->getStyle("Z4:Z{$dataEndRow}")->applyFromArray([
+                    'font' => ['color' => ['rgb' => '008000'], 'bold' => true, 'size' => 8],
+                ]);
             }
 
             // ── Totals Row ─────────────────────────────────────────────────────
@@ -274,8 +284,16 @@ class NextJsPayrollApiController extends Controller
                 $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx);
                 $cellRef = "{$colLetter}{$totalRow}";
                 $sheet->setCellValue($cellRef, "=SUM({$colLetter}{$dataStartRow}:{$colLetter}{$dataEndRow})");
+                
+                $fontColor = '000000';
+                if ($colIdx === 25) {
+                    $fontColor = 'DC2626'; // Red for Total Deductions
+                } elseif ($colIdx === 26) {
+                    $fontColor = '008000'; // Green for Net Pay
+                }
+
                 $sheet->getStyle($cellRef)->applyFromArray([
-                    'font'    => ['bold' => true, 'size' => 9],
+                    'font'    => ['bold' => true, 'size' => 9, 'color' => ['rgb' => $fontColor]],
                     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],
                 ]);
@@ -289,10 +307,11 @@ class NextJsPayrollApiController extends Controller
                 2  => 28,  // NAME
                 3  => 20,  // DEPARTMENT
                 12 => 9,   // PAID DAYS
-                32 => 18,  // ACCOUNT NO
-                33 => 16,  // BANK
-                34 => 10,  // SORT CODE
-                35 => 14,  // PAYER ID
+                23 => 14,  // LOA.DEDN
+                33 => 18,  // ACCOUNT NO
+                34 => 16,  // BANK
+                35 => 10,  // SORT CODE
+                36 => 14,  // PAYER ID
             ];
             for ($c = 1; $c <= $totalCols; $c++) {
                 $cl = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
@@ -554,8 +573,8 @@ class NextJsPayrollApiController extends Controller
                 'totalNetPay'      => number_format($allRows->sum(fn($r) => (float)$r->net_pay), 2, '.', ''),
             ];
 
-            $offset    = ($page - 1) * $perPage;
-            $paged     = $mapped->slice($offset, $perPage)->values()->toArray();
+            $offset    = ($page - 1) * max(1, $perPage);
+            $paged     = ($perPage > 0) ? $mapped->slice($offset, $perPage)->values()->toArray() : $mapped->values()->toArray();
 
             return [$paged, $total, $summary];
         }
@@ -706,8 +725,8 @@ class NextJsPayrollApiController extends Controller
         ];
 
         // 6. Paginate in PHP (all records were fetched for dynamic join; pagination returned to client)
-        $offset    = ($page - 1) * $perPage;
-        $paged     = $mapped->slice($offset, $perPage)->values()->toArray();
+        $offset    = ($page - 1) * max(1, $perPage);
+        $paged     = ($perPage > 0) ? $mapped->slice($offset, $perPage)->values()->toArray() : $mapped->values()->toArray();
 
         return [$paged, $total, $summary];
     }
@@ -1079,7 +1098,10 @@ class NextJsPayrollApiController extends Controller
                 $absencePenaltySetup = DB::table('absence_penalty_deduction_setups')
                     ->where('staffId', $emp->ID)
                     ->where('is_active', 1)
-                    ->where('balance_remaining', '>', 0)
+                    ->where(function($q) {
+                        $q->where('balance_remaining', '>', 0)
+                          ->orWhere('total_amount', '>', 0);
+                    })
                     ->where('start_month', '<=', $currentMonthStr)
                     ->where(function($q) use ($currentMonthStr) {
                         $q->whereNull('end_month')
@@ -1093,7 +1115,10 @@ class NextJsPayrollApiController extends Controller
                 $otherDeductionSetup = DB::table('other_deduction_setups')
                     ->where('staffId', $emp->ID)
                     ->where('is_active', 1)
-                    ->where('balance_remaining', '>', 0)
+                    ->where(function($q) {
+                        $q->where('balance_remaining', '>', 0)
+                          ->orWhere('total_amount', '>', 0);
+                    })
                     ->where('start_month', '<=', $currentMonthStr)
                     ->where(function($q) use ($currentMonthStr) {
                         $q->whereNull('end_month')
@@ -1208,10 +1233,13 @@ class NextJsPayrollApiController extends Controller
 
                 // Process Absence Penalty Setup
                 if ($absencePenaltySetup) {
-                    $absencePenalty = min((float)$absencePenaltySetup->monthly_deduction, (float)$absencePenaltySetup->balance_remaining);
+                    $absBal = (float)$absencePenaltySetup->balance_remaining > 0
+                        ? (float)$absencePenaltySetup->balance_remaining
+                        : ((float)$absencePenaltySetup->total_amount > 0 ? (float)$absencePenaltySetup->total_amount : (float)$absencePenaltySetup->monthly_deduction);
+                    $absencePenalty = min((float)$absencePenaltySetup->monthly_deduction, $absBal);
                     
                     // Update remaining balance on setups table
-                    $newBalance = max(0.00, (float)$absencePenaltySetup->balance_remaining - $absencePenalty);
+                    $newBalance = max(0.00, $absBal - $absencePenalty);
                     $updateData = ['balance_remaining' => $newBalance];
                     if ($newBalance <= 0) {
                         $updateData['is_active'] = 0;
@@ -1223,10 +1251,13 @@ class NextJsPayrollApiController extends Controller
 
                 // Process Other Deduction Setup
                 if ($otherDeductionSetup) {
-                    $otherDeductions = min((float)$otherDeductionSetup->monthly_deduction, (float)$otherDeductionSetup->balance_remaining);
+                    $otherDeductBal = (float)$otherDeductionSetup->balance_remaining > 0
+                        ? (float)$otherDeductionSetup->balance_remaining
+                        : ((float)$otherDeductionSetup->total_amount > 0 ? (float)$otherDeductionSetup->total_amount : (float)$otherDeductionSetup->monthly_deduction);
+                    $otherDeductions = min((float)$otherDeductionSetup->monthly_deduction, $otherDeductBal);
                     
                     // Update remaining balance on setups table
-                    $newBalance = max(0.00, (float)$otherDeductionSetup->balance_remaining - $otherDeductions);
+                    $newBalance = max(0.00, $otherDeductBal - $otherDeductions);
                     $updateData = ['balance_remaining' => $newBalance];
                     if ($newBalance <= 0) {
                         $updateData['is_active'] = 0;

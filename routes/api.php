@@ -192,6 +192,13 @@ Route::prefix('nextjs')->group(function () {
         Route::post('/print-activation', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'togglePrintActivation']);
         Route::get('/staff-netpay/{staffId}', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getStaffNetPay']);
 
+        // Monthly Salary Breakdown (Pre-Compute / Post-Compute)
+        Route::get('/salary-breakdown', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'getBreakdown']);
+        Route::get('/salary-breakdown/staff', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'getStaffList']);
+        Route::get('/salary-breakdown/staff/export', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'exportStaffSheet']);
+        Route::get('/salary-breakdown/all-staff', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'getAllStaffSheet']);
+        Route::get('/salary-breakdown/all-staff/export', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'exportAllStaffSheet']);
+
         // Active Month Setup
         Route::get('/active-month', [\App\Http\Controllers\Api\ActiveMonthApiController::class, 'index']);
         Route::post('/active-month', [\App\Http\Controllers\Api\ActiveMonthApiController::class, 'store']);
@@ -226,6 +233,17 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/',        [\App\Http\Controllers\Api\SalaryStructureApiController::class, 'index']);
             Route::post('/',       [\App\Http\Controllers\Api\SalaryStructureApiController::class, 'store']);
             Route::post('/upload', [\App\Http\Controllers\Api\SalaryStructureApiController::class, 'upload']);
+        });
+
+        // Salary Increments
+        Route::prefix('salary-increments')->group(function () {
+            Route::get('/staff',   [\App\Http\Controllers\Api\SalaryIncrementApiController::class, 'getStaff']);
+            Route::get('/history', [\App\Http\Controllers\Api\SalaryIncrementApiController::class, 'getHistory']);
+            Route::post('/single', [\App\Http\Controllers\Api\SalaryIncrementApiController::class, 'applySingle']);
+            Route::post('/bulk',   [\App\Http\Controllers\Api\SalaryIncrementApiController::class, 'applyBulk']);
+            Route::post('/upload', [\App\Http\Controllers\Api\SalaryIncrementApiController::class, 'upload']);
+            Route::post('/revert', [\App\Http\Controllers\Api\SalaryIncrementApiController::class, 'revert']);
+            Route::get('/export',  [\App\Http\Controllers\Api\SalaryIncrementApiController::class, 'exportHistory']);
         });
 
         // Declare Salary
