@@ -993,23 +993,33 @@ class SalaryBreakdownApiController extends Controller
             $sheet->setAutoFilter("A3:{$lastColLetter}3");
 
             $filename = "Payroll_{$monthName}_{$year}.xlsx";
-            $writer = new Xlsx($spreadsheet);
 
-            if (ob_get_length()) {
-                ob_clean();
+            if (class_exists(\XMLWriter::class) && class_exists(\ZipArchive::class)) {
+                try {
+                    $writer = new Xlsx($spreadsheet);
+
+                    if (ob_get_length()) {
+                        ob_clean();
+                    }
+
+                    ob_start();
+                    $writer->save('php://output');
+                    $content = ob_get_clean();
+
+                    return response($content, 200, [
+                        'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                        'Pragma'              => 'no-cache',
+                        'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                        'Expires'             => '0',
+                    ]);
+                } catch (\Throwable $xlsxErr) {
+                    Log::warning('PhpSpreadsheet Xlsx write error: ' . $xlsxErr->getMessage());
+                    return $this->generateExcelHtmlResponse($columns, $dataKeys, $records, $moneyColIndices, 'ISALU HRMS — PAYROLL SCHEDULE', 'Period: ' . ucfirst(strtolower($monthName)) . ' ' . $year, $filename);
+                }
+            } else {
+                return $this->generateExcelHtmlResponse($columns, $dataKeys, $records, $moneyColIndices, 'ISALU HRMS — PAYROLL SCHEDULE', 'Period: ' . ucfirst(strtolower($monthName)) . ' ' . $year, $filename);
             }
-
-            ob_start();
-            $writer->save('php://output');
-            $content = ob_get_clean();
-
-            return response($content, 200, [
-                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-                'Pragma'              => 'no-cache',
-                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-                'Expires'             => '0',
-            ]);
         } catch (\Throwable $th) {
             Log::error('SalaryBreakdownApiController exportAllStaffSheet: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
@@ -1245,27 +1255,172 @@ class SalaryBreakdownApiController extends Controller
 
             $safeStaffName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $staffName);
             $filename = "Payroll_{$safeStaffName}_{$monthName}_{$year}.xlsx";
-            $writer = new Xlsx($spreadsheet);
 
-            if (ob_get_length()) {
-                ob_clean();
+            if (class_exists(\XMLWriter::class) && class_exists(\ZipArchive::class)) {
+                try {
+                    $writer = new Xlsx($spreadsheet);
+
+                    if (ob_get_length()) {
+                        ob_clean();
+                    }
+
+                    ob_start();
+                    $writer->save('php://output');
+                    $content = ob_get_clean();
+
+                    return response($content, 200, [
+                        'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                        'Pragma'              => 'no-cache',
+                        'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                        'Expires'             => '0',
+                    ]);
+                } catch (\Throwable $xlsxErr) {
+                    Log::warning('PhpSpreadsheet Xlsx write error: ' . $xlsxErr->getMessage());
+                    return $this->generateExcelHtmlResponse($columns, $dataKeys, $records, $moneyColIndices, 'ISALU HRMS — PAYROLL SCHEDULE', 'Staff: ' . $staffName . ' | Period: ' . ucfirst(strtolower($monthName)) . ' ' . $year, $filename);
+                }
+            } else {
+                return $this->generateExcelHtmlResponse($columns, $dataKeys, $records, $moneyColIndices, 'ISALU HRMS — PAYROLL SCHEDULE', 'Staff: ' . $staffName . ' | Period: ' . ucfirst(strtolower($monthName)) . ' ' . $year, $filename);
             }
-
-            ob_start();
-            $writer->save('php://output');
-            $content = ob_get_clean();
-
-            return response($content, 200, [
-                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-                'Pragma'              => 'no-cache',
-                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-                'Expires'             => '0',
-            ]);
         } catch (\Throwable $th) {
             Log::error('SalaryBreakdownApiController exportStaffSheet: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
+    }
+
+    /**
+     * Generate styled Excel (.xls / .xlsx) HTML document for servers lacking XMLWriter/ext-zip.
+     */
+    private function generateExcelHtmlResponse(array $columns, array $dataKeys, array $records, array $moneyColIndices, string $title, string $subtitle, string $filename)
+    {
+        $totalCols = count($columns);
+        $html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">' . "\n";
+        $html .= '<head>' . "\n";
+        $html .= '<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Payroll</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->' . "\n";
+        $html .= '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">' . "\n";
+        $html .= '<style>' . "\n";
+        $html .= 'body { font-family: Calibri, Arial, sans-serif; font-size: 11px; }' . "\n";
+        $html .= 'table { border-collapse: collapse; width: 100%; }' . "\n";
+        $html .= '.title-row { background-color: #000000; color: #FFFFFF; font-size: 14px; font-weight: bold; text-align: center; height: 35px; }' . "\n";
+        $html .= '.subtitle-row { background-color: #000000; color: #FFFFFF; font-size: 11px; font-weight: bold; text-align: center; height: 25px; }' . "\n";
+        $html .= '.header-cell { background-color: #000000; color: #FFFFFF; font-size: 9px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 6px; }' . "\n";
+        $html .= '.cell-text { border: 1px solid #000000; padding: 4px; font-size: 9px; text-align: left; mso-number-format:"\@"; }' . "\n";
+        $html .= '.cell-center { border: 1px solid #000000; padding: 4px; font-size: 9px; text-align: center; }' . "\n";
+        $html .= '.cell-money { border: 1px solid #000000; padding: 4px; font-size: 9px; text-align: right; mso-number-format:"\#\,\#\#0\.00"; }' . "\n";
+        $html .= '.cell-deduct { border: 1px solid #000000; padding: 4px; font-size: 9px; text-align: right; color: #DC2626; font-weight: bold; mso-number-format:"\#\,\#\#0\.00"; }' . "\n";
+        $html .= '.cell-netpay { border: 1px solid #000000; padding: 4px; font-size: 9px; text-align: right; color: #008000; font-weight: bold; mso-number-format:"\#\,\#\#0\.00"; }' . "\n";
+        $html .= '.total-label { border: 1px solid #000000; font-weight: bold; font-size: 10px; text-align: center; }' . "\n";
+        $html .= '.total-money { border: 1px solid #000000; font-weight: bold; font-size: 10px; text-align: right; mso-number-format:"\#\,\#\#0\.00"; }' . "\n";
+        $html .= '.total-deduct { border: 1px solid #000000; font-weight: bold; font-size: 10px; text-align: right; color: #DC2626; mso-number-format:"\#\,\#\#0\.00"; }' . "\n";
+        $html .= '.total-netpay { border: 1px solid #000000; font-weight: bold; font-size: 10px; text-align: right; color: #008000; mso-number-format:"\#\,\#\#0\.00"; }' . "\n";
+        $html .= '</style>' . "\n";
+        $html .= '</head>' . "\n";
+        $html .= '<body>' . "\n";
+        $html .= '<table>' . "\n";
+
+        // Row 1: Title
+        $html .= '<tr><td colspan="' . $totalCols . '" class="title-row">' . htmlspecialchars($title) . '</td></tr>' . "\n";
+        // Row 2: Subtitle
+        $html .= '<tr><td colspan="' . $totalCols . '" class="subtitle-row">' . htmlspecialchars($subtitle) . '</td></tr>' . "\n";
+
+        // Row 3: Headers
+        $html .= '<tr>';
+        foreach ($columns as $col) {
+            $html .= '<th class="header-cell">' . htmlspecialchars($col) . '</th>';
+        }
+        $html .= '</tr>' . "\n";
+
+        $totals = array_fill(1, $totalCols, 0.0);
+
+        // Data Rows
+        foreach ($records as $record) {
+            $formattedRecord = [
+                'IDNO'               => $record['id'] ?? '',
+                'NAME'               => $record['name'] ?? '',
+                'DEPERTMENT'         => $record['department'] ?? '',
+                'BASIC'              => $record['basic_salary'] ?? 0,
+                'HOUSING'            => $record['housing_allowance'] ?? 0,
+                'TRANSPORT'          => $record['transport_allowance'] ?? 0,
+                'MEDICAL'            => $record['medical_allowance'] ?? 0,
+                'UTILITY'            => $record['utility_allowance'] ?? 0,
+                'MEAL'               => $record['meal_allowance'] ?? 0,
+                'TOTAL INCOME'       => $record['gross_pay'] ?? 0,
+                'DECLARED INCOME'    => $record['declare_salary'] ?? $record['gross_pay'] ?? 0,
+                'PAID DAYS'          => $record['paid_days'] ?? 30,
+                'P.TAX'              => $record['paye_tax'] ?? 0,
+                'IOU'                => $record['iou'] ?? 0,
+                'RETENTION'          => $record['retention'] ?? 0,
+                'LOAN'               => $record['regular_loan'] ?? 0,
+                'SURGHARGES'         => $record['surcharges'] ?? 0,
+                'PENSION'            => $record['pension'] ?? 0,
+                'MEDICAL LOAN'       => $record['medical_loan'] ?? 0,
+                'COOP. SAVING'       => $record['coop_savings'] ?? 0,
+                'COOP. LOAN RPYT'    => $record['coop_loan'] ?? 0,
+                'ABSENCE PENALTY'    => $record['absence_penalty'] ?? 0,
+                'LOA.DEDN'           => $record['leave_of_absence'] ?? 0,
+                'OTHER DEDUCTION'    => $record['other_deductions'] ?? 0,
+                'TOTAL DEDUCTION'    => $record['total_deductions'] ?? 0,
+                'NETPAY'             => $record['net_pay'] ?? 0,
+                'REVOLVING LOAN BAL' => $record['revolving_loan_bal'] ?? 0,
+                'COP.CONTR'          => $record['coop_contr'] ?? 0,
+                'COP. LONE BAL'      => $record['coop_loan_bal'] ?? 0,
+                'COOP.ASSET.'        => $record['coop_asset'] ?? 0,
+                'COP. ASSET FIN'     => $record['coop_asset_fin'] ?? 0,
+                'MEDICAL DEBT'       => $record['medical_debt'] ?? 0,
+                'ACC. NO'            => $record['account_number'] ?? '',
+                'BANK'               => $record['bank_name'] ?? '',
+                'CODE'               => '',
+                'PAYER ID'           => $record['payer_id'] ?? '',
+            ];
+
+            $html .= '<tr>';
+            foreach ($dataKeys as $i => $key) {
+                $colIdx = $i + 1;
+                $rawVal = $formattedRecord[$key] ?? '';
+                if (in_array($colIdx, $moneyColIndices)) {
+                    $clean = str_replace(',', '', (string)$rawVal);
+                    $numVal = is_numeric($clean) ? (float)$clean : 0.0;
+                    $totals[$colIdx] += $numVal;
+                    $cls = 'cell-money';
+                    if ($colIdx === 25) $cls = 'cell-deduct';
+                    elseif ($colIdx === 26) $cls = 'cell-netpay';
+                    $html .= '<td class="' . $cls . '">' . number_format($numVal, 2, '.', ',') . '</td>';
+                } elseif ($colIdx === 1 || $colIdx === 12) {
+                    $html .= '<td class="cell-center">' . htmlspecialchars((string)$rawVal) . '</td>';
+                } else {
+                    $html .= '<td class="cell-text">' . htmlspecialchars((string)$rawVal) . '</td>';
+                }
+            }
+            $html .= '</tr>' . "\n";
+        }
+
+        // Totals row
+        $html .= '<tr>';
+        $html .= '<td colspan="3" class="total-label">TOTAL</td>';
+        for ($c = 4; $c <= $totalCols; $c++) {
+            if (in_array($c, $moneyColIndices)) {
+                $cls = 'total-money';
+                if ($c === 25) $cls = 'total-deduct';
+                elseif ($c === 26) $cls = 'total-netpay';
+                $html .= '<td class="' . $cls . '">' . number_format($totals[$c] ?? 0.0, 2, '.', ',') . '</td>';
+            } else {
+                $html .= '<td class="total-label"></td>';
+            }
+        }
+        $html .= '</tr>' . "\n";
+        $html .= '</table></body></html>';
+
+        if (ob_get_length()) {
+            ob_clean();
+        }
+
+        return response($html, 200, [
+            'Content-Type'        => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Pragma'              => 'no-cache',
+            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires'             => '0',
+        ]);
     }
 
     /**
