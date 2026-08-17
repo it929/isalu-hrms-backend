@@ -86,44 +86,30 @@ class SalaryBreakdownApiTest extends TestCase
         // 4. Test exportAllStaffSheet endpoint
         $exportResponse = $this->get('/api/nextjs/payroll/salary-breakdown/all-staff/export', $headers);
         $exportResponse->assertStatus(200);
-        $this->assertEquals(
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            $exportResponse->headers->get('Content-Type')
-        );
+        $this->assertStringContainsString('text/csv', $exportResponse->headers->get('Content-Type'));
 
-        // Verify Excel content has LOA.DEDN column
-        $tempFile = tempnam(sys_get_temp_dir(), 'excel_test');
-        file_put_contents($tempFile, $exportResponse->getContent());
-        $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
-        $spreadsheet = $reader->load($tempFile);
-        $sheet = $spreadsheet->getActiveSheet();
-        
-        $this->assertEquals('ABSENCE PENALTY', $sheet->getCell('V3')->getValue());
-        $this->assertEquals('LOA.DEDN', $sheet->getCell('W3')->getValue());
-        $this->assertEquals('OTHER DEDUCTION', $sheet->getCell('X3')->getValue());
-        $this->assertEquals('TOTAL DEDUCTION', $sheet->getCell('Y3')->getValue());
-        $this->assertEquals('NET PAY', $sheet->getCell('Z3')->getValue());
-        unlink($tempFile);
+        // Verify CSV content has headers
+        $csvContent = $exportResponse->streamedContent();
+        $this->assertStringContainsString('IDNO,NAME,DEPARTMENT', $csvContent);
+        $this->assertStringContainsString('ABSENCE PENALTY', $csvContent);
+        $this->assertStringContainsString('LOA.DEDN', $csvContent);
+        $this->assertStringContainsString('OTHER DEDUCTION', $csvContent);
+        $this->assertStringContainsString('TOTAL DEDUCTION', $csvContent);
+        $this->assertStringContainsString('NET PAY', $csvContent);
+        $this->assertStringContainsString('TOTAL', $csvContent);
 
         // 5. Test exportStaffSheet endpoint
         $staffExportResponse = $this->get('/api/nextjs/payroll/salary-breakdown/staff/export?staff_id=' . $user->ID, $headers);
         $staffExportResponse->assertStatus(200);
-        $this->assertEquals(
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            $staffExportResponse->headers->get('Content-Type')
-        );
+        $this->assertStringContainsString('text/csv', $staffExportResponse->headers->get('Content-Type'));
 
-        $tempFileStaff = tempnam(sys_get_temp_dir(), 'excel_test_staff');
-        file_put_contents($tempFileStaff, $staffExportResponse->getContent());
-        $spreadsheetStaff = $reader->load($tempFileStaff);
-        $sheetStaff = $spreadsheetStaff->getActiveSheet();
-        
-        $this->assertEquals('ABSENCE PENALTY', $sheetStaff->getCell('V3')->getValue());
-        $this->assertEquals('LOA.DEDN', $sheetStaff->getCell('W3')->getValue());
-        $this->assertEquals('OTHER DEDUCTION', $sheetStaff->getCell('X3')->getValue());
-        $this->assertEquals('TOTAL DEDUCTION', $sheetStaff->getCell('Y3')->getValue());
-        $this->assertEquals('NET PAY', $sheetStaff->getCell('Z3')->getValue());
-        unlink($tempFileStaff);
+        $staffCsvContent = $staffExportResponse->streamedContent();
+        $this->assertStringContainsString('IDNO,NAME,DEPARTMENT', $staffCsvContent);
+        $this->assertStringContainsString('ABSENCE PENALTY', $staffCsvContent);
+        $this->assertStringContainsString('LOA.DEDN', $staffCsvContent);
+        $this->assertStringContainsString('OTHER DEDUCTION', $staffCsvContent);
+        $this->assertStringContainsString('TOTAL DEDUCTION', $staffCsvContent);
+        $this->assertStringContainsString('NET PAY', $staffCsvContent);
 
         // 6. Test getBreakdown after computation (from payroll_conpt)
         $runId = DB::table('payroll_runs')->insertGetId([
