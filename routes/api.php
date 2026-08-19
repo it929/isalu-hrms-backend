@@ -331,6 +331,14 @@ Route::prefix('nextjs')->group(function () {
             Route::post('/',              [\App\Http\Controllers\Api\CoopSavingsLoanOffsetApiController::class, 'store']);
         });
 
+        // Medical Loan Entries
+        Route::prefix('medical-loan-entries')->group(function () {
+            Route::get('/',                     [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'index']);
+            Route::get('/staff-balance/{staffId}', [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'getStaffBalance']);
+            Route::post('/',                    [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'store']);
+            Route::delete('/{id}',              [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'destroy']);
+        });
+
         // Medical Loan Deduction Setup
         Route::prefix('medical-loan-deduction-setups')->group(function () {
             Route::get('/',        [\App\Http\Controllers\Api\MedicalLoanDeductionSetupApiController::class, 'index']);
@@ -381,6 +389,17 @@ Route::prefix('nextjs')->group(function () {
             Route::post('/import', [\App\Http\Controllers\Api\CoopAssetFinanceDeductionSetupApiController::class, 'import']);
         });
         
+        // Bonus & Allowance Setup
+        Route::prefix('bonus-allowance-setups')->group(function () {
+            Route::get('/staff',    [\App\Http\Controllers\Api\BonusAllowanceSetupApiController::class, 'getStaffList']);
+            Route::get('/',         [\App\Http\Controllers\Api\BonusAllowanceSetupApiController::class, 'index']);
+            Route::get('/template', [\App\Http\Controllers\Api\BonusAllowanceSetupApiController::class, 'downloadTemplate']);
+            Route::post('/',        [\App\Http\Controllers\Api\BonusAllowanceSetupApiController::class, 'store']);
+            Route::post('/toggle/{id}', [\App\Http\Controllers\Api\BonusAllowanceSetupApiController::class, 'toggleStatus']);
+            Route::delete('/{id}',  [\App\Http\Controllers\Api\BonusAllowanceSetupApiController::class, 'destroy']);
+            Route::post('/import',  [\App\Http\Controllers\Api\BonusAllowanceSetupApiController::class, 'import']);
+        });
+
         // Staff Control Variables
         Route::prefix('staff-control-variables')->group(function () {
             Route::get('/staff', [\App\Http\Controllers\Api\StaffControlVariableApiController::class, 'getStaffList']);
@@ -452,6 +471,7 @@ Route::prefix('nextjs')->group(function () {
         Route::prefix('pension-activation')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\PensionActivationApiController::class, 'index']);
             Route::post('/toggle', [\App\Http\Controllers\Api\PensionActivationApiController::class, 'togglePension']);
+            Route::post('/bulk-toggle', [\App\Http\Controllers\Api\PensionActivationApiController::class, 'bulkTogglePension']);
             Route::post('/import', [\App\Http\Controllers\Api\PensionActivationApiController::class, 'importPension']);
         });
 
@@ -468,6 +488,7 @@ Route::prefix('nextjs')->group(function () {
     // Dynamic Reports endpoints
     Route::prefix('reports')->group(function () {
         Route::get('/salary-advances', [\App\Http\Controllers\Api\ReportApiController::class, 'getSalaryAdvances']);
+        Route::get('/hr-dashboard', [\App\Http\Controllers\Api\ReportApiController::class, 'getHrDashboard']);
         Route::get('/vacancies', [\App\Http\Controllers\Api\ReportApiController::class, 'getVacancies']);
         Route::get('/applicants', [\App\Http\Controllers\Api\ReportApiController::class, 'getApplicants']);
         Route::get('/appraisals', [\App\Http\Controllers\Api\ReportApiController::class, 'getAppraisals']);

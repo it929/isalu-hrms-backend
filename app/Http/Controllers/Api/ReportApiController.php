@@ -40,40 +40,168 @@ class ReportApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
             }
 
-            $records = DB::table('iou_records as ir')
+            $month = $request->input('month');
+            $year  = $request->input('year');
+
+            $monthNum = null;
+            if (!empty($month)) {
+                if (is_numeric($month)) {
+                    $monthNum = (int)$month;
+                } else {
+                    $monthMap = [
+                        'january' => 1, 'february' => 2, 'march' => 3, 'april' => 4,
+                        'may' => 5, 'june' => 6, 'july' => 7, 'august' => 8,
+                        'september' => 9, 'october' => 10, 'november' => 11, 'december' => 12
+                    ];
+                    $cleanMonth = strtolower(trim($month));
+                    if (isset($monthMap[$cleanMonth])) {
+                        $monthNum = $monthMap[$cleanMonth];
+                    } else {
+                        $parsedTime = strtotime("1 " . $cleanMonth . " 2026");
+                        if ($parsedTime !== false) {
+                            $monthNum = (int)date('m', $parsedTime);
+                        }
+                    }
+                }
+            }
+
+            $query = DB::table('iou_records as ir')
                 ->join('tblper as p', 'p.ID', '=', 'ir.staff_id')
+                ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
                 ->select(
+                    'ir.id',
+                    'ir.staff_id',
+                    'p.fileNo',
                     'p.surname', 'p.first_name', 'p.othernames',
-                    'ir.amount as advance_amt',
-                    'ir.monthly_deduction as recovery_amt',
-                    'ir.balance'
+                    'd.department',
+                    'ir.amount',
+                    'ir.reason',
+                    'ir.iou_date',
+                    'ir.repayment_date',
+                    'ir.status',
+                    'ir.hod_status',
+                    'ir.admin_status',
+                    'ir.audit_status',
+                    'ir.finance_status',
+                    'ir.created_at'
                 )
-                ->get()
+                ->orderBy('ir.id', 'desc');
+
+            $employee = $ctx['employee'];
+
+            if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isFinanceStaff'] || $ctx['isAuditStaff']) {
+                // Admins, Finance, and Audit see all IOU applications
+            } elseif ($employee && $ctx['isHod']) {
+                $deptId = (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) ? $ctx['delegated_department_id'] : $employee->departmentID;
+                $query->where('p.departmentID', $deptId);
+            } elseif ($employee) {
+                $query->where('ir.staff_id', $employee->ID);
+            }
+
+            if ($monthNum && $year) {
+                $firstDay = \Carbon\Carbon::create((int)$year, $monthNum, 1)->startOfMonth()->format('Y-m-d');
+                $lastDay  = \Carbon\Carbon::create((int)$year, $monthNum, 1)->endOfMonth()->format('Y-m-d');
+                $query->where(function($q) use ($firstDay, $lastDay, $year, $monthNum) {
+                    $q->whereBetween('ir.iou_date', [$firstDay, $lastDay])
+                      ->orWhere(function($q2) use ($year, $monthNum) {
+                          $q2->whereNull('ir.iou_date')
+                             ->whereYear('ir.created_at', $year)
+                             ->whereMonth('ir.created_at', $monthNum);
+                      });
+                });
+            } elseif ($year) {
+                $query->where(function($q) use ($year) {
+                    $q->whereYear('ir.iou_date', $year)
+                      ->orWhereYear('ir.created_at', $year);
+                });
+            }
+
+            $records = $query->get()
                 ->map(function ($row) {
+                    $statusText = 'Pending';
+                    if ($row->status == 1 || $row->finance_status == 1 || $row->admin_status == 1) {
+                        $statusText = 'Approved';
+                    } elseif ($row->status == 2 || $row->finance_status == 2 || $row->admin_status == 2 || $row->hod_status == 2) {
+                        $statusText = 'Rejected';
+                    }
+
+                    $advanceDate = !empty($row->iou_date) ? $row->iou_date : (!empty($row->created_at) ? substr($row->created_at, 0, 10) : '—');
+                    $amt = (float)($row->amount ?? 0);
+                    $monthly = (float)($row->monthly_deduction ?? $amt);
+                    $bal = (float)($row->balance ?? 0);
+
                     return [
+                        'id' => $row->id,
+                        'staff_id' => $row->staff_id,
                         'name' => trim("{$row->surname} {$row->first_name} {$row->othernames}"),
-                        'advance_amt' => (float)$row->advance_amt,
-                        'recovery_amt' => (float)$row->recovery_amt,
-                        'balance' => (float)$row->balance
+                        'department' => $row->department ?? '—',
+                        'amount' => $amt,
+                        'advance_amt' => $amt,
+                        'reason' => $row->reason ?? '—',
+                        'monthly_deduction' => $monthly,
+                        'recovery_amt' => $monthly,
+                        'balance' => $bal,
+                        'date' => $advanceDate,
+                        'iou_date' => $advanceDate,
+                        'status' => $statusText
                     ];
                 });
-
-            if ($records->isEmpty()) {
-                $staff = $this->getStaffListFallback();
-                $records = $staff->filter(fn($s, $idx) => $idx % 2 === 0)->map(function ($s) {
-                    $amt = 35000;
-                    return [
-                        'name' => $s['name'],
-                        'advance_amt' => $amt,
-                        'recovery_amt' => 5000,
-                        'balance' => 20000
-                    ];
-                })->values();
-            }
 
             return response()->json(['status' => 'success', 'data' => $records]);
         } catch (\Throwable $th) {
             Log::error('ReportApiController getSalaryAdvances: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/nextjs/reports/hr-dashboard
+     */
+    public function getHrDashboard(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+            }
+
+            $today = date('Y-m-d');
+
+            // Find staff on approved leave currently (from leave_record)
+            $allOnLeaveStaffIds = DB::table('leave_record')
+                ->where('status', 2)
+                ->where('start_date', '<=', $today)
+                ->where('end_date', '>=', $today)
+                ->pluck('staffId')
+                ->unique()
+                ->toArray();
+
+            $allStaff = DB::table('tblper')->get();
+            $headcount = $allStaff->count();
+            $active = $allStaff->filter(fn($s) => (int)$s->staff_status === 1 || $s->staff_status == '1' || strtolower($s->status_value ?? '') === 'active service')->count();
+            $onLeave = $allStaff->filter(fn($s) => in_array($s->ID, $allOnLeaveStaffIds))->count();
+            $exited = $allStaff->filter(fn($s) => in_array($s->staff_status, [0, 2]) || !empty($s->date_left) || $s->is_retired == 1)->count();
+            $currentYear = date('Y');
+            $newStaff = $allStaff->filter(function($s) use ($currentYear) {
+                $joinDate = $s->doj ?: ($s->appointment_date ?: ($s->date ?: ($s->created_at ?: null)));
+                return $joinDate && str_starts_with($joinDate, $currentYear);
+            })->count();
+
+            $records = [
+                [
+                    'total' => $headcount,
+                    'headcount' => $headcount,
+                    'active' => $active,
+                    'newStaff' => $newStaff,
+                    'on_leave' => $onLeave,
+                    'onLeave' => $onLeave,
+                    'exited' => $exited
+                ]
+            ];
+
+            return response()->json(['status' => 'success', 'data' => $records]);
+        } catch (\Throwable $th) {
+            Log::error('ReportApiController getHrDashboard: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
     }
@@ -323,35 +451,163 @@ class ReportApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
             }
 
-            $records = DB::table('audit_log as al')
-                ->join('users as u', 'u.id', '=', 'al.user_id')
-                ->where(function($q) {
-                    $q->where('al.operation', 'like', '%staff%')
-                      ->orWhere('al.operation', 'like', '%employee%')
-                      ->orWhere('al.operation', 'like', '%user%');
-                })
-                ->select('al.operation as action', 'u.name as user', 'al.date')
-                ->orderBy('al.date', 'desc')
-                ->limit(50)
-                ->get()
-                ->map(function ($row) {
-                    return [
-                        'field' => 'Staff record updated',
-                        'oldVal' => '—',
-                        'newVal' => $row->action,
-                        'user' => $row->user,
-                        'date' => $row->date
-                    ];
-                });
+            $allChanges = collect();
 
-            if ($records->isEmpty()) {
-                $records = collect([
-                    ['field' => 'Account Number', 'oldVal' => '0012345678', 'newVal' => '0998877665', 'user' => 'HR_MANAGER', 'date' => date('Y-m-d')],
-                    ['field' => 'Grade Level Designation', 'oldVal' => 'Officer II', 'newVal' => 'Senior Officer', 'user' => 'HR_MANAGER', 'date' => date('Y-m-d', strtotime('-2 days'))]
-                ]);
+            // 1. Salary Increments & Adjustments
+            if (\Illuminate\Support\Facades\Schema::hasTable('salary_increments')) {
+                $increments = DB::table('salary_increments as si')
+                    ->leftJoin('tblper as p', 'p.ID', '=', 'si.staff_id')
+                    ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
+                    ->leftJoin('tblper as creator', 'creator.ID', '=', 'si.created_by')
+                    ->select(
+                        'si.*',
+                        'p.surname',
+                        'p.first_name',
+                        'p.othernames',
+                        'p.fileNo',
+                        'd.department',
+                        'creator.surname as cr_surname',
+                        'creator.first_name as cr_first'
+                    )
+                    ->orderBy('si.created_at', 'desc')
+                    ->limit(100)
+                    ->get()
+                    ->map(function ($row) {
+                        $staffName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                        $creatorName = $row->cr_surname ? trim("{$row->cr_surname} {$row->cr_first}") : 'HR / Admin';
+                        $prevGross = number_format((float)$row->previous_gross_salary, 2);
+                        $newGross = number_format((float)$row->new_gross_salary, 2);
+                        $prevBasic = number_format((float)$row->previous_basic, 2);
+                        $newBasic = number_format((float)$row->new_basic, 2);
+                        $statusBadge = $row->status ? " [" . strtoupper($row->status) . "]" : "";
+
+                        return [
+                            'staff' => $staffName ?: ("Staff ID: " . $row->staff_id),
+                            'field' => 'Salary Increment (' . ucfirst($row->increment_type ?? 'Adjustment') . ')',
+                            'oldVal' => "Gross: ₦{$prevGross} (Basic: ₦{$prevBasic})",
+                            'newVal' => "Gross: ₦{$newGross} (Basic: ₦{$newBasic}){$statusBadge}",
+                            'user' => $creatorName,
+                            'date' => $row->created_at ? date('Y-m-d H:i', strtotime($row->created_at)) : ($row->effective_date ?? '—'),
+                            'raw_date' => $row->created_at ?? $row->effective_date
+                        ];
+                    });
+                $allChanges = $allChanges->concat($increments);
             }
 
-            return response()->json(['status' => 'success', 'data' => $records]);
+            // 2. Record of Service Alterations (Promotions, Transfers, Commendations)
+            if (\Illuminate\Support\Facades\Schema::hasTable('recordof_service')) {
+                $serviceRecords = DB::table('recordof_service as ros')
+                    ->leftJoin('tblper as p', function ($join) {
+                        $join->on('p.ID', '=', 'ros.staffid')
+                             ->orOn('p.fileNo', '=', 'ros.fileNo');
+                    })
+                    ->select('ros.*', 'p.surname', 'p.first_name', 'p.othernames')
+                    ->orderBy('ros.entryDate', 'desc')
+                    ->limit(100)
+                    ->get()
+                    ->map(function ($row) {
+                        $staffName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                        $author = $row->signature ?: ($row->namestamp ?: 'HR Administrator');
+                        return [
+                            'staff' => $staffName ?: ("File No: " . ($row->fileNo ?? 'N/A')),
+                            'field' => 'Record of Service / Promotion / Transfer',
+                            'oldVal' => '—',
+                            'newVal' => $row->detail ?? 'Service Entry Recorded',
+                            'user' => $author,
+                            'date' => $row->entryDate ? date('Y-m-d', strtotime($row->entryDate)) : ($row->updated_at ?? '—'),
+                            'raw_date' => $row->entryDate ?? $row->updated_at
+                        ];
+                    });
+                $allChanges = $allChanges->concat($serviceRecords);
+            }
+
+            // 3. Resignation Requests & Status Alterations
+            if (\Illuminate\Support\Facades\Schema::hasTable('resignation_requests')) {
+                $resignations = DB::table('resignation_requests as rr')
+                    ->leftJoin('tblper as p', 'p.ID', '=', 'rr.staff_id')
+                    ->select('rr.*', 'p.surname', 'p.first_name', 'p.othernames')
+                    ->orderBy('rr.created_at', 'desc')
+                    ->limit(50)
+                    ->get()
+                    ->map(function ($row) {
+                        $staffName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                        return [
+                            'staff' => $staffName ?: ("Staff ID: " . $row->staff_id),
+                            'field' => 'Resignation Request & Status',
+                            'oldVal' => 'Active Employment',
+                            'newVal' => "Status: " . ucfirst($row->status ?? 'pending') . ($row->reason ? " - {$row->reason}" : ""),
+                            'user' => 'HR / Management',
+                            'date' => $row->created_at ? date('Y-m-d H:i', strtotime($row->created_at)) : ($row->resignation_date ?? '—'),
+                            'raw_date' => $row->created_at ?? $row->resignation_date
+                        ];
+                    });
+                $allChanges = $allChanges->concat($resignations);
+            }
+
+            // 4. Service Terminations
+            if (\Illuminate\Support\Facades\Schema::hasTable('service_termination')) {
+                $terminations = DB::table('service_termination as st')
+                    ->leftJoin('tblper as p', function ($join) {
+                        $join->on('p.ID', '=', 'st.staffid')
+                             ->orOn('p.fileNo', '=', 'st.fileNo');
+                    })
+                    ->select('st.*', 'p.surname', 'p.first_name', 'p.othernames')
+                    ->orderBy('st.dateTerminated', 'desc')
+                    ->limit(50)
+                    ->get()
+                    ->map(function ($row) {
+                        $staffName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                        $gratuity = number_format((float)($row->gratuity ?? 0), 2);
+                        return [
+                            'staff' => $staffName ?: ("File No: " . ($row->fileNo ?? 'N/A')),
+                            'field' => 'Service Termination',
+                            'oldVal' => 'Active Service',
+                            'newVal' => "Terminated on {$row->dateTerminated} (Gratuity: ₦{$gratuity})",
+                            'user' => 'HR Administration',
+                            'date' => $row->dateTerminated ? date('Y-m-d', strtotime($row->dateTerminated)) : ($row->updated_at ?? '—'),
+                            'raw_date' => $row->dateTerminated ?? $row->updated_at
+                        ];
+                    });
+                $allChanges = $allChanges->concat($terminations);
+            }
+
+            // 5. Staff Profile & Bank Details Updates
+            if (\Illuminate\Support\Facades\Schema::hasTable('tblper')) {
+                $profileUpdates = DB::table('tblper as p')
+                    ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
+                    ->leftJoin('tbldesignation as desg', 'desg.id', '=', 'p.designationID')
+                    ->leftJoin('tblbanklist as b', 'b.bankID', '=', 'p.bankID')
+                    ->whereNotNull('p.updated_at')
+                    ->select('p.*', 'd.department', 'desg.designation', 'b.bank')
+                    ->orderBy('p.updated_at', 'desc')
+                    ->limit(50)
+                    ->get()
+                    ->map(function ($row) {
+                        $staffName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                        $bankInfo = $row->bank ? "Bank: {$row->bank} (Acc: " . ($row->AccNo ?? '—') . ")" : "Profile Updated";
+                        return [
+                            'staff' => $staffName,
+                            'field' => 'Staff Profile & Account Details',
+                            'oldVal' => '—',
+                            'newVal' => "{$row->designation} • {$bankInfo}",
+                            'user' => 'System / HR Admin',
+                            'date' => $row->updated_at ? date('Y-m-d H:i', strtotime($row->updated_at)) : '—',
+                            'raw_date' => $row->updated_at
+                        ];
+                    });
+                $allChanges = $allChanges->concat($profileUpdates);
+            }
+
+            // Sort all collected changes chronologically descending
+            $sortedRecords = $allChanges->sortByDesc('raw_date')->values()->map(function ($item) {
+                unset($item['raw_date']);
+                return $item;
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $sortedRecords
+            ]);
         } catch (\Throwable $th) {
             Log::error('ReportApiController getEmployeeChanges: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);

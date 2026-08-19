@@ -122,6 +122,69 @@ class PensionActivationApiController extends Controller
     }
 
     /**
+     * POST /api/nextjs/payroll/pension-activation/bulk-toggle
+     * Bulk toggle pension activation status for multiple staff members.
+     */
+    public function bulkTogglePension(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'staff_ids' => 'required|array|min:1',
+                'staff_ids.*' => 'integer|exists:tblper,ID',
+                'pen_act' => 'required|integer|in:0,1'
+            ]);
+
+            $staffIds = $validated['staff_ids'];
+            $penAct = $validated['pen_act'];
+            $successCount = 0;
+
+            DB::beginTransaction();
+
+            foreach ($staffIds as $staffId) {
+                $existing = DB::table('salary_structures')->where('staffId', $staffId)->first();
+
+                if ($existing) {
+                    DB::table('salary_structures')->where('staffId', $staffId)->update([
+                        'pen_act' => $penAct,
+                    ]);
+                } else {
+                    DB::table('salary_structures')->insert([
+                        'staffId' => $staffId,
+                        'basic_salary' => 0.00,
+                        'declare_salary' => 0.00,
+                        'housing_allowance' => 0.00,
+                        'transport_allowance' => 0.00,
+                        'medical_allowance' => 0.00,
+                        'utility_allowance' => 0.00,
+                        'meal_allowance' => 0.00,
+                        'pension_rate' => 0.00,
+                        'tax_rate' => 0.00,
+                        'pen_act' => $penAct,
+                        'created_at' => now(),
+                    ]);
+                }
+                $successCount++;
+            }
+
+            DB::commit();
+
+            $action = $penAct === 1 ? 'activated' : 'deactivated';
+            return response()->json([
+                'status' => 'success',
+                'message' => "Successfully {$action} pension for {$successCount} staff member(s).",
+                'count' => $successCount,
+            ]);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            Log::error('PensionActivationAPI bulkTogglePension: ' . $th->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * POST /api/nextjs/payroll/pension-activation/import
      * Bulk activate pension for multiple staff via Excel/CSV spreadsheet.
      */
