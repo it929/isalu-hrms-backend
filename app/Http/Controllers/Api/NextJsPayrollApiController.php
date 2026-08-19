@@ -436,7 +436,11 @@ class NextJsPayrollApiController extends Controller
                 'pc.audit_checked',
                 'pc.is_paid',
                 'pc.payer_id'
-            )->get();
+            )
+            ->orderByRaw('COALESCE(dept.department, "ZZZ") ASC')
+            ->orderBy('p.surname', 'ASC')
+            ->orderBy('p.first_name', 'ASC')
+            ->get();
 
             $mapped = $allRows->map(function ($row) use ($revolvingLoanBalances, $coopLoanBalances, $coopSavingsBalances, $medicalLoanBalances, $coopAssetFinanceBalances, $loanSetupDeductions) {
                 return [
@@ -539,7 +543,10 @@ class NextJsPayrollApiController extends Controller
         }
 
         $total   = $query->count();
-        $allRows = $query->get(); // we need all rows to look up dynamic elements
+        $allRows = $query
+            ->orderByRaw('COALESCE(dept.department, "ZZZ") ASC')
+            ->orderBy('pc.name', 'ASC')
+            ->get(); // we need all rows to look up dynamic elements
 
         // 2. Collect all staffIDs for dynamic lookup
         $staffIds = $allRows->pluck('staffid')->filter()->unique()->values()->toArray();
