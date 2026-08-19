@@ -236,8 +236,8 @@ class CoopLoanDeductionSetupApiController extends Controller
                 'Expires'             => '0',
             ];
 
-            $columns = ['Staff ID', 'Loan Amount', 'Interest Rate (%)', 'Duration Months', 'Start Month (YYYY-MM)'];
-            $exampleRow = ['9', '500000.00', '6', '12', '2026-05'];
+            $columns = ['Staff ID', 'Amount Deduct Monthly', 'Balance', 'Start Month (YYYY-MM)'];
+            $exampleRow = ['1024', '25000.00', '150000.00', '2026-06'];
 
             $callback = function () use ($columns, $exampleRow) {
                 $handle = fopen('php://output', 'w');
@@ -268,8 +268,6 @@ class CoopLoanDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-
-
             $request->validate([
                 'file' => 'required|file|mimes:xlsx,xls,csv'
             ]);
@@ -285,39 +283,56 @@ class CoopLoanDeductionSetupApiController extends Controller
             }
 
             // Normalize headers
-            $headers = array_map(function ($h) {
-                return strtolower(trim((string)$h));
-            }, $rows[0]);
-
             $staffIdIdx = -1;
             $fileNoIdx = -1;
-            $amountIdx = -1;
+            $monthlyDeductIdx = -1;
+            $balanceIdx = -1;
+            $loanAmountIdx = -1;
             $interestIdx = -1;
             $durationIdx = -1;
             $startIdx = -1;
 
-            foreach ($headers as $index => $header) {
-                if (strpos($header, 'staff id') !== false || strpos($header, 'staff_id') !== false || $header === 'id' || $header === 'staffid') {
+            foreach ($rows[0] as $index => $rawHeader) {
+                $h = strtolower(preg_replace('/[^a-z0-9]/', '', (string)$rawHeader));
+                if (in_array($h, ['staffid', 'id', 'staff', 'employeeid', 'empid', 'staffno'])) {
                     $staffIdIdx = $index;
-                } elseif (strpos($header, 'file') !== false || $header === 'fileno' || $header === 'file_no') {
+                } elseif (in_array($h, ['fileno', 'file', 'filenumber', 'file_no'])) {
                     $fileNoIdx = $index;
-                } elseif (strpos($header, 'amount') !== false || strpos($header, 'loan') !== false) {
-                    $amountIdx = $index;
-                } elseif (strpos($header, 'interest') !== false || strpos($header, 'rate') !== false) {
+                } elseif (in_array($h, ['amountdeductmonthly', 'monthlydeduction', 'monthlydeductionamount', 'amountdeduct', 'monthlydeduct', 'monthlyamount', 'deductmonthly', 'monthly', 'monthlysavings'])) {
+                    $monthlyDeductIdx = $index;
+                } elseif (in_array($h, ['balance', 'balanceremaining', 'loanbalance', 'remainingbalance', 'savingbalance', 'bal'])) {
+                    $balanceIdx = $index;
+                } elseif (in_array($h, ['loanamount', 'amount', 'loan', 'totalloan', 'totalloanamount'])) {
+                    $loanAmountIdx = $index;
+                } elseif (in_array($h, ['interestrate', 'interest', 'rate'])) {
                     $interestIdx = $index;
-                } elseif (strpos($header, 'start') !== false || strpos($header, 'period') !== false) {
-                    $startIdx = $index;
-                } elseif (strpos($header, 'duration') !== false || strpos($header, 'month') !== false) {
+                } elseif (in_array($h, ['durationmonths', 'duration', 'months'])) {
                     $durationIdx = $index;
+                } elseif (in_array($h, ['startmonth', 'startmonthyyyymm', 'start', 'period', 'month', 'startperiod'])) {
+                    $startIdx = $index;
+                } else {
+                    // Partial fallback check
+                    $rawLower = strtolower(trim((string)$rawHeader));
+                    if (strpos($rawLower, 'balance') !== false || strpos($rawLower, 'bal') !== false) {
+                        $balanceIdx = $index;
+                    } elseif (strpos($rawLower, 'monthly') !== false || strpos($rawLower, 'deduct') !== false) {
+                        $monthlyDeductIdx = $index;
+                    } elseif (strpos($rawLower, 'staff') !== false || strpos($rawLower, 'id') !== false) {
+                        $staffIdIdx = $index;
+                    } elseif (strpos($rawLower, 'loan') !== false || strpos($rawLower, 'amount') !== false) {
+                        $loanAmountIdx = $index;
+                    } elseif (strpos($rawLower, 'start') !== false || strpos($rawLower, 'month') !== false) {
+                        $startIdx = $index;
+                    }
                 }
             }
 
-            // Fallback checking by column position
+            // Fallback checking by column position if not detected by headers:
+            // Format: Staff ID, Amount Deduct Monthly, Balance, Start Month
             if ($staffIdIdx === -1 && $fileNoIdx === -1) $staffIdIdx = 0;
-            if ($amountIdx === -1) $amountIdx = 1;
-            if ($interestIdx === -1) $interestIdx = 2;
-            if ($durationIdx === -1) $durationIdx = 3;
-            if ($startIdx === -1) $startIdx = 4;
+            if ($monthlyDeductIdx === -1 && $loanAmountIdx === -1) $monthlyDeductIdx = 1;
+            if ($balanceIdx === -1 && count($rows[0]) >= 3) $balanceIdx = 2;
+            if ($startIdx === -1 && count($rows[0]) >= 4) $startIdx = 3;
 
             $importedCount = 0;
             $warnings = [];
@@ -339,20 +354,20 @@ class CoopLoanDeductionSetupApiController extends Controller
                 $staff = null;
 
                 // Match by Staff ID
-                if ($staffIdIdx !== -1 && isset($row[$staffIdIdx]) && trim($row[$staffIdIdx]) !== '') {
-                    $val = trim($row[$staffIdIdx]);
+                if ($staffIdIdx !== -1 && isset($row[$staffIdIdx]) && trim((string)$row[$staffIdIdx]) !== '') {
+                    $val = trim((string)$row[$staffIdIdx]);
                     $staff = DB::table('tblper')->where('ID', $val)->first();
                 }
 
                 // Match by File Number
-                if (!$staff && $fileNoIdx !== -1 && isset($row[$fileNoIdx]) && trim($row[$fileNoIdx]) !== '') {
-                    $val = trim($row[$fileNoIdx]);
+                if (!$staff && $fileNoIdx !== -1 && isset($row[$fileNoIdx]) && trim((string)$row[$fileNoIdx]) !== '') {
+                    $val = trim((string)$row[$fileNoIdx]);
                     $staff = DB::table('tblper')->where('fileNo', $val)->first();
                 }
 
                 // Fallback matching
-                if (!$staff && $staffIdIdx !== -1 && isset($row[$staffIdIdx]) && trim($row[$staffIdIdx]) !== '') {
-                    $val = trim($row[$staffIdIdx]);
+                if (!$staff && $staffIdIdx !== -1 && isset($row[$staffIdIdx]) && trim((string)$row[$staffIdIdx]) !== '') {
+                    $val = trim((string)$row[$staffIdIdx]);
                     $staff = DB::table('tblper')->where('fileNo', $val)->first();
                 }
 
@@ -361,28 +376,59 @@ class CoopLoanDeductionSetupApiController extends Controller
                     continue;
                 }
 
-                // Parse loan amount
-                $loanAmount = isset($row[$amountIdx]) ? (float)trim(str_replace([',', '₦', '$'], '', $row[$amountIdx])) : 0.00;
-                if ($loanAmount <= 0) {
-                    $warnings[] = "Row " . ($r + 1) . ": Invalid loan amount.";
-                    continue;
+                // Determine Monthly Deduction and Balance
+                $monthlyDeduction = 0.00;
+                $balanceRemaining = 0.00;
+                $loanAmount = 0.00;
+                $interestRate = 0.00;
+                $durationMonths = 12;
+
+                if ($monthlyDeductIdx !== -1 && isset($row[$monthlyDeductIdx]) && trim((string)$row[$monthlyDeductIdx]) !== '') {
+                    $monthlyDeduction = (float)trim(str_replace([',', '₦', '$'], '', $row[$monthlyDeductIdx]));
                 }
 
-                // Parse interest rate
-                $interestRate = ($interestIdx !== -1 && isset($row[$interestIdx])) ? (float)trim($row[$interestIdx]) : 0.00;
-                if ($interestRate < 0 || $interestRate > 100) {
-                    $interestRate = 0.00;
+                if ($balanceIdx !== -1 && isset($row[$balanceIdx]) && trim((string)$row[$balanceIdx]) !== '') {
+                    $balanceRemaining = (float)trim(str_replace([',', '₦', '$'], '', $row[$balanceIdx]));
                 }
 
-                // Parse duration months
-                $durationMonths = isset($row[$durationIdx]) ? (int)trim($row[$durationIdx]) : 12;
-                if ($durationMonths <= 0) {
-                    $warnings[] = "Row " . ($r + 1) . ": Invalid duration months.";
+                if ($loanAmountIdx !== -1 && isset($row[$loanAmountIdx]) && trim((string)$row[$loanAmountIdx]) !== '') {
+                    $loanAmount = (float)trim(str_replace([',', '₦', '$'], '', $row[$loanAmountIdx]));
+                }
+
+                if ($interestIdx !== -1 && isset($row[$interestIdx]) && trim((string)$row[$interestIdx]) !== '') {
+                    $interestRate = (float)trim(str_replace([',', '%'], '', $row[$interestIdx]));
+                }
+
+                if ($durationIdx !== -1 && isset($row[$durationIdx]) && trim((string)$row[$durationIdx]) !== '') {
+                    $durationMonths = (int)trim((string)$row[$durationIdx]);
+                }
+
+                // If monthly deduction was supplied
+                if ($monthlyDeduction > 0) {
+                    if ($balanceRemaining <= 0) {
+                        $balanceRemaining = $loanAmount > 0 ? $loanAmount : $monthlyDeduction;
+                    }
+                    if ($loanAmount <= 0) {
+                        $loanAmount = $balanceRemaining;
+                    }
+                    if ($durationMonths <= 0 || $durationIdx === -1) {
+                        $durationMonths = max(1, (int)ceil($balanceRemaining / $monthlyDeduction));
+                    }
+                } elseif ($loanAmount > 0) {
+                    // Legacy format: loan amount + interest rate + duration
+                    $totalRepayment = $loanAmount * (1 + $interestRate / 100);
+                    $durationMonths = $durationMonths > 0 ? $durationMonths : 12;
+                    $monthlyDeduction = round($totalRepayment / $durationMonths, 2);
+                    if ($balanceRemaining <= 0) {
+                        $balanceRemaining = $totalRepayment;
+                    }
+                } else {
+                    $warnings[] = "Row " . ($r + 1) . ": Invalid deduction amount or balance.";
                     continue;
                 }
 
                 // Parse start month
-                $startMonth = isset($row[$startIdx]) ? trim($row[$startIdx]) : '';
+                $startMonth = ($startIdx !== -1 && isset($row[$startIdx])) ? trim((string)$row[$startIdx]) : '';
                 if ($startMonth === '') {
                     $startMonth = date('Y-m');
                 } else {
@@ -414,9 +460,6 @@ class CoopLoanDeductionSetupApiController extends Controller
                     }
                 }
 
-                $totalRepayment = $loanAmount * (1 + $interestRate / 100);
-                $monthlyDeduction = round($totalRepayment / $durationMonths, 2);
-
                 DB::table('coop_loan_deduction_setups')->updateOrInsert(
                     ['staffId' => $staff->ID],
                     [
@@ -424,7 +467,7 @@ class CoopLoanDeductionSetupApiController extends Controller
                         'interest_rate' => $interestRate,
                         'duration_months' => $durationMonths,
                         'monthly_deduction' => $monthlyDeduction,
-                        'balance_remaining' => $totalRepayment,
+                        'balance_remaining' => $balanceRemaining,
                         'start_month' => $startMonth,
                         'end_month' => $endMonth,
                         'is_active' => 1,

@@ -238,27 +238,36 @@ class CoopSavingsSetupApiController extends Controller
             }
 
             // Normalize headers
-            $headers = array_map(function ($h) {
-                return strtolower(trim((string)$h));
-            }, $rows[0]);
-
             $staffIdIdx = -1;
             $fileNoIdx = -1;
             $savingIdx = -1;
             $balanceIdx = -1;
             $startIdx = -1;
 
-            foreach ($headers as $index => $header) {
-                if (strpos($header, 'staff id') !== false || strpos($header, 'staff_id') !== false || $header === 'id' || $header === 'staffid') {
+            foreach ($rows[0] as $index => $rawHeader) {
+                $h = strtolower(preg_replace('/[^a-z0-9]/', '', (string)$rawHeader));
+                if (in_array($h, ['staffid', 'id', 'staff', 'employeeid', 'empid', 'staffno'])) {
                     $staffIdIdx = $index;
-                } elseif (strpos($header, 'file') !== false || $header === 'fileno' || $header === 'file_no') {
+                } elseif (in_array($h, ['fileno', 'file', 'filenumber', 'file_no'])) {
                     $fileNoIdx = $index;
-                } elseif (strpos($header, 'saving') !== false || strpos($header, 'amount') !== false) {
-                    $savingIdx = $index;
-                } elseif (strpos($header, 'balance') !== false || strpos($header, 'bal') !== false) {
+                } elseif (in_array($h, ['savingbalance', 'balance', 'savingbal', 'savingsbalance', 'currentbalance', 'savingbalanceamount', 'bal'])) {
                     $balanceIdx = $index;
-                } elseif (strpos($header, 'start') !== false || strpos($header, 'period') !== false || $header === 'month') {
+                } elseif (in_array($h, ['monthlysavingamount', 'monthlysaving', 'savingamount', 'monthlyamount', 'saving', 'amount', 'monthly', 'monthlysavings', 'savingsamount', 'monthlysavingsamount'])) {
+                    $savingIdx = $index;
+                } elseif (in_array($h, ['startmonth', 'startmonthyyyymm', 'start', 'period', 'month', 'startperiod'])) {
                     $startIdx = $index;
+                } else {
+                    // Partial fallback check (check balance first so 'saving balance' is not captured as monthly saving)
+                    $rawLower = strtolower(trim((string)$rawHeader));
+                    if (strpos($rawLower, 'balance') !== false || strpos($rawLower, 'bal') !== false) {
+                        $balanceIdx = $index;
+                    } elseif (strpos($rawLower, 'monthly') !== false || strpos($rawLower, 'saving') !== false || strpos($rawLower, 'amount') !== false) {
+                        $savingIdx = $index;
+                    } elseif (strpos($rawLower, 'staff') !== false || strpos($rawLower, 'id') !== false) {
+                        $staffIdIdx = $index;
+                    } elseif (strpos($rawLower, 'start') !== false || strpos($rawLower, 'month') !== false) {
+                        $startIdx = $index;
+                    }
                 }
             }
 
