@@ -53,18 +53,6 @@ class MedicalLoanDeductionSetupApiController extends Controller
 
             $employee = $ctx['employee'];
 
-            if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
-                // Admins see all setups
-            } elseif ($employee && $employee->is_hod == 1) {
-                // HOD sees department staff setups
-                $query->where('p.departmentID', $employee->departmentID);
-            } elseif ($employee) {
-                // Regular staff see only their own
-                $query->where('mlds.staffId', $employee->ID);
-            } else {
-                $query->where('mlds.id', 0); // fallback empty
-            }
-
             $records = $query->orderBy('mlds.id', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $row->is_active = (int) $row->is_active;
@@ -113,13 +101,7 @@ class MedicalLoanDeductionSetupApiController extends Controller
                 'is_active' => 'nullable|integer|in:0,1',
             ]);
 
-            // Restriction check: Only Admins can modify settings
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Access denied: Only administrators can configure medical loan deduction setups.'
-                ], 403);
-            }
+
 
             $id = $validated['id'] ?? null;
             $loanAmount = (float) $validated['loan_amount'];
@@ -192,12 +174,7 @@ class MedicalLoanDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Access denied: Only administrators can toggle setup status.'
-                ], 403);
-            }
+
 
             $setup = DB::table('medical_loan_deduction_setups')->where('id', $id)->first();
             if (!$setup) {
@@ -236,12 +213,7 @@ class MedicalLoanDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Access denied: Only administrators can delete setups.'
-                ], 403);
-            }
+
 
             $exists = DB::table('medical_loan_deduction_setups')->where('id', $id)->exists();
             if (!$exists) {
@@ -310,12 +282,7 @@ class MedicalLoanDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Access denied: Only administrators can import settings.'
-                ], 403);
-            }
+
 
             $request->validate([
                 'file' => 'required|file'

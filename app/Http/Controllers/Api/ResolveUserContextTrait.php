@@ -33,7 +33,7 @@ trait ResolveUserContextTrait
 
         $adminStaff = in_array(48, $roleIds) || in_array('hr head', $roleNames);
 
-        $isAuditStaff = in_array(34, $roleIds) || in_array(35, $roleIds) || in_array('audit head', $roleNames);
+        $isAuditStaff = in_array(34, $roleIds) || in_array(35, $roleIds) || in_array('audit head', $roleNames) || in_array('audit', $roleNames) || in_array('auditor', $roleNames) || in_array('internal audit', $roleNames);
 
         $isFinanceStaff = in_array(36, $roleIds) || in_array(37, $roleIds) || in_array('finance head', $roleNames);
 
@@ -44,33 +44,17 @@ trait ResolveUserContextTrait
         $delegatedPermissions = [];
         $delegatedDepartmentId = null;
 
-        if (!$isHod && $employee) {
-            $delegation = DB::table('hod_delegations')
-                ->where('delegate_staff_id', $employee->ID)
-                ->where('status', 'active')
-                ->where(function($query) {
-                    $query->whereNull('start_date')
-                          ->orWhere('start_date', '<=', now()->toDateString());
-                })
-                ->where(function($query) {
-                    $query->whereNull('end_date')
-                          ->orWhere('end_date', '>=', now()->toDateString());
-                })
-                ->first();
-
-            if ($delegation) {
-                $isHod = true;
-                $isDelegatedHod = true;
-                $delegatedPermissions = json_decode($delegation->permissions, true) ?: [];
-                $delegatedDepartmentId = $delegation->department_id;
-            }
-        }
-
         $isDelegatedHr = false;
         $delegatedHrPermissions = [];
 
-        if (!$adminStaff && $employee) {
-            $hrDelegation = DB::table('hr_delegations')
+        $isDelegatedFinance = false;
+        $delegatedFinancePermissions = [];
+
+        $isDelegatedAudit = false;
+        $delegatedAuditPermissions = [];
+
+        if ($employee) {
+            $delegations = DB::table('hod_delegations')
                 ->where('delegate_staff_id', $employee->ID)
                 ->where('status', 'active')
                 ->where(function($query) {
@@ -81,28 +65,86 @@ trait ResolveUserContextTrait
                     $query->whereNull('end_date')
                           ->orWhere('end_date', '>=', now()->toDateString());
                 })
-                ->first();
+                ->get();
 
-            if ($hrDelegation) {
+            foreach ($delegations as $del) {
+                $perms = json_decode($del->permissions, true) ?: [];
+                $delegatedPermissions = array_unique(array_merge($delegatedPermissions, $perms));
+                if (!$delegatedDepartmentId) {
+                    $delegatedDepartmentId = $del->department_id;
+                }
+
+                // Check for HR approval roles in delegation
+                $hrRoles = array_filter($perms, fn($p) => is_string($p) && str_starts_with($p, 'hr_'));
+                if (!empty($hrRoles)) {
+                    $adminStaff = true;
+                    $isDelegatedHr = true;
+                    $delegatedHrPermissions = array_unique(array_merge($delegatedHrPermissions, $hrRoles));
+                }
+
+                // Check for Finance approval roles in delegation
+                $finRoles = array_filter($perms, fn($p) => is_string($p) && str_starts_with($p, 'finance_'));
+                if (!empty($finRoles)) {
+                    $isFinanceStaff = true;
+                    $isDelegatedFinance = true;
+                    $delegatedFinancePermissions = array_unique(array_merge($delegatedFinancePermissions, $finRoles));
+                }
+
+                // Check for Audit approval roles in delegation
+                $audRoles = array_filter($perms, fn($p) => is_string($p) && str_starts_with($p, 'audit_'));
+                if (!empty($audRoles)) {
+                    $isAuditStaff = true;
+                    $isDelegatedAudit = true;
+                    $delegatedAuditPermissions = array_unique(array_merge($delegatedAuditPermissions, $audRoles));
+                }
+
+                // Check for general HOD approval roles
+                $hodRoles = array_filter($perms, fn($p) => is_string($p) && str_starts_with($p, 'approve_'));
+                if (!empty($hodRoles) || !$isHod) {
+                    $isHod = true;
+                    $isDelegatedHod = true;
+                }
+            }
+
+            // Also check hr_delegations table for backward compatibility
+            $hrDelegations = DB::table('hr_delegations')
+                ->where('delegate_staff_id', $employee->ID)
+                ->where('status', 'active')
+                ->where(function($query) {
+                    $query->whereNull('start_date')
+                          ->orWhere('start_date', '<=', now()->toDateString());
+                })
+                ->where(function($query) {
+                    $query->whereNull('end_date')
+                          ->orWhere('end_date', '>=', now()->toDateString());
+                })
+                ->get();
+
+            foreach ($hrDelegations as $hrDel) {
+                $perms = json_decode($hrDel->permissions, true) ?: [];
                 $adminStaff = true;
                 $isDelegatedHr = true;
-                $delegatedHrPermissions = json_decode($hrDelegation->permissions, true) ?: [];
+                $delegatedHrPermissions = array_unique(array_merge($delegatedHrPermissions, $perms));
             }
         }
 
         return [
-            'userId'                 => $userId,
-            'isSuperAdmin'           => $isSuperAdmin,
-            'isAdminStaff'           => $adminStaff,
-            'isAuditStaff'           => $isAuditStaff,
-            'isFinanceStaff'         => $isFinanceStaff,
-            'employee'               => $employee,
-            'isHod'                  => $isHod,
-            'isDelegatedHod'         => $isDelegatedHod,
-            'delegatedPermissions'   => $delegatedPermissions,
-            'delegated_department_id'=> $delegatedDepartmentId,
-            'isDelegatedHr'          => $isDelegatedHr,
-            'delegatedHrPermissions' => $delegatedHrPermissions,
+            'userId'                      => $userId,
+            'isSuperAdmin'                => $isSuperAdmin,
+            'isAdminStaff'                => $adminStaff,
+            'isAuditStaff'                => $isAuditStaff,
+            'isFinanceStaff'              => $isFinanceStaff,
+            'employee'                    => $employee,
+            'isHod'                       => $isHod,
+            'isDelegatedHod'              => $isDelegatedHod,
+            'delegatedPermissions'        => $delegatedPermissions,
+            'delegated_department_id'     => $delegatedDepartmentId,
+            'isDelegatedHr'               => $isDelegatedHr,
+            'delegatedHrPermissions'      => $delegatedHrPermissions,
+            'isDelegatedFinance'          => $isDelegatedFinance,
+            'delegatedFinancePermissions' => $delegatedFinancePermissions,
+            'isDelegatedAudit'            => $isDelegatedAudit,
+            'delegatedAuditPermissions'   => $delegatedAuditPermissions,
         ];
     }
 

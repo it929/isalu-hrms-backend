@@ -53,18 +53,6 @@ class OtherDeductionSetupApiController extends Controller
 
             $employee = $ctx['employee'];
 
-            if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
-                // Admins see all setups
-            } elseif ($employee && $employee->is_hod == 1) {
-                // HOD sees department staff setups
-                $query->where('p.departmentID', $employee->departmentID);
-            } elseif ($employee) {
-                // Regular staff see only their own
-                $query->where('ods.staffId', $employee->ID);
-            } else {
-                $query->where('ods.id', 0); // fallback empty
-            }
-
             $records = $query->orderBy('ods.id', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $row->is_active = (int) $row->is_active;
@@ -114,13 +102,7 @@ class OtherDeductionSetupApiController extends Controller
                 'is_active' => 'nullable|integer|in:0,1',
             ]);
 
-            // Restriction check: Only Admins can modify settings
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Access denied: Only administrators can configure other deduction setups.'
-                ], 403);
-            }
+
 
             $id = $validated['id'] ?? null;
             $totalAmount = (float) $validated['total_amount'];
@@ -191,12 +173,7 @@ class OtherDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Access denied: Only administrators can toggle status.'
-                ], 403);
-            }
+
 
             $setup = DB::table('other_deduction_setups')->where('id', $id)->first();
             if (!$setup) {
@@ -235,12 +212,7 @@ class OtherDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Access denied: Only administrators can delete setups.'
-                ], 403);
-            }
+
 
             $exists = DB::table('other_deduction_setups')->where('id', $id)->exists();
             if (!$exists) {
@@ -309,12 +281,7 @@ class OtherDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Access denied: Only administrators can import settings.'
-                ], 403);
-            }
+
 
             $request->validate([
                 'file' => 'required|file|mimes:xlsx,xls,csv'

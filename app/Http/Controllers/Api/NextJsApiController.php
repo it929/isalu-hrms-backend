@@ -736,65 +736,59 @@ class NextJsApiController extends Controller
     public function getDelegations(Request $request)
     {
         $ctx = $this->getUserContext($request);
-        if (!$ctx || !$ctx['isHod'] || $ctx['isDelegatedHod']) {
-            return response()->json(['status' => 'error', 'message' => 'HOD privileges required.'], 403);
+        if (!$ctx) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized.'], 401);
         }
 
-        // Get department staff of the HOD
-        $deptId = $ctx['employee']->departmentID;
-        $staff = \DB::table('tblper')
-            ->where('departmentID', $deptId)
-            ->where('ID', '!=', $ctx['employee']->ID) // exclude the HOD themselves
-            ->select('ID', 'surname', 'first_name', 'othernames')
-            ->get();
+        $employee = $ctx['employee'];
+        $isHrHead = (bool)($ctx['isAdminStaff'] || ($employee && $employee->departmentID == 80));
+        $isFinanceHead = (bool)($ctx['isFinanceStaff'] || ($employee && $employee->departmentID == 77));
+        $isAuditHead = (bool)($ctx['isAuditStaff'] || ($employee && $employee->departmentID == 89));
+        $isHod = (bool)($ctx['isHod'] || ($employee && $employee->is_hod == 1));
 
-        // Get current HOD delegations
-        $delegations = \DB::table('hod_delegations as hd')
+        $canDelegate = $isHrHead || $isFinanceHead || $isAuditHead || $isHod || $ctx['isSuperAdmin'];
+
+        if (!$canDelegate) {
+            return response()->json(['status' => 'error', 'message' => 'Department Head or Administrative privileges required.'], 403);
+        }
+
+        // Get department staff of the Head
+        $deptId = $employee ? $employee->departmentID : 0;
+        $staffQuery = \DB::table('tblper');
+        if ($deptId > 0 && !$ctx['isSuperAdmin']) {
+            $staffQuery->where('departmentID', $deptId);
+        }
+        if ($employee) {
+            $staffQuery->where('ID', '!=', $employee->ID); // exclude the Head themselves
+        }
+        $staff = $staffQuery->select('ID', 'ID as staffId', 'surname', 'first_name', 'othernames')->get();
+
+        // Get department name
+        $deptName = '';
+        if ($deptId > 0) {
+            $d = \DB::table('tbldepartment')->where('id', $deptId)->first();
+            $deptName = $d ? $d->department : '';
+        }
+
+        // Get current delegations by this Head
+        $delegationsQuery = \DB::table('hod_delegations as hd')
             ->join('tblper as p', 'p.ID', '=', 'hd.delegate_staff_id')
-            ->where('hd.hod_staff_id', $ctx['employee']->ID)
             ->select(
                 'hd.*',
+                'p.ID as staffId',
                 'p.surname',
                 'p.first_name',
                 'p.othernames'
             )
-            ->orderBy('hd.created_at', 'DESC')
-            ->get();
+            ->orderBy('hd.created_at', 'DESC');
 
-        // Get modules and submodules assigned to the HOD's roles or delegated to HOD by HR
-        $hrDelegatedSubmoduleIds = [];
-        $hrDelegation = \DB::table('hr_delegations')
-            ->where('delegate_staff_id', $ctx['employee']->ID)
-            ->where('status', 'active')
-            ->where(function($query) {
-                $query->whereNull('start_date')
-                      ->orWhere('start_date', '<=', now()->toDateString());
-            })
-            ->where(function($query) {
-                $query->whereNull('end_date')
-                      ->orWhere('end_date', '>=', now()->toDateString());
-            })
-            ->first();
-        if ($hrDelegation) {
-            $perms = json_decode($hrDelegation->permissions, true) ?: [];
-            foreach ($perms as $perm) {
-                if (is_numeric($perm)) {
-                    $hrDelegatedSubmoduleIds[] = (int)$perm;
-                } else {
-                    $mapping = [
-                        'hr_approve_leave' => [252, 253],
-                        'hr_approve_loan' => [231, 232],
-                        'hr_approve_iou' => [242],
-                        'hr_approve_refund' => [263],
-                        'hr_approve_resignation' => [264],
-                    ];
-                    if (isset($mapping[$perm])) {
-                        $hrDelegatedSubmoduleIds = array_merge($hrDelegatedSubmoduleIds, $mapping[$perm]);
-                    }
-                }
-            }
+        if ($employee && !$ctx['isSuperAdmin']) {
+            $delegationsQuery->where('hd.hod_staff_id', $employee->ID);
         }
 
+        $delegations = $delegationsQuery->get();
+
+        // Get modules and submodules assigned to the user's roles
         $query = \DB::table('assign_user_role')
             ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
             ->join('assign_module_role', 'assign_module_role.roleID', '=', 'assign_user_role.roleID')
@@ -803,24 +797,21 @@ class NextJsApiController extends Controller
             ->where('assign_user_role.userID', '=', $ctx['userId'])
             ->select('submodule.submoduleID', 'submodule.submodulename', 'submodule.route', 'module.modulename');
 
-        if (!empty($hrDelegatedSubmoduleIds)) {
-            $delegatedSubmodulesQuery = \DB::table('submodule')
-                ->join('module', 'module.moduleID', '=', 'submodule.moduleID')
-                ->whereIn('submodule.submoduleID', $hrDelegatedSubmoduleIds)
-                ->select('submodule.submoduleID', 'submodule.submodulename', 'submodule.route', 'module.modulename');
-            
-            $assignedSubmodules = $query->union($delegatedSubmodulesQuery)->get();
-        } else {
-            $assignedSubmodules = $query->distinct()
-                ->orderBy('module.modulename', 'ASC')
-                ->orderBy('submodule.submodulename', 'ASC')
-                ->get();
-        }
-
-        $assignedSubmodules = $assignedSubmodules->unique('submoduleID')->values();
+        $assignedSubmodules = $query->distinct()
+            ->orderBy('module.modulename', 'ASC')
+            ->orderBy('submodule.submodulename', 'ASC')
+            ->get()
+            ->unique('submoduleID')
+            ->values();
 
         return response()->json([
             'status' => 'success',
+            'isHrHead' => $isHrHead,
+            'isFinanceHead' => $isFinanceHead,
+            'isAuditHead' => $isAuditHead,
+            'isHod' => $isHod,
+            'isSuperAdmin' => $ctx['isSuperAdmin'],
+            'departmentName' => $deptName,
             'staff' => $staff,
             'delegations' => $delegations,
             'assignedSubmodules' => $assignedSubmodules
@@ -833,8 +824,19 @@ class NextJsApiController extends Controller
     public function saveDelegation(Request $request)
     {
         $ctx = $this->getUserContext($request);
-        if (!$ctx || !$ctx['isHod'] || $ctx['isDelegatedHod']) {
-            return response()->json(['status' => 'error', 'message' => 'HOD privileges required.'], 403);
+        if (!$ctx) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized.'], 401);
+        }
+
+        $employee = $ctx['employee'];
+        $isHrHead = (bool)($ctx['isAdminStaff'] || ($employee && $employee->departmentID == 80));
+        $isFinanceHead = (bool)($ctx['isFinanceStaff'] || ($employee && $employee->departmentID == 77));
+        $isAuditHead = (bool)($ctx['isAuditStaff'] || ($employee && $employee->departmentID == 89));
+        $isHod = (bool)($ctx['isHod'] || ($employee && $employee->is_hod == 1));
+
+        $canDelegate = $isHrHead || $isFinanceHead || $isAuditHead || $isHod || $ctx['isSuperAdmin'];
+        if (!$canDelegate) {
+            return response()->json(['status' => 'error', 'message' => 'Department Head privileges required.'], 403);
         }
 
         $request->validate([
@@ -844,21 +846,23 @@ class NextJsApiController extends Controller
             'end_date' => 'nullable|date|after_or_equal:start_date',
         ]);
 
-        // Verify that the delegate is in the HOD's department
-        $delegate = \DB::table('tblper')
-            ->where('ID', $request->delegate_staff_id)
-            ->where('departmentID', $ctx['employee']->departmentID)
-            ->first();
+        // Verify that the delegate is in the Head's department (or if superadmin, any valid staff)
+        $deptId = $employee ? $employee->departmentID : 0;
+        $delegateQuery = \DB::table('tblper')->where('ID', $request->delegate_staff_id);
+        if (!$ctx['isSuperAdmin'] && $deptId > 0) {
+            $delegateQuery->where('departmentID', $deptId);
+        }
+        $delegate = $delegateQuery->first();
 
         if (!$delegate) {
-            return response()->json(['status' => 'error', 'message' => 'Staff member is not in your department.'], 403);
+            return response()->json(['status' => 'error', 'message' => 'Staff member must belong to your department.'], 403);
         }
 
         // Insert new delegation
         \DB::table('hod_delegations')->insert([
-            'hod_staff_id' => $ctx['employee']->ID,
+            'hod_staff_id' => $employee ? $employee->ID : 1,
             'delegate_staff_id' => $request->delegate_staff_id,
-            'department_id' => $ctx['employee']->departmentID,
+            'department_id' => $delegate->departmentID ?: $deptId,
             'permissions' => json_encode($request->permissions),
             'start_date' => $request->start_date,
             'end_date' => $request->end_date,
@@ -879,14 +883,16 @@ class NextJsApiController extends Controller
     public function toggleDelegation(Request $request, $id)
     {
         $ctx = $this->getUserContext($request);
-        if (!$ctx || !$ctx['isHod'] || $ctx['isDelegatedHod']) {
-            return response()->json(['status' => 'error', 'message' => 'HOD privileges required.'], 403);
+        if (!$ctx) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized.'], 401);
         }
 
-        $delegation = \DB::table('hod_delegations')
-            ->where('id', $id)
-            ->where('hod_staff_id', $ctx['employee']->ID)
-            ->first();
+        $employee = $ctx['employee'];
+        $query = \DB::table('hod_delegations')->where('id', $id);
+        if (!$ctx['isSuperAdmin'] && $employee) {
+            $query->where('hod_staff_id', $employee->ID);
+        }
+        $delegation = $query->first();
 
         if (!$delegation) {
             return response()->json(['status' => 'error', 'message' => 'Delegation not found.'], 404);

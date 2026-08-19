@@ -64,8 +64,8 @@ class HrLeaveApiController extends Controller
 
         $leaveTypes = DB::table('tblleave_type')->orderBy('id', 'DESC')->get();
         
-        if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
-            $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames', 'office_shift')->get()->map(function($emp) {
+        if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
+            $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'gender')->get()->map(function($emp) {
                 $emp->has_uploaded_education = DB::table('tbleducations')
                     ->where('staffid', $emp->ID)
                     ->whereNotNull('document')
@@ -93,6 +93,7 @@ class HrLeaveApiController extends Controller
             'isSuperAdmin'  => $ctx['isSuperAdmin'],
             'isHod'         => $ctx['isHod'],
             'isAdminStaff'  => $ctx['isAdminStaff'],
+            'isAuditStaff'  => $ctx['isAuditStaff'],
             'employee'      => $employee,
         ]);
     }
@@ -126,7 +127,7 @@ class HrLeaveApiController extends Controller
 
         $employee = $ctx['employee'];
 
-        if ($ctx['isSuperAdmin']) {
+        if ($ctx['isSuperAdmin'] || $ctx['isAuditStaff']) {
             $records = $baseQuery->get();
         } else {
             $baseQuery->where(function ($query) use ($ctx, $employee) {
@@ -236,9 +237,11 @@ class HrLeaveApiController extends Controller
             ]);
         }
 
-        // Gender restriction: maternity leave (id == 3) strictly for female staff
-        if ($leaveType->id == 3 && strtolower($employee->gender) !== 'female') {
-            return response()->json(['status' => 'error', 'message' => 'You are not eligible for maternity leave.']);
+        // Gender restriction: maternity leave strictly for female staff
+        $isMaternity = ($leaveType->id == 3 || stripos($leaveType->leaveType, 'maternity') !== false);
+        $staffGender = strtolower(trim($employee->gender ?? ''));
+        if ($isMaternity && $staffGender !== 'female' && $staffGender !== 'f') {
+            return response()->json(['status' => 'error', 'message' => 'Maternity leave is strictly for female staff and cannot be captured for male staff.']);
         }
 
         $totalAllowed = $leaveType->days;
@@ -301,6 +304,16 @@ class HrLeaveApiController extends Controller
         $leaveType = DB::table('tblleave_type')->where('id', $request->leave_type)->first();
         if (!$leaveType) {
             return response()->json(['status' => 'error', 'message' => 'Leave type not found'], 404);
+        }
+
+        // Gender restriction: maternity leave strictly for female staff
+        $isMaternity = ($leaveType->id == 3 || stripos($leaveType->leaveType, 'maternity') !== false);
+        $staffGender = strtolower(trim($employee->gender ?? ''));
+        if ($isMaternity && $staffGender !== 'female' && $staffGender !== 'f') {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Maternity leave is strictly for female staff and cannot be captured for male staff.'
+            ]);
         }
 
         $totalAllowed = $leaveType->days;
@@ -455,9 +468,11 @@ class HrLeaveApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Employee not found.']);
         }
 
-        // Gender restriction: maternity leave (id == 3) strictly for female staff
-        if ($leaveType->id == 3 && strtolower($employee->gender) !== 'female') {
-            return response()->json(['status' => 'error', 'message' => 'You are not eligible for maternity leave.']);
+        // Gender restriction: maternity leave strictly for female staff
+        $isMaternity = ($leaveType->id == 3 || stripos($leaveType->leaveType, 'maternity') !== false);
+        $staffGender = strtolower(trim($employee->gender ?? ''));
+        if ($isMaternity && $staffGender !== 'female' && $staffGender !== 'f') {
+            return response()->json(['status' => 'error', 'message' => 'Maternity leave is strictly for female staff and cannot be captured for male staff.']);
         }
 
         // Check for any OTHER pending application of this leave type (excluding this one)

@@ -53,18 +53,6 @@ class CoopAssetFinanceDeductionSetupApiController extends Controller
 
             $employee = $ctx['employee'];
 
-            if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
-                // Admins see all setups
-            } elseif ($employee && $employee->is_hod == 1) {
-                // HOD sees department staff setups
-                $query->where('p.departmentID', $employee->departmentID);
-            } elseif ($employee) {
-                // Regular staff see only their own
-                $query->where('cafds.staffId', $employee->ID);
-            } else {
-                $query->where('cafds.id', 0); // fallback empty
-            }
-
             $records = $query->orderBy('cafds.id', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $row->is_active = (int) $row->is_active;
@@ -113,13 +101,7 @@ class CoopAssetFinanceDeductionSetupApiController extends Controller
                 'is_active'        => 'nullable|integer|in:0,1',
             ]);
 
-            // Restriction check: Only Admins can modify settings
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status'  => 'error',
-                    'message' => 'Access denied: Only administrators can configure coop asset finance deduction setups.'
-                ], 403);
-            }
+
 
             $id             = $validated['id'] ?? null;
             $totalAmount    = (float) $validated['total_amount'];
@@ -187,12 +169,7 @@ class CoopAssetFinanceDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status'  => 'error',
-                    'message' => 'Access denied: Only administrators can toggle setup status.'
-                ], 403);
-            }
+
 
             $setup = DB::table('coop_asset_finance_deduction_setups')->where('id', $id)->first();
             if (!$setup) {
@@ -231,12 +208,7 @@ class CoopAssetFinanceDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status'  => 'error',
-                    'message' => 'Access denied: Only administrators can delete setups.'
-                ], 403);
-            }
+
 
             $exists = DB::table('coop_asset_finance_deduction_setups')->where('id', $id)->exists();
             if (!$exists) {
@@ -305,12 +277,7 @@ class CoopAssetFinanceDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json([
-                    'status'  => 'error',
-                    'message' => 'Access denied: Only administrators can import settings.'
-                ], 403);
-            }
+
 
             $request->validate([
                 'file' => 'required|file|mimes:xlsx,xls,csv'

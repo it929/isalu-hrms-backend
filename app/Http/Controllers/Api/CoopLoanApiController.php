@@ -31,15 +31,24 @@ class CoopLoanApiController extends Controller
             $query = DB::table('tblper')
                 ->where('rank', '!=', 2)
                 ->where('staff_status', 1)
-                ->select('ID as id', 'fileNo', 'surname', 'first_name', 'othernames')
-                ->orderBy('surname', 'asc');
+                ->leftJoin('tbldepartment', 'tblper.departmentID', '=', 'tbldepartment.id')
+                ->select(
+                    'tblper.ID as id', 
+                    'tblper.fileNo', 
+                    'tblper.surname', 
+                    'tblper.first_name', 
+                    'tblper.othernames',
+                    'tblper.gender',
+                    'tbldepartment.department'
+                )
+                ->orderBy('tblper.surname', 'asc');
 
             // Non-admins can only select themselves
             if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
                 if ($ctx['employee']) {
-                    $query->where('ID', $ctx['employee']->ID);
+                    $query->where('tblper.ID', $ctx['employee']->ID);
                 } else {
-                    $query->where('ID', 0); // fallback to empty
+                    $query->where('tblper.ID', 0); // fallback to empty
                 }
             }
 
@@ -49,8 +58,11 @@ class CoopLoanApiController extends Controller
                     return [
                         'id' => $row->id,
                         'fileNo' => $row->fileNo ?? '',
+                        'staffID' => $row->fileNo ?? (string)$row->id,
                         'name' => $fullName,
                         'label' => $fullName,
+                        'gender' => strtolower(trim($row->gender ?? '')),
+                        'department' => $row->department ?? '',
                     ];
                 });
 

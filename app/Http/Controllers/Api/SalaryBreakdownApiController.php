@@ -139,6 +139,7 @@ class SalaryBreakdownApiController extends Controller
                     'p.othernames',
                     'p.email',
                     'p.phone',
+                    'p.doj',
                     'p.AccNo as account_number',
                     'bl.bank as bank_name',
                     'd.department',
@@ -233,6 +234,66 @@ class SalaryBreakdownApiController extends Controller
                 // Ignore if not present
             }
 
+            // Fetch staff bonuses and custom allowances from staff_bonuses_and_allowances
+            $totalBonuses = 0.00;
+            $bonusesList = [];
+            $totalCustomAllowances = 0.00;
+            $customAllowancesList = [];
+
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('staff_bonuses_and_allowances')) {
+                    $staffBA = DB::table('staff_bonuses_and_allowances')
+                        ->where('staffId', $staffId)
+                        ->where('is_active', 1)
+                        ->where(function($q) use ($currentMonthStr) {
+                            $q->where(function($sq) use ($currentMonthStr) {
+                                $sq->where('frequency', 'one_time')
+                                   ->where('start_month', $currentMonthStr);
+                            })->orWhere(function($sq) use ($currentMonthStr) {
+                                $sq->where('frequency', 'recurring')
+                                   ->where('start_month', '<=', $currentMonthStr)
+                                   ->where(function($sub) use ($currentMonthStr) {
+                                       $sub->whereNull('end_month')
+                                           ->orWhere('end_month', '')
+                                           ->orWhere('end_month', '>=', $currentMonthStr);
+                                   });
+                            });
+                        })
+                        ->get();
+
+                    foreach ($staffBA as $item) {
+                        $amt = (float)$item->amount;
+                        if ($item->type === 'bonus') {
+                            $totalBonuses += $amt;
+                            $bonusesList[] = [
+                                'id' => $item->id,
+                                'title' => $item->title,
+                                'category' => $item->category,
+                                'amount' => $amt,
+                                'frequency' => $item->frequency,
+                                'start_month' => $item->start_month,
+                                'end_month' => $item->end_month,
+                                'notes' => $item->notes,
+                            ];
+                        } else {
+                            $totalCustomAllowances += $amt;
+                            $customAllowancesList[] = [
+                                'id' => $item->id,
+                                'title' => $item->title,
+                                'category' => $item->category,
+                                'amount' => $amt,
+                                'frequency' => $item->frequency,
+                                'start_month' => $item->start_month,
+                                'end_month' => $item->end_month,
+                                'notes' => $item->notes,
+                            ];
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Ignore if not present
+            }
+
             $grossPay = $totalBasicAllowances + $totalEarningVars;
 
             // --- Deductions Breakdown ---
@@ -270,15 +331,14 @@ class SalaryBreakdownApiController extends Controller
                     $annualTax += $taxableRemaining * 0.25;
                 }
             }
-            $payeTax = round($annualTax / 12.0, 2);
+            $fullMonthlyTax = round($annualTax / 12.0, 2);
+            $payeTax = $fullMonthlyTax;
 
             // 2. Pension
-            $pension = 0.00;
             $isPensionActive = ($struct && $struct->pen_act == 1);
-            if ($isPensionActive) {
-                $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
-                $pension = round(($totalBasicAllowances * 0.5) * $rate, 2);
-            }
+            $pensionRatePercent = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
+            $fullMonthlyPension = $isPensionActive ? round(($totalBasicAllowances * 0.5) * $pensionRatePercent, 2) : 0.00;
+            $pension = $fullMonthlyPension;
 
             // 3. Retention
             $retention = 0.00;
@@ -483,6 +543,18 @@ class SalaryBreakdownApiController extends Controller
                 // Ignore if LOA table is not available
             }
 
+            // Check if employee joined mid-month (doj)
+            $dojDaysDeducted = 0;
+            if (!empty($staff->doj)) {
+                try {
+                    $dojDate = \Carbon\Carbon::parse($staff->doj);
+                    if ($dojDate->year === $year && $dojDate->month === $month) {
+                        $daysBefore = max(0, min(30, $dojDate->day - 1));
+                        $dojDaysDeducted = $daysBefore;
+                    }
+                } catch (\Throwable $e) { /* ignore */ }
+            }
+
             if ($isComputed) {
                 $basic = (float)$computedRecord->basic;
                 $housing = (float)$computedRecord->housing;
@@ -514,8 +586,13 @@ class SalaryBreakdownApiController extends Controller
                 $paidDays = isset($computedRecord->paid_days) ? (int)$computedRecord->paid_days : 30;
                 $loaDays = max(0, 30 - $paidDays);
             } else {
+                $paidDays = max(0, 30 - $loaDays - $dojDaysDeducted);
                 $leaveOfAbsenceDeduct = ($grossPay / 30.0) * $loaDays;
-                $paidDays = max(0, 30 - $loaDays);
+
+                // Method 1: Prorate Monthly PAYE Tax by Paid Days / 30
+                $payeTax = round($fullMonthlyTax * ($paidDays / 30.0), 2);
+                // Pension is calculated based on full gross (not prorated)
+                $pension = $fullMonthlyPension;
 
                 $totalDeductions = $payeTax + $pension + $retention + $iouSum + $medicalLoanDeduct + $coopLoanDeduct +
                                    $coopSavingsDeduct + $coopAssetDeduct + $surchargeDeduct + $absencePenaltyDeduct +
@@ -557,9 +634,13 @@ class SalaryBreakdownApiController extends Controller
                     'utility_allowance' => $utility,
                     'meal_allowance' => $meal,
                     'total_basic_allowances' => $totalBasicAllowances,
+                    'bonuses' => $bonusesList,
+                    'total_bonuses' => round($totalBonuses, 2),
+                    'custom_allowances' => $customAllowancesList,
+                    'total_custom_allowances' => round($totalCustomAllowances, 2),
                     'earning_variables' => $earningVarsList,
                     'total_earning_vars' => $totalEarningVars,
-                    'gross_pay' => $grossPay,
+                    'gross_pay' => round($grossPay, 2),
                 ],
                 'deductions' => [
                     'paye_tax' => [
@@ -1281,6 +1362,7 @@ class SalaryBreakdownApiController extends Controller
         $allStaff = $staffQuery->select([
             'p.ID as id',
             'p.fileNo as file_no',
+            'p.doj',
             DB::raw("CONCAT(p.surname, ' ', p.first_name, ' ', COALESCE(p.othernames, '')) as name"),
             'dept.department',
             'des.designation',
@@ -1308,6 +1390,42 @@ class SalaryBreakdownApiController extends Controller
                 foreach ($eVars as $ev) {
                     $sid = $ev->staffID;
                     $earningVarsByStaff[$sid] = ($earningVarsByStaff[$sid] ?? 0.00) + (float)$ev->amount;
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
+
+        // 4b. Fetch staff bonuses and custom allowances from staff_bonuses_and_allowances
+        $bonusesByStaff = [];
+        $customAllowancesByStaff = [];
+        if (\Illuminate\Support\Facades\Schema::hasTable('staff_bonuses_and_allowances')) {
+            try {
+                $allBA = DB::table('staff_bonuses_and_allowances')
+                    ->whereIn('staffId', $staffIds)
+                    ->where('is_active', 1)
+                    ->where(function($q) use ($currentMonthStr) {
+                        $q->where(function($sq) use ($currentMonthStr) {
+                            $sq->where('frequency', 'one_time')
+                               ->where('start_month', $currentMonthStr);
+                        })->orWhere(function($sq) use ($currentMonthStr) {
+                            $sq->where('frequency', 'recurring')
+                               ->where('start_month', '<=', $currentMonthStr)
+                               ->where(function($sub) use ($currentMonthStr) {
+                                   $sub->whereNull('end_month')
+                                       ->orWhere('end_month', '')
+                                       ->orWhere('end_month', '>=', $currentMonthStr);
+                               });
+                        });
+                    })
+                    ->get();
+
+                foreach ($allBA as $item) {
+                    $sid = $item->staffId;
+                    $amt = (float)$item->amount;
+                    if ($item->type === 'bonus') {
+                        $bonusesByStaff[$sid] = ($bonusesByStaff[$sid] ?? 0.00) + $amt;
+                    } else {
+                        $customAllowancesByStaff[$sid] = ($customAllowancesByStaff[$sid] ?? 0.00) + $amt;
+                    }
                 }
             } catch (\Throwable $e) { /* ignore */ }
         }
@@ -1433,7 +1551,23 @@ class SalaryBreakdownApiController extends Controller
 
             $basicAllowances = $basic + $housing + $transport + $medical + $utility + $meal;
             $varAllowances = $earningVarsByStaff[$sid] ?? 0.00;
+            $bonuses = $bonusesByStaff[$sid] ?? 0.00;
+            $customAllowances = $customAllowancesByStaff[$sid] ?? 0.00;
             $grossPay = $basicAllowances + $varAllowances;
+
+            // Check if employee joined mid-month (doj)
+            $loaDays = $loaDaysByStaff[$sid] ?? 0;
+            $dojDaysDeducted = 0;
+            if (!empty($staff->doj)) {
+                try {
+                    $dojDate = \Carbon\Carbon::parse($staff->doj);
+                    if ($dojDate->year === $year && $dojDate->month === $month) {
+                        $daysBefore = max(0, min(30, $dojDate->day - 1));
+                        $dojDaysDeducted = $daysBefore;
+                    }
+                } catch (\Throwable $e) { /* ignore */ }
+            }
+            $paidDays = max(0, 30 - $loaDays - $dojDaysDeducted);
 
             // PAYE Tax (Nigeria 2025/2026 progressive bands)
             $annualGross = $declareSalary * 12.0;
@@ -1468,9 +1602,11 @@ class SalaryBreakdownApiController extends Controller
                     $annualTax += $taxableRemaining * 0.25;
                 }
             }
-            $payeTax = round($annualTax / 12.0, 2);
+            $fullMonthlyTax = round($annualTax / 12.0, 2);
+            // Method 1: Prorate Monthly PAYE Tax by Paid Days / 30
+            $payeTax = round($fullMonthlyTax * ($paidDays / 30.0), 2);
 
-            // Pension
+            // Pension (calculated on full basic allowances / gross, not prorated)
             $pension = 0.00;
             if ($penAct == 1) {
                 $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
@@ -1546,7 +1682,6 @@ class SalaryBreakdownApiController extends Controller
             $otherDeduct = $othSetup ? min((float)$othSetup->monthly_deduction, $othBal) : 0.00;
 
             // Leave of Absence
-            $loaDays = $loaDaysByStaff[$sid] ?? 0;
             $leaveOfAbsence = round(($grossPay / 30.0) * $loaDays, 2);
 
             $totalDeductions = round(
@@ -1578,6 +1713,8 @@ class SalaryBreakdownApiController extends Controller
                 'utility_allowance' => $utility,
                 'meal_allowance' => $meal,
                 'variable_allowances' => round($varAllowances, 2),
+                'bonuses' => round($bonuses, 2),
+                'custom_allowances' => round($customAllowances, 2),
                 'gross_pay' => round($grossPay, 2),
                 'declare_salary' => round($declareSalary, 2),
                 'paye_tax' => $payeTax,
@@ -1598,7 +1735,7 @@ class SalaryBreakdownApiController extends Controller
                 'bank_name' => $staff->bank_name ?? '—',
                 'account_number' => $staff->account_number ?? '—',
                 'payer_id' => $staff->payer_id ?? '—',
-                'paid_days' => max(0, 30 - $loaDays),
+                'paid_days' => $paidDays,
                 'days_absent' => $loaDays,
                 'revolving_loan_bal' => $revolvingLoanBal,
                 'coop_contr' => $coopContr,
