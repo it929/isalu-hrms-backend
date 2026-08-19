@@ -1243,7 +1243,10 @@ class SalaryBreakdownApiController extends Controller
                 $hasPayerIdPc ? 'pc.payer_id' : ($hasPayerIdTblper ? 'p.payer_id' : DB::raw("'' as payer_id")),
             ];
 
-            $rows = $query->select($selectFields)->orderBy('p.surname', 'asc')->get();
+            $rows = $query->select($selectFields)
+                ->orderBy('dept.department', 'asc')
+                ->orderBy('p.surname', 'asc')
+                ->get();
 
             $staffIds = $rows->pluck('id')->toArray();
             $loanBals = \Illuminate\Support\Facades\Schema::hasTable('loan_deduction_setups') ? DB::table('loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray() : [];
@@ -1307,7 +1310,10 @@ class SalaryBreakdownApiController extends Controller
                     'coop_asset_fin' => $coopAssetFin,
                     'medical_debt' => $medDebt,
                 ];
-            });
+            })->sortBy([
+                ['department', 'asc'],
+                ['name', 'asc'],
+            ], SORT_NATURAL | SORT_FLAG_CASE)->values();
 
             $summary = [
                 'total_staff' => $mapped->count(),
@@ -1318,7 +1324,7 @@ class SalaryBreakdownApiController extends Controller
             ];
 
             return [
-                'records' => $mapped->values()->toArray(),
+                'records' => $mapped->toArray(),
                 'summary' => $summary,
                 'period' => [
                     'month' => $month,
@@ -1369,7 +1375,10 @@ class SalaryBreakdownApiController extends Controller
             'p.AccNo as account_number',
             'bl.bank as bank_name',
             $hasPayerIdTblper ? 'p.payer_id' : DB::raw("'' as payer_id"),
-        ])->orderBy('p.surname', 'asc')->get();
+        ])
+        ->orderBy('dept.department', 'asc')
+        ->orderBy('p.surname', 'asc')
+        ->get();
 
         $staffIds = $allStaff->pluck('id')->toArray();
 
@@ -1746,7 +1755,10 @@ class SalaryBreakdownApiController extends Controller
             ];
         }
 
-        $calcCollection = collect($calculatedRows);
+        $calcCollection = collect($calculatedRows)->sortBy([
+            ['department', 'asc'],
+            ['name', 'asc'],
+        ], SORT_NATURAL | SORT_FLAG_CASE)->values();
 
         $summary = [
             'total_staff' => $calcCollection->count(),
@@ -1757,7 +1769,7 @@ class SalaryBreakdownApiController extends Controller
         ];
 
         return [
-            'records' => $calculatedRows,
+            'records' => $calcCollection->toArray(),
             'summary' => $summary,
             'period' => [
                 'month' => $month,
