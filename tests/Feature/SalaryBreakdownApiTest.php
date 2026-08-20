@@ -41,6 +41,17 @@ class SalaryBreakdownApiTest extends TestCase
             ]
         );
 
+        // Ensure coop savings setup exists
+        DB::table('coop_savings_setups')->updateOrInsert(
+            ['staffId' => $user->ID],
+            [
+                'monthly_saving' => 5000.00,
+                'saving_balance' => 45000.00,
+                'start_month' => '2020-01',
+                'is_active' => 1
+            ]
+        );
+
         $headers = ['X-User-Id' => $user->UserID ?? 1];
 
         // 1. Test getStaffList endpoint
@@ -48,8 +59,8 @@ class SalaryBreakdownApiTest extends TestCase
         $staffListResponse->assertStatus(200)
             ->assertJson(['status' => 'success']);
 
-        // 2. Test getBreakdown endpoint for active month
-        $response = $this->getJson('/api/nextjs/payroll/salary-breakdown?staff_id=' . $user->ID, $headers);
+        // 2. Test getBreakdown endpoint for pre-compute period
+        $response = $this->getJson('/api/nextjs/payroll/salary-breakdown?staff_id=' . $user->ID . '&month=12&year=2028', $headers);
         $response->assertStatus(200)
             ->assertJson(['status' => 'success'])
             ->assertJsonStructure([
@@ -57,12 +68,16 @@ class SalaryBreakdownApiTest extends TestCase
                 'staff' => ['id', 'file_no', 'name', 'department', 'designation'],
                 'period' => ['month', 'year', 'month_name', 'period_str', 'is_computed'],
                 'earnings' => ['basic_salary', 'housing_allowance', 'transport_allowance', 'medical_allowance', 'utility_allowance', 'meal_allowance', 'gross_pay'],
-                'deductions' => ['paye_tax', 'pension', 'retention', 'iou', 'medical_loan', 'coop_loan', 'total_deductions'],
+                'deductions' => ['paye_tax', 'pension', 'retention', 'iou', 'medical_loan', 'coop_loan', 'coop_savings', 'total_deductions'],
+                'balances' => ['coop_savings_balance', 'coop_loan_balance', 'coop_asset_finance_balance', 'medical_loan_balance', 'regular_loan_balance'],
                 'summary' => ['gross_pay', 'total_deductions', 'net_pay', 'status']
             ]);
 
         $data = $response->json();
         $this->assertEquals(200000.00, $data['earnings']['gross_pay']);
+        $this->assertEquals(5000.00, $data['deductions']['coop_savings']['amount']);
+        $this->assertEquals(45000.00, $data['deductions']['coop_savings']['saving_balance']);
+        $this->assertEquals(45000.00, $data['balances']['coop_savings_balance']);
         $this->assertGreaterThanOrEqual(0, $data['summary']['net_pay']);
         $this->assertTrue($data['can_generate_all_staff']);
 
