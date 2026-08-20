@@ -395,12 +395,14 @@ class SalaryBreakdownApiController extends Controller
             $coopLoanDeduct = $coopLoanSetup ? min((float)$coopLoanSetup->monthly_deduction, (float)$coopLoanSetup->balance_remaining) : 0.00;
 
             // 7. Coop Savings Setup
-            $coopSavingsSetup = DB::table('coop_savings_setups')
+            $coopSavingsRecord = DB::table('coop_savings_setups')
                 ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->where('start_month', '<=', $currentMonthStr)
                 ->orderBy('id', 'desc')
                 ->first();
+            $coopSavingsBalance = $coopSavingsRecord ? (float)$coopSavingsRecord->saving_balance : 0.00;
+            $coopSavingsSetup = ($coopSavingsRecord && $coopSavingsRecord->is_active == 1 && $coopSavingsRecord->start_month <= $currentMonthStr)
+                ? $coopSavingsRecord
+                : null;
             $coopSavingsDeduct = $coopSavingsSetup ? (float)$coopSavingsSetup->monthly_saving : 0.00;
 
             // 8. Coop Asset Finance Setup
@@ -684,7 +686,10 @@ class SalaryBreakdownApiController extends Controller
                     ],
                     'coop_savings' => [
                         'amount' => $coopSavingsDeduct,
-                        'is_active' => ($coopSavingsDeduct > 0 || $coopSavingsSetup !== null),
+                        'balance' => $coopSavingsBalance,
+                        'saving_balance' => $coopSavingsBalance,
+                        'balance_remaining' => $coopSavingsBalance,
+                        'is_active' => ($coopSavingsDeduct > 0 || ($coopSavingsRecord && $coopSavingsRecord->is_active == 1) || $coopSavingsBalance > 0),
                         'label' => 'Cooperative Monthly Savings'
                     ],
                     'coop_asset_finance' => [
@@ -725,6 +730,13 @@ class SalaryBreakdownApiController extends Controller
                         'label' => 'Other Deductions'
                     ],
                     'total_deductions' => round($totalDeductions, 2)
+                ],
+                'balances' => [
+                    'coop_savings_balance' => $coopSavingsBalance,
+                    'coop_loan_balance' => $coopLoanSetup ? (float)$coopLoanSetup->balance_remaining : 0.00,
+                    'coop_asset_finance_balance' => $coopAssetSetup ? (float)$coopAssetSetup->balance_remaining : 0.00,
+                    'medical_loan_balance' => $medLoanSetup ? (float)$medLoanSetup->balance_remaining : 0.00,
+                    'regular_loan_balance' => $loanBalance,
                 ],
                 'summary' => [
                     'gross_pay' => round($grossPay, 2),
