@@ -56,19 +56,20 @@ class BankUpdateApiController extends Controller
     }
 
     /**
-     * Update bank details for an individual staff member.
+     * Update bank details and payer ID for an individual staff member.
      */
     public function updateIndividual(Request $request)
     {
         $ctx = $this->getUserContext($request);
-        if (!$ctx || !$ctx['isSuperAdmin']) {
-            return response()->json(['status' => 'error', 'message' => 'Super Admin privileges required.'], 403);
+        if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isFinanceStaff'])) {
+            return response()->json(['status' => 'error', 'message' => 'Administrative privileges required.'], 403);
         }
 
         $validator = Validator::make($request->all(), [
             'staff_id' => 'required|integer|exists:tblper,ID',
-            'bank_id' => 'required|integer|exists:tblbanklist,bankID',
-            'account_number' => 'required|string|max:50',
+            'bank_id' => 'nullable|integer|exists:tblbanklist,bankID',
+            'account_number' => 'nullable|string|max:50',
+            'payer_id' => 'nullable|string|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -80,17 +81,27 @@ class BankUpdateApiController extends Controller
         }
 
         try {
+            $updates = [
+                'updated_at' => now(),
+            ];
+
+            if ($request->has('bank_id')) {
+                $updates['bankID'] = $request->bank_id ?: null;
+            }
+            if ($request->has('account_number')) {
+                $updates['AccNo'] = $request->account_number ?: null;
+            }
+            if ($request->has('payer_id')) {
+                $updates['payer_id'] = $request->payer_id ?: null;
+            }
+
             DB::table('tblper')
                 ->where('ID', $request->staff_id)
-                ->update([
-                    'bankID' => $request->bank_id,
-                    'AccNo' => $request->account_number,
-                    'updated_at' => now(),
-                ]);
+                ->update($updates);
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Bank details updated successfully for the staff member.'
+                'message' => 'Staff account details and Payer ID updated successfully.'
             ]);
         } catch (\Throwable $th) {
             Log::error('BankUpdateApiController updateIndividual: ' . $th->getMessage());
@@ -104,8 +115,8 @@ class BankUpdateApiController extends Controller
     public function importBulk(Request $request)
     {
         $ctx = $this->getUserContext($request);
-        if (!$ctx || !$ctx['isSuperAdmin']) {
-            return response()->json(['status' => 'error', 'message' => 'Super Admin privileges required.'], 403);
+        if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isFinanceStaff'])) {
+            return response()->json(['status' => 'error', 'message' => 'Administrative privileges required.'], 403);
         }
 
         $request->validate([
@@ -227,6 +238,7 @@ class BankUpdateApiController extends Controller
                     'tblper.othernames',
                     'tbldepartment.department',
                     'tblbanklist.bank as bank_name',
+                    'tblper.bankID as bank_id',
                     'tblper.AccNo as account_number',
                     'tblper.payer_id'
                 )
@@ -234,13 +246,20 @@ class BankUpdateApiController extends Controller
                 ->get()
                 ->map(function ($row) {
                     $fullName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                    $accNo = trim((string)($row->account_number ?? ''));
+                    $payerId = trim((string)($row->payer_id ?? ''));
+
+                    $isAccValid = !empty($accNo) && $accNo !== '—' && $accNo !== '-' && $accNo !== '0' && !preg_match('/^0+$/', $accNo);
+                    $isPayerValid = !empty($payerId) && $payerId !== '—' && $payerId !== '-' && $payerId !== '0' && !preg_match('/^0+$/', $payerId);
+
                     return [
                         'id' => $row->id,
                         'name' => $fullName,
                         'department' => $row->department ?? '—',
                         'bank_name' => $row->bank_name ?? '—',
-                        'account_number' => $row->account_number ?? '—',
-                        'payer_id' => $row->payer_id ?? '—',
+                        'bank_id' => $row->bank_id,
+                        'account_number' => $isAccValid ? $accNo : '—',
+                        'payer_id' => $isPayerValid ? $payerId : '—',
                     ];
                 });
 

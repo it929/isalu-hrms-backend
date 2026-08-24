@@ -29,15 +29,27 @@ trait ResolveUserContextTrait
             return strtolower($role);
         })->toArray();
 
-        $isSuperAdmin = in_array(1, $roleIds) || in_array('super administrator', $roleNames);
+        $isSuperAdmin = in_array(1, $roleIds) || in_array('super administrator', $roleNames) || in_array('superadmin', $roleNames);
 
-        $adminStaff = in_array(48, $roleIds) || in_array('hr head', $roleNames);
+        $adminStaff = in_array(48, $roleIds) || in_array(68, $roleIds) || in_array('hr head', $roleNames) || in_array('head of hr', $roleNames);
 
-        $isAuditStaff = in_array(34, $roleIds) || in_array(35, $roleIds) || in_array('audit head', $roleNames) || in_array('audit', $roleNames) || in_array('auditor', $roleNames) || in_array('internal audit', $roleNames);
+        $isAuditStaff = in_array(34, $roleIds) || in_array(35, $roleIds) || in_array(70, $roleIds) || in_array('audit head', $roleNames) || in_array('head of audit', $roleNames);
 
-        $isFinanceStaff = in_array(36, $roleIds) || in_array(37, $roleIds) || in_array('finance head', $roleNames);
+        $isFinanceStaff = in_array(36, $roleIds) || in_array(37, $roleIds) || in_array(69, $roleIds) || in_array('finance head', $roleNames) || in_array('head of finance', $roleNames);
 
         $employee = DB::table('tblper')->where('UserID', $userId)->first();
+        if (!$employee && is_numeric($userId)) {
+            $employee = DB::table('tblper')->where('ID', (int)$userId)->first();
+        }
+        if (!$employee) {
+            $userRec = DB::table('users')->where('id', $userId)->first();
+            if ($userRec) {
+                $employee = DB::table('tblper')->where('fileNo', $userRec->username)->first();
+                if (!$employee && !empty($userRec->email)) {
+                    $employee = DB::table('tblper')->where('email', $userRec->email)->first();
+                }
+            }
+        }
 
         $isHod = $employee && $employee->is_hod == 1;
         $isDelegatedHod = false;
