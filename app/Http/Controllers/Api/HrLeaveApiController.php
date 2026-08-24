@@ -541,7 +541,9 @@ class HrLeaveApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
         }
 
-        if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
+        $isExecutive = $ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff'] || $ctx['isFinanceStaff'];
+
+        if ($isExecutive) {
             $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames')->get()->map(function($emp) {
                 $emp->has_uploaded_education = DB::table('tbleducations')
                     ->where('staffid', $emp->ID)
@@ -569,6 +571,8 @@ class HrLeaveApiController extends Controller
             'isSuperAdmin'  => $ctx['isSuperAdmin'],
             'isHod'         => $ctx['isHod'],
             'isAdminStaff'  => $ctx['isAdminStaff'],
+            'isAuditStaff'  => $ctx['isAuditStaff'],
+            'isFinanceStaff'=> $ctx['isFinanceStaff'],
             'employee'      => $employee,
         ]);
     }
@@ -600,9 +604,11 @@ class HrLeaveApiController extends Controller
             ->orderBy('leave_of_absent.id', 'DESC');
 
         $employee = $ctx['employee'];
+        $isExecutive = $ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff'] || $ctx['isFinanceStaff'];
 
-        if ($ctx['isSuperAdmin']) {
-            // Super Admin sees all records
+        if ($isExecutive) {
+            // Super Admin, HR Head, Audit Head, and Finance Head see all records of all staff
+            $records = $baseQuery->get();
         } else {
             $baseQuery->where(function ($query) use ($ctx, $employee) {
                 $hasCondition = false;
@@ -613,17 +619,7 @@ class HrLeaveApiController extends Controller
                     $hasCondition = true;
                 }
 
-                // 2. HR Head sees HOD-approved (1) or finalized (2, 4) records
-                if ($ctx['isAdminStaff']) {
-                    if ($hasCondition) {
-                        $query->orWhereIn('leave_of_absent.status', [1, 2, 4]);
-                    } else {
-                        $query->whereIn('leave_of_absent.status', [1, 2, 4]);
-                    }
-                    $hasCondition = true;
-                }
-
-                // 3. HOD sees records of staff in their department
+                // 2. HOD sees records of staff in their department
                 if ($employee && $ctx['isHod']) {
                     $hodDeptId = ($ctx['isDelegatedHod'] ?? false) ? $ctx['delegated_department_id'] : $employee->departmentID;
                     if ($hasCondition) {
@@ -639,6 +635,7 @@ class HrLeaveApiController extends Controller
                     $query->where('leave_of_absent.id', 0);
                 }
             });
+            $records = $baseQuery->get();
         }
 
         $records = $baseQuery->get();

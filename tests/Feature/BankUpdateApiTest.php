@@ -82,6 +82,7 @@ class BankUpdateApiTest extends TestCase
             'staff_id' => $staffId,
             'bank_id' => $bankId2,
             'account_number' => '1234567890',
+            'payer_id' => 'PAY-TEST-9988',
         ], $adminHeaders);
         $response->assertStatus(200)
             ->assertJson([
@@ -92,6 +93,7 @@ class BankUpdateApiTest extends TestCase
             'ID' => $staffId,
             'bankID' => $bankId2,
             'AccNo' => '1234567890',
+            'payer_id' => 'PAY-TEST-9988',
         ]);
 
         // 5. Test bulk CSV import (unauthorized non-admin)
@@ -135,5 +137,16 @@ class BankUpdateApiTest extends TestCase
         ]);
 
         unlink($tempFile);
+
+        // 7. Test getBankDetailsList
+        $listResponse = $this->getJson('/api/nextjs/payroll/bank-updates/list', $adminHeaders);
+        $listResponse->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+            ]);
+        $this->assertNotEmpty($listResponse->json('staff'));
+        $firstStaff = collect($listResponse->json('staff'))->firstWhere('id', $staffId);
+        $this->assertEquals('PAY-TEST-9988', $firstStaff['payer_id']);
+        $this->assertEquals('0987654321', $firstStaff['account_number']);
     }
 }

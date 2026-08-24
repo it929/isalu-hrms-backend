@@ -23,9 +23,42 @@ class MedicalLoanEntryApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
+            $userId = $request->header('X-User-Id');
             $search = trim($request->input('search', ''));
             $monthFilter = trim($request->input('month', '')); // e.g. YYYY-MM
+            $fromDate = trim($request->input('from_date', '')); // e.g. YYYY-MM-DD
+            $toDate = trim($request->input('to_date', ''));     // e.g. YYYY-MM-DD
             $staffIdFilter = $request->input('staffId', null);
+
+            // Fetch explicit roles from assign_user_role for this user
+            $userRoles = DB::table('assign_user_role')
+                ->leftJoin('user_role', 'assign_user_role.roleID', '=', 'user_role.roleID')
+                ->where('assign_user_role.userID', $userId)
+                ->select('assign_user_role.roleID', 'user_role.rolename')
+                ->get();
+
+            $roleIds = $userRoles->pluck('roleID')->map(fn($id) => (int)$id)->toArray();
+            $roleNames = $userRoles->pluck('rolename')->filter()->map(fn($r) => strtolower(trim($r)))->toArray();
+
+            // Strictly: Super Admin, HR Head, Audit Head, Finance Head
+            $isSuperAdmin = in_array(1, $roleIds) || in_array('super administrator', $roleNames) || in_array('superadmin', $roleNames);
+            $isHrHead = in_array(48, $roleIds) || in_array(68, $roleIds) || in_array('hr head', $roleNames) || in_array('head of hr', $roleNames);
+            $isAuditHead = in_array(34, $roleIds) || in_array(35, $roleIds) || in_array(70, $roleIds) || in_array('audit head', $roleNames) || in_array('head of audit', $roleNames);
+            $isFinanceHead = in_array(36, $roleIds) || in_array(37, $roleIds) || in_array(69, $roleIds) || in_array('finance head', $roleNames) || in_array('head of finance', $roleNames);
+
+            $isPrivileged = $isSuperAdmin || $isHrHead || $isAuditHead || $isFinanceHead;
+            $employee = $ctx['employee'];
+
+            // Access Control: Non-privileged staff members ONLY see their own records
+            $effectiveStaffId = null;
+            if (!$isPrivileged) {
+                $effectiveStaffId = $employee ? $employee->ID : (is_numeric($userId) ? (int)$userId : -1);
+                $staffIdFilter = $effectiveStaffId;
+            } else {
+                if (!empty($staffIdFilter) && is_numeric($staffIdFilter)) {
+                    $effectiveStaffId = intval($staffIdFilter);
+                }
+            }
 
             $query = DB::table('medical_loan_entries as mle')
                 ->join('tblper as p', 'p.ID', '=', 'mle.staffId')
@@ -56,8 +89,16 @@ class MedicalLoanEntryApiController extends Controller
                 $query->where('mle.loan_date', 'like', "{$monthFilter}%");
             }
 
-            if ($staffIdFilter) {
-                $query->where('mle.staffId', intval($staffIdFilter));
+            if ($fromDate !== '') {
+                $query->where('mle.loan_date', '>=', $fromDate);
+            }
+
+            if ($toDate !== '') {
+                $query->where('mle.loan_date', '<=', $toDate);
+            }
+
+            if ($effectiveStaffId !== null) {
+                $query->where('mle.staffId', $effectiveStaffId);
             }
 
             $records = $query->orderBy('mle.loan_date', 'desc')
@@ -77,22 +118,45 @@ class MedicalLoanEntryApiController extends Controller
                     return $row;
                 });
 
-            // Calculate overall summary metrics
-            $totalDisbursed = (float) DB::table('medical_loan_entries')->sum('amount');
-            $totalEntries = DB::table('medical_loan_entries')->count();
+            // Calculate overall and filtered summary metrics
+            $totalDisbursed = (float) $records->sum('amount');
+            $totalEntries = $records->count();
             
             $totalOutstanding = 0.00;
             $activeStaffCount = 0;
-            if (\Illuminate\Support\Facades\Schema::hasTable('medical_loan_deduction_setups')) {
-                $totalOutstanding = (float) DB::table('medical_loan_deduction_setups')
-                    ->where('is_active', 1)
-                    ->where('balance_remaining', '>', 0)
-                    ->sum('balance_remaining');
+            $staffSetup = null;
 
-                $activeStaffCount = DB::table('medical_loan_deduction_setups')
-                    ->where('is_active', 1)
-                    ->where('balance_remaining', '>', 0)
-                    ->count();
+            if (\Illuminate\Support\Facades\Schema::hasTable('medical_loan_deduction_setups')) {
+                if ($staffIdFilter) {
+                    $setupRow = DB::table('medical_loan_deduction_setups')
+                        ->where('staffId', intval($staffIdFilter))
+                        ->first();
+
+                    if ($setupRow) {
+                        $staffSetup = [
+                            'id' => $setupRow->id,
+                            'loan_amount' => (float) $setupRow->loan_amount,
+                            'balance_remaining' => (float) $setupRow->balance_remaining,
+                            'monthly_deduction' => (float) $setupRow->monthly_deduction,
+                            'duration_months' => (int) $setupRow->duration_months,
+                            'start_month' => $setupRow->start_month,
+                            'end_month' => $setupRow->end_month,
+                            'is_active' => (int) $setupRow->is_active,
+                        ];
+                        $totalOutstanding = (float) $setupRow->balance_remaining;
+                        $activeStaffCount = $setupRow->is_active && $setupRow->balance_remaining > 0 ? 1 : 0;
+                    }
+                } else {
+                    $totalOutstanding = (float) DB::table('medical_loan_deduction_setups')
+                        ->where('is_active', 1)
+                        ->where('balance_remaining', '>', 0)
+                        ->sum('balance_remaining');
+
+                    $activeStaffCount = DB::table('medical_loan_deduction_setups')
+                        ->where('is_active', 1)
+                        ->where('balance_remaining', '>', 0)
+                        ->count();
+                }
             }
 
             return response()->json([
@@ -104,11 +168,20 @@ class MedicalLoanEntryApiController extends Controller
                     'total_outstanding' => $totalOutstanding,
                     'active_staff_count' => $activeStaffCount,
                 ],
-                'isSuperAdmin' => $ctx['isSuperAdmin'],
-                'isHod' => $ctx['isHod'],
-                'isAdminStaff' => $ctx['isAdminStaff'],
-                'isAuditStaff' => $ctx['isAuditStaff'],
-                'employee' => $ctx['employee'],
+                'staff_setup' => $staffSetup,
+                'filter' => [
+                    'from_date' => $fromDate ?: null,
+                    'to_date' => $toDate ?: null,
+                    'month' => $monthFilter ?: null,
+                    'staffId' => $staffIdFilter ? intval($staffIdFilter) : null,
+                ],
+                'isSuperAdmin' => $isSuperAdmin,
+                'isHod' => !empty($ctx['isHod']),
+                'isAdminStaff' => $isHrHead,
+                'isAuditStaff' => $isAuditHead,
+                'isFinanceStaff' => $isFinanceHead,
+                'isPrivileged' => $isPrivileged,
+                'employee' => $employee,
             ]);
         } catch (\Throwable $th) {
             Log::error('MedicalLoanEntryApiController index: ' . $th->getMessage());
