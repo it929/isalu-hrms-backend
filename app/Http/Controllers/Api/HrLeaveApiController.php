@@ -52,6 +52,43 @@ class HrLeaveApiController extends Controller
     }
 
     /**
+     * Check if an employee is eligible to apply for leave (minimum 1 year of service in the company).
+     */
+    private function checkLeaveEligibility($employee, $startDate): array
+    {
+        if (!$employee) {
+            return ['eligible' => false, 'message' => 'Employee record not found.'];
+        }
+
+        $employmentDate = $employee->doj 
+            ?: ($employee->appointment_date 
+            ?: ($employee->date_present_appointment 
+            ?: ($employee->resumption_date 
+            ?: ($employee->created_at ?: null))));
+
+        if ($employmentDate) {
+            try {
+                $joined = Carbon::parse($employmentDate);
+                $start = Carbon::parse($startDate);
+                $eligibleFrom = (clone $joined)->addYear();
+
+                if ($start->lt($eligibleFrom)) {
+                    return [
+                        'eligible' => false,
+                        'message'  => "Cannot apply for leave: Employee must have worked for at least one (1) full year in the company before becoming eligible for leave. (Date of Employment: {$joined->format('d M, Y')}, Eligible From: {$eligibleFrom->format('d M, Y')})",
+                        'employment_date' => $joined->format('d M, Y'),
+                        'eligible_from'   => $eligibleFrom->format('d M, Y'),
+                    ];
+                }
+            } catch (\Throwable $e) {
+                // If date parsing fails, allow fallback
+            }
+        }
+
+        return ['eligible' => true];
+    }
+
+    /**
      * GET /api/nextjs/hr/apply-leave
      * Returns leave types, employees list, and roles context instantly.
      */
@@ -64,26 +101,42 @@ class HrLeaveApiController extends Controller
 
         $leaveTypes = DB::table('tblleave_type')->orderBy('id', 'DESC')->get();
         
+        $enrichEmp = function($emp) {
+            $emp->has_uploaded_education = DB::table('tbleducations')
+                ->where('staffid', $emp->ID)
+                ->whereNotNull('document')
+                ->where('document', '!=', '')
+                ->exists();
+
+            $empDate = $emp->doj ?: ($emp->appointment_date ?: ($emp->created_at ?: null));
+            if ($empDate) {
+                try {
+                    $joined = Carbon::parse($empDate);
+                    $eligibleFrom = (clone $joined)->addYear();
+                    $emp->employment_date = $joined->format('d M, Y');
+                    $emp->eligible_from = $eligibleFrom->format('d M, Y');
+                    $emp->is_leave_eligible = $eligibleFrom->lte(Carbon::now());
+                } catch (\Throwable $e) {
+                    $emp->is_leave_eligible = true;
+                }
+            } else {
+                $emp->is_leave_eligible = true;
+            }
+            return $emp;
+        };
+
         if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
-            $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'gender')->get()->map(function($emp) {
-                $emp->has_uploaded_education = DB::table('tbleducations')
-                    ->where('staffid', $emp->ID)
-                    ->whereNotNull('document')
-                    ->where('document', '!=', '')
-                    ->exists();
-                return $emp;
-            });
+            $employees = DB::table('tblper')
+                ->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'gender', 'doj', 'appointment_date', 'created_at')
+                ->get()
+                ->map($enrichEmp);
         } else {
-            $employees  = collect();
+            $employees = collect();
         }
 
         $employee = $ctx['employee'];
         if ($employee) {
-            $employee->has_uploaded_education = DB::table('tbleducations')
-                ->where('staffid', $employee->ID)
-                ->whereNotNull('document')
-                ->where('document', '!=', '')
-                ->exists();
+            $employee = $enrichEmp($employee);
         }
 
         return response()->json([
@@ -220,7 +273,16 @@ class HrLeaveApiController extends Controller
         // Validate employee
         $employee = DB::table('tblper')->where('ID', $request->employee_id)->first();
         if (!$employee) {
-            return response()->json(['status' => 'error', 'message' => 'Employee not found.']);
+            return response()->json(['status' => 'error', 'message' => 'Employee not found.'], 404);
+        }
+
+        // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for leave
+        $eligibility = $this->checkLeaveEligibility($employee, $request->start_date);
+        if (!$eligibility['eligible']) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $eligibility['message'],
+            ], 422);
         }
 
         // Check for any pending application (status 0) of the same leave type for this employee
@@ -304,6 +366,17 @@ class HrLeaveApiController extends Controller
         $leaveType = DB::table('tblleave_type')->where('id', $request->leave_type)->first();
         if (!$leaveType) {
             return response()->json(['status' => 'error', 'message' => 'Leave type not found'], 404);
+        }
+
+        // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for leave
+        $eligibility = $this->checkLeaveEligibility($employee, $request->start_date);
+        if (!$eligibility['eligible']) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $eligibility['message'],
+                'remaining_days' => 0,
+                'end_date' => null,
+            ], 422);
         }
 
         // Gender restriction: maternity leave strictly for female staff
@@ -465,7 +538,16 @@ class HrLeaveApiController extends Controller
         // Validate employee
         $employee = DB::table('tblper')->where('ID', $request->employee_id)->first();
         if (!$employee) {
-            return response()->json(['status' => 'error', 'message' => 'Employee not found.']);
+            return response()->json(['status' => 'error', 'message' => 'Employee not found.'], 404);
+        }
+
+        // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for leave
+        $eligibility = $this->checkLeaveEligibility($employee, $request->start_date);
+        if (!$eligibility['eligible']) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $eligibility['message'],
+            ], 422);
         }
 
         // Gender restriction: maternity leave strictly for female staff
@@ -543,17 +625,49 @@ class HrLeaveApiController extends Controller
 
         $isExecutive = $ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff'] || $ctx['isFinanceStaff'];
 
+        $salaryMap = DB::table('salary_structures')->get()->keyBy('staffId');
+        $firstSalaryMap = DB::table('first_salary_structure')->get()->keyBy('staffId');
+
+        $calcSalary = function($staffId) use ($salaryMap, $firstSalaryMap) {
+            $struct = $salaryMap[$staffId] ?? null;
+            $monthlySalary = 0.00;
+            if ($struct) {
+                $monthlySalary = (float)$struct->basic_salary +
+                                 (float)$struct->housing_allowance +
+                                 (float)$struct->transport_allowance +
+                                 (float)$struct->medical_allowance +
+                                 (float)$struct->utility_allowance +
+                                 (float)$struct->meal_allowance;
+                if ($monthlySalary <= 0 && (float)$struct->declare_salary > 0) {
+                    $monthlySalary = (float)$struct->declare_salary;
+                }
+            }
+            if ($monthlySalary <= 0) {
+                $first = $firstSalaryMap[$staffId] ?? null;
+                if ($first) {
+                    $monthlySalary = (float)$first->basic_salary +
+                                     (float)$first->housing_allowance +
+                                     (float)$first->transport_allowance +
+                                     (float)$first->medical_allowance +
+                                     (float)$first->utility_allowance +
+                                     (float)$first->meal_allowance;
+                }
+            }
+            return $monthlySalary;
+        };
+
         if ($isExecutive) {
-            $employees  = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames')->get()->map(function($emp) {
+            $employees = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames')->get()->map(function($emp) use ($calcSalary) {
                 $emp->has_uploaded_education = DB::table('tbleducations')
                     ->where('staffid', $emp->ID)
                     ->whereNotNull('document')
                     ->where('document', '!=', '')
                     ->exists();
+                $emp->monthly_salary = $calcSalary($emp->ID);
                 return $emp;
             });
         } else {
-            $employees  = collect();
+            $employees = collect();
         }
 
         $employee = $ctx['employee'];
@@ -563,6 +677,7 @@ class HrLeaveApiController extends Controller
                 ->whereNotNull('document')
                 ->where('document', '!=', '')
                 ->exists();
+            $employee->monthly_salary = $calcSalary($employee->ID);
         }
 
         return response()->json([
@@ -638,9 +753,11 @@ class HrLeaveApiController extends Controller
             $records = $baseQuery->get();
         }
 
-        $records = $baseQuery->get();
+        $staffIds = $records->pluck('staffId')->unique()->filter()->values();
+        $salaryMap = DB::table('salary_structures')->whereIn('staffId', $staffIds)->get()->keyBy('staffId');
+        $firstSalaryMap = DB::table('first_salary_structure')->whereIn('staffId', $staffIds)->get()->keyBy('staffId');
 
-        $records = $records->map(function ($r) {
+        $records = $records->map(function ($r) use ($salaryMap, $firstSalaryMap) {
             $start = Carbon::parse($r->start_date);
             $end   = Carbon::parse($r->end_date);
             
@@ -657,6 +774,42 @@ class HrLeaveApiController extends Controller
             } else {
                 $r->duration_days = $start->diffInDays($end) + 1;
             }
+
+            // Capture exact number of days in the month (e.g. 28, 29, 30, or 31 days)
+            $daysInMonth = $start->daysInMonth;
+            $r->days_in_month = $daysInMonth;
+            $r->month_name = $start->format('F Y');
+
+            // Calculate salary rate and deduction
+            $struct = $salaryMap[$r->staffId] ?? null;
+            $monthlySalary = 0.00;
+            if ($struct) {
+                $monthlySalary = (float)$struct->basic_salary +
+                                 (float)$struct->housing_allowance +
+                                 (float)$struct->transport_allowance +
+                                 (float)$struct->medical_allowance +
+                                 (float)$struct->utility_allowance +
+                                 (float)$struct->meal_allowance;
+                if ($monthlySalary <= 0 && (float)$struct->declare_salary > 0) {
+                    $monthlySalary = (float)$struct->declare_salary;
+                }
+            }
+            if ($monthlySalary <= 0) {
+                $first = $firstSalaryMap[$r->staffId] ?? null;
+                if ($first) {
+                    $monthlySalary = (float)$first->basic_salary +
+                                     (float)$first->housing_allowance +
+                                     (float)$first->transport_allowance +
+                                     (float)$first->medical_allowance +
+                                     (float)$first->utility_allowance +
+                                     (float)$first->meal_allowance;
+                }
+            }
+
+            $dailyRate = $daysInMonth > 0 ? round($monthlySalary / $daysInMonth, 2) : 0.00;
+            $r->monthly_salary = $monthlySalary;
+            $r->daily_rate = $dailyRate;
+            $r->estimated_deduction = round($dailyRate * $r->duration_days, 2);
             
             $r->date_applied  = Carbon::parse($r->created_at)->format('d M, Y');
             return $r;
@@ -696,7 +849,16 @@ class HrLeaveApiController extends Controller
             return response()->json([
                 'status'  => 'error',
                 'message' => 'You already have a pending leave of absence application that is waiting for approval.'
-            ]);
+            ], 422);
+        }
+
+        // Net Pay check: Leave of Absence deduction must not cause net pay to reach 0.00 or negative
+        $impact = $this->checkLoaNetPayImpact($request->employee_id, $request->start_date, $request->end_date);
+        if (!$impact['valid']) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $impact['message']
+            ], 422);
         }
 
         DB::table('leave_of_absent')->insert([
@@ -730,12 +892,21 @@ class HrLeaveApiController extends Controller
         }
 
         if ($record->status != 0) {
-            return response()->json(['status' => 'error', 'message' => 'This leave of absence application has already been processed and cannot be edited.']);
+            return response()->json(['status' => 'error', 'message' => 'This leave of absence application has already been processed and cannot be edited.'], 422);
         }
 
         $employee = DB::table('tblper')->where('ID', $request->employee_id)->first();
         if (!$employee) {
-            return response()->json(['status' => 'error', 'message' => 'Employee not found.']);
+            return response()->json(['status' => 'error', 'message' => 'Employee not found.'], 404);
+        }
+
+        // Net Pay check: Leave of Absence deduction must not cause net pay to reach 0.00 or negative
+        $impact = $this->checkLoaNetPayImpact($request->employee_id, $request->start_date, $request->end_date, $id);
+        if (!$impact['valid']) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $impact['message']
+            ], 422);
         }
 
         DB::table('leave_of_absent')->where('id', $id)->update([
@@ -821,5 +992,370 @@ class HrLeaveApiController extends Controller
         }
         DB::table('leave_of_absent')->where('id', $id)->update(['status' => 4]);
         return response()->json(['status' => 'success', 'message' => 'Leave of absence rejected by Admin.']);
+    }
+
+    /**
+     * Helper to validate that a proposed Leave of Absence does not reduce employee net pay to <= 0 in any month.
+     */
+    public function checkLoaNetPayImpact($staffId, $startDate, $endDate, $excludeLoaId = null)
+    {
+        $start = Carbon::parse($startDate);
+        $end = Carbon::parse($endDate);
+
+        $employee = DB::table('tblper')->where('ID', $staffId)->first();
+        if (!$employee) {
+            return ['valid' => true];
+        }
+
+        // Iterate through each month spanned by the start and end dates
+        $currentMonth = $start->copy()->startOfMonth();
+        $endMonth = $end->copy()->startOfMonth();
+
+        while ($currentMonth->lte($endMonth)) {
+            $year = (int)$currentMonth->year;
+            $month = (int)$currentMonth->month;
+            $daysInMonth = (int)$currentMonth->daysInMonth;
+            $monthName = $currentMonth->format('F Y');
+            $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+
+            $startOfMonth = $currentMonth->copy()->startOfMonth();
+            $endOfMonth = $currentMonth->copy()->endOfMonth();
+
+            // Calculate LOA days for the proposed application in this month
+            $overlapStart = $start->greaterThan($startOfMonth) ? $start : $startOfMonth;
+            $overlapEnd = $end->lessThan($endOfMonth) ? $end : $endOfMonth;
+
+            $proposedLoaDaysInMonth = 0;
+            if ($employee->office_shift == 1) {
+                $cur = $overlapStart->copy();
+                while ($cur->lte($overlapEnd)) {
+                    if (!$cur->isWeekend()) {
+                        $proposedLoaDaysInMonth++;
+                    }
+                    $cur->addDay();
+                }
+            } else {
+                $proposedLoaDaysInMonth = $overlapStart->diffInDays($overlapEnd) + 1;
+            }
+
+            // Existing approved/active LOAs in this month (excluding $excludeLoaId)
+            $existingLoaQuery = DB::table('leave_of_absent')
+                ->where('staffId', $staffId)
+                ->whereIn('status', [0, 1, 2]) // Pending or Approved
+                ->where(function ($query) use ($startOfMonth, $endOfMonth) {
+                    $query->whereBetween('start_date', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
+                          ->orWhereBetween('end_date', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
+                          ->orWhere(function ($q) use ($startOfMonth, $endOfMonth) {
+                              $q->where('start_date', '<=', $startOfMonth->toDateString())
+                                ->where('end_date', '>=', $endOfMonth->toDateString());
+                          });
+                });
+
+            if ($excludeLoaId) {
+                $existingLoaQuery->where('id', '!=', $excludeLoaId);
+            }
+
+            $existingLoas = $existingLoaQuery->get();
+            $otherLoaDays = 0;
+            foreach ($existingLoas as $leave) {
+                $lStart = Carbon::parse($leave->start_date);
+                $lEnd = Carbon::parse($leave->end_date);
+                $oStart = $lStart->greaterThan($startOfMonth) ? $lStart : $startOfMonth;
+                $oEnd = $lEnd->lessThan($endOfMonth) ? $lEnd : $endOfMonth;
+                if ($employee->office_shift == 1) {
+                    $cur = $oStart->copy();
+                    while ($cur->lte($oEnd)) {
+                        if (!$cur->isWeekend()) {
+                            $otherLoaDays++;
+                        }
+                        $cur->addDay();
+                    }
+                } else {
+                    $otherLoaDays += $oStart->diffInDays($oEnd) + 1;
+                }
+            }
+
+            $totalLoaDaysInMonth = min($daysInMonth, $proposedLoaDaysInMonth + $otherLoaDays);
+
+            // Fetch Salary Structure
+            $struct = DB::table('salary_structures')->where('staffId', $staffId)->first();
+            $basic = 0.00;
+            $housing = 0.00;
+            $transport = 0.00;
+            $medical = 0.00;
+            $utility = 0.00;
+            $meal = 0.00;
+            $pensionRate = 0.00;
+            $declareSalary = 0.00;
+
+            if ($struct) {
+                $basic = (float)($struct->basic_salary ?? 0);
+                $housing = (float)($struct->housing_allowance ?? 0);
+                $transport = (float)($struct->transport_allowance ?? 0);
+                $medical = (float)($struct->medical_allowance ?? 0);
+                $utility = (float)($struct->utility_allowance ?? 0);
+                $meal = (float)($struct->meal_allowance ?? 0);
+                $pensionRate = (float)($struct->pension_rate ?? 0);
+                $declareSalary = (float)($struct->declare_salary ?? 0);
+            }
+
+            $totalBasicAllowances = $basic + $housing + $transport + $medical + $utility + $meal;
+
+            // Custom Allowances / Bonuses for month
+            $totalEarningVars = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('bonus_allowance_setups')) {
+                $bonuses = DB::table('bonus_allowance_setups')
+                    ->where('staff_id', $staffId)
+                    ->where('is_active', 1)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where(function ($q) use ($currentMonthStr) {
+                        $q->whereNull('end_month')
+                          ->orWhere('end_month', '=', '')
+                          ->orWhere('end_month', '>=', $currentMonthStr);
+                    })
+                    ->get();
+                $totalEarningVars = (float)$bonuses->sum('amount');
+            }
+
+            $grossPay = $totalBasicAllowances + $totalEarningVars;
+            $taxBase = ($declareSalary > 0) ? $declareSalary : $totalBasicAllowances;
+
+            // LOA Deduction for this month
+            $loaDeduction = ($daysInMonth > 0) ? round(($grossPay / (float)$daysInMonth) * $totalLoaDaysInMonth, 2) : 0.00;
+            $paidDays = max(0, $daysInMonth - $totalLoaDaysInMonth);
+
+            // PAYE Tax (Prorated based on paid days)
+            $annualGross = $taxBase * 12.0;
+            $annualPension = 0.00;
+            if ($struct && (int)($struct->pen_act ?? 0) === 1) {
+                $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
+                $annualPension = ($annualGross * 0.5) * $rate;
+            }
+            $annualTaxable = max(0.00, $annualGross - $annualPension);
+            $annualTax = 0.00;
+            if ($annualTaxable > 800000.00) {
+                $taxableRemaining = $annualTaxable - 800000.00;
+                $band1 = min(2200000.00, $taxableRemaining);
+                $annualTax += $band1 * 0.15;
+                $taxableRemaining -= $band1;
+                if ($taxableRemaining > 0) {
+                    $band2 = min(9000000.00, $taxableRemaining);
+                    $annualTax += $band2 * 0.18;
+                    $taxableRemaining -= $band2;
+                }
+                if ($taxableRemaining > 0) {
+                    $band3 = min(13000000.00, $taxableRemaining);
+                    $annualTax += $band3 * 0.21;
+                    $taxableRemaining -= $band3;
+                }
+                if ($taxableRemaining > 0) {
+                    $band4 = min(25000000.00, $taxableRemaining);
+                    $annualTax += $band4 * 0.23;
+                    $taxableRemaining -= $band4;
+                }
+                if ($taxableRemaining > 0) {
+                    $annualTax += $taxableRemaining * 0.25;
+                }
+            }
+            $fullMonthlyTax = round($annualTax / 12.0, 2);
+            $payeTax = ($daysInMonth > 0) ? round($fullMonthlyTax * ($paidDays / (float)$daysInMonth), 2) : 0.00;
+
+            // Pension
+            $pension = 0.00;
+            if ($struct && (int)($struct->pen_act ?? 0) === 1) {
+                $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
+                $pension = round(($totalBasicAllowances * 0.5) * $rate, 2);
+            }
+
+            // Retention
+            $retention = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('first_salary_structure')) {
+                $firstStruct = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+                if ($firstStruct && (int)($firstStruct->reten_act ?? 0) === 1 && (int)($firstStruct->num_rente_months ?? 0) < 20) {
+                    $retentionBase = (float)($firstStruct->basic_salary ?? 0) +
+                                     (float)($firstStruct->housing_allowance ?? 0) +
+                                     (float)($firstStruct->transport_allowance ?? 0) +
+                                     (float)($firstStruct->medical_allowance ?? 0) +
+                                     (float)($firstStruct->utility_allowance ?? 0) +
+                                     (float)($firstStruct->meal_allowance ?? 0);
+                    $retention = round(0.05 * $retentionBase, 2);
+                }
+            }
+
+            // IOUs for this month
+            $firstDayStr = $startOfMonth->toDateString();
+            $lastDayStr = $endOfMonth->toDateString();
+            $iouSum = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('iou_records')) {
+                $iouSum = (float)DB::table('iou_records')
+                    ->where('staff_id', $staffId)
+                    ->where('status', '!=', 2)
+                    ->whereBetween('iou_date', [$firstDayStr, $lastDayStr])
+                    ->sum('amount');
+            }
+
+            // Medical Loan Setup
+            $medicalLoanDeduct = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('medical_loan_deduction_setups')) {
+                $medLoan = DB::table('medical_loan_deduction_setups')
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where('end_month', '>=', $currentMonthStr)
+                    ->orderBy('id', 'desc')->first();
+                if ($medLoan) {
+                    $medicalLoanDeduct = min((float)$medLoan->monthly_deduction, (float)$medLoan->balance_remaining);
+                }
+            }
+
+            // Coop Loan Setup
+            $coopLoanDeduct = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('coop_loan_deduction_setups')) {
+                $coopLoan = DB::table('coop_loan_deduction_setups')
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where('end_month', '>=', $currentMonthStr)
+                    ->orderBy('id', 'desc')->first();
+                if ($coopLoan) {
+                    $coopLoanDeduct = min((float)$coopLoan->monthly_deduction, (float)$coopLoan->balance_remaining);
+                }
+            }
+
+            // Coop Savings Setup
+            $coopSavingsDeduct = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('coop_savings_setups')) {
+                $coopSavings = DB::table('coop_savings_setups')
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->orderBy('id', 'desc')->first();
+                if ($coopSavings) {
+                    $coopSavingsDeduct = (float)$coopSavings->monthly_saving;
+                }
+            }
+
+            // Coop Asset Finance Setup
+            $coopAssetDeduct = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('coop_asset_finance_deduction_setups')) {
+                $coopAsset = DB::table('coop_asset_finance_deduction_setups')
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where(function ($q) use ($currentMonthStr) {
+                        $q->whereNull('end_month')
+                          ->orWhere('end_month', '=', '')
+                          ->orWhere('end_month', '>=', $currentMonthStr);
+                    })
+                    ->orderBy('id', 'desc')->first();
+                if ($coopAsset) {
+                    $coopAssetDeduct = min((float)$coopAsset->monthly_deduction, (float)$coopAsset->balance_remaining);
+                }
+            }
+
+            // Surcharge Setup
+            $surchargeDeduct = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('surcharge_deduction_setups')) {
+                $surcharge = DB::table('surcharge_deduction_setups')
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where(function ($q) use ($currentMonthStr) {
+                        $q->whereNull('end_month')
+                          ->orWhere('end_month', '=', '')
+                          ->orWhere('end_month', '>=', $currentMonthStr);
+                    })
+                    ->orderBy('id', 'desc')->first();
+                if ($surcharge) {
+                    $surchargeDeduct = min((float)$surcharge->monthly_deduction, (float)$surcharge->balance_remaining);
+                }
+            }
+
+            // Absence Penalty Setup
+            $absencePenaltyDeduct = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('absence_penalty_deduction_setups')) {
+                $absencePenalty = DB::table('absence_penalty_deduction_setups')
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where(function ($q) use ($currentMonthStr) {
+                        $q->whereNull('end_month')
+                          ->orWhere('end_month', '=', '')
+                          ->orWhere('end_month', '>=', $currentMonthStr);
+                    })
+                    ->orderBy('id', 'desc')->first();
+                if ($absencePenalty) {
+                    $absencePenaltyDeduct = min((float)$absencePenalty->monthly_deduction, (float)($absencePenalty->balance_remaining > 0 ? $absencePenalty->balance_remaining : $absencePenalty->total_amount));
+                }
+            }
+
+            // Loan Deduction
+            $loanDeduct = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('loan_deduction_setups')) {
+                $loanSetup = DB::table('loan_deduction_setups')
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where('end_month', '>=', $currentMonthStr)
+                    ->orderBy('id', 'desc')->first();
+                if ($loanSetup) {
+                    $loanDeduct = min((float)$loanSetup->monthly_deduction, (float)$loanSetup->balance_remaining);
+                }
+            }
+            if ($loanDeduct == 0.00 && \Illuminate\Support\Facades\Schema::hasTable('employee_loans')) {
+                $empLoan = DB::table('employee_loans')
+                    ->where('staffId', $staffId)
+                    ->whereRaw("LOWER(status) = 'approved'")
+                    ->where('balance', '>', 0)
+                    ->orderBy('id', 'desc')->first();
+                if ($empLoan) {
+                    $loanDeduct = min((float)$empLoan->monthly_deduction, (float)$empLoan->balance);
+                }
+            }
+
+            // Other Deductions Setup
+            $otherDeduct = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups')) {
+                $otherSetup = DB::table('other_deduction_setups')
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->where('balance_remaining', '>', 0)
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where(function ($q) use ($currentMonthStr) {
+                        $q->whereNull('end_month')
+                          ->orWhere('end_month', '=', '')
+                          ->orWhere('end_month', '>=', $currentMonthStr);
+                    })
+                    ->orderBy('id', 'desc')->first();
+                if ($otherSetup) {
+                    $otherDeduct = min((float)$otherSetup->monthly_deduction, (float)$otherSetup->balance_remaining);
+                }
+            }
+
+            $totalDeductions = $payeTax + $pension + $retention + $iouSum + $medicalLoanDeduct +
+                               $coopLoanDeduct + $coopSavingsDeduct + $coopAssetDeduct + $surchargeDeduct +
+                               $absencePenaltyDeduct + $loanDeduct + $otherDeduct + $loaDeduction;
+
+            $projectedNetPay = round($grossPay - $totalDeductions, 2);
+
+            if ($projectedNetPay <= 0.00) {
+                return [
+                    'valid' => false,
+                    'month_name' => $monthName,
+                    'projected_net_pay' => $projectedNetPay,
+                    'loa_days' => $proposedLoaDaysInMonth,
+                    'message' => "Cannot apply for Leave of Absence: This employee available net pay for {$monthName} can not be negative."
+                ];
+            }
+
+            $currentMonth->addMonth();
+        }
+
+        return ['valid' => true];
     }
 }

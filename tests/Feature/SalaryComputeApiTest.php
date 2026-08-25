@@ -534,20 +534,20 @@ class SalaryComputeApiTest extends TestCase
         $runId = $response->json('payroll_run_id');
 
         // Gross Pay = 150000.00
-        // Paid Days = 30 - 6 = 24
-        // LOA Deduction = (150000.00 / 30) * 6 = 30000.00
+        // Paid Days = 31 - 6 = 25 (May has 31 calendar days)
+        // LOA Deduction = (150000.00 / 31) * 6 = 29032.26
         // Absence Penalty (unapproved) = 5000.00
-        // Total Deductions = 30000.00 + 5000.00 = 35000.00
-        // Net Pay = 150000.00 - 35000.00 = 115000.00
+        // Total Deductions = 29032.26 + 5000.00 = 34032.26
+        // Net Pay = 150000.00 - 34032.26 = 115967.74
 
         $this->assertDatabaseHas('payroll_conpt', [
             'payroll_run_id' => $runId,
             'staffID' => $employee->ID,
-            'paid_days' => 24,
-            'leave_of_absence_deduction' => 30000.00,
+            'paid_days' => 25,
+            'leave_of_absence_deduction' => 29032.26,
             'absence_penalty' => 5000.00,
-            'total_deductions' => 35000.00,
-            'net_pay' => 115000.00
+            'total_deductions' => 34032.26,
+            'net_pay' => 115967.74
         ]);
 
         // Verify report response columns
@@ -558,8 +558,8 @@ class SalaryComputeApiTest extends TestCase
         $employeeRow = collect($data)->firstWhere('IDNO', $employee->ID);
         $this->assertNotNull($employeeRow);
 
-        $this->assertEquals(24, $employeeRow['PAID DAYS']);
-        $this->assertEquals('30000.00', $employeeRow['LEAVE OF ABSENCE DEDUCTION']);
+        $this->assertEquals(25, $employeeRow['PAID DAYS']);
+        $this->assertEquals('29032.26', $employeeRow['LEAVE OF ABSENCE DEDUCTION']);
         $this->assertEquals('5000.00', $employeeRow['ABSENCE PENALTY']);
     }
 

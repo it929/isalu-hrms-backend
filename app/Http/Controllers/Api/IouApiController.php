@@ -73,7 +73,7 @@ class IouApiController extends Controller
 
                 $canTakeIou = (int)($row->can_take_iou ?? 1);
                 $maxIouAmount = (float)($row->max_iou_amount ?? 0.00);
-                $maxIou = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.50);
+                $maxIou = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.70);
 
                 $hasUploadedEducation = DB::table('tbleducations')
                     ->where('staffid', $row->id)
@@ -161,7 +161,7 @@ class IouApiController extends Controller
                 $maxIouAmount = (float)($struct->max_iou_amount ?? 0.00);
             }
 
-            $maxLimit = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.50);
+            $maxLimit = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.70);
 
             // Sum already used amount for this month and year (all non-rejected: status != 2)
             $query = DB::table('iou_records')
@@ -177,6 +177,9 @@ class IouApiController extends Controller
             $usedAmount = (float) $query->sum('amount');
             $remainingLimit = max(0.00, $maxLimit - $usedAmount);
 
+            $netPayInfo = $this->calculateStaffNetPayBeforeIou($staffId, $year, $month, $excludeId);
+            $availableNetPay = $netPayInfo['available_net_pay'];
+
             return response()->json([
                 'status' => 'success',
                 'data' => [
@@ -184,6 +187,7 @@ class IouApiController extends Controller
                     'max_limit' => $maxLimit,
                     'used_amount' => $usedAmount,
                     'remaining_limit' => $remainingLimit,
+                    'available_net_pay' => $availableNetPay,
                     'month_name' => date('F Y', $time),
                     'can_take_iou' => $canTakeIou,
                     'max_iou_amount' => $maxIouAmount,
@@ -373,7 +377,7 @@ class IouApiController extends Controller
                 ], 422);
             }
 
-            $maxAllowed = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.50);
+            $maxAllowed = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.70);
             $amount = (float) $validated['amount'];
             $id = $validated['id'] ?? null;
 
@@ -402,7 +406,7 @@ class IouApiController extends Controller
                 $formattedRequested = number_format($amount, 2);
                 $monthName = date('F Y', $time);
                 
-                $limitReason = $maxIouAmount > 0.00 ? "custom allowed limit" : "maximum allowed limit of 50% of the employee's salary";
+                $limitReason = $maxIouAmount > 0.00 ? "custom allowed limit" : "maximum allowed limit of 70% of the employee's salary";
                 if ($alreadyUsed > 0) {
                     $msg = "The IOU amount (₦{$formattedRequested}) plus already applied IOUs for {$monthName} (₦{$formattedAlready}) exceeds the {$limitReason} (₦{$formattedMax}).";
                 } else {
@@ -412,6 +416,18 @@ class IouApiController extends Controller
                 return response()->json([
                     'status'  => 'error',
                     'message' => $msg
+                ], 422);
+            }
+
+            // Net Pay check: The requested amount must not reduce available net pay to zero or negative
+            $monthName = date('F Y', $time);
+            $netPayInfo = $this->calculateStaffNetPayBeforeIou($validated['staff_id'], $year, $month, $id);
+            $availableNetPay = $netPayInfo['available_net_pay'];
+
+            if ($availableNetPay <= 0.00 || $amount >= $availableNetPay) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => "Cannot apply for IOU: This employee available net pay for {$monthName} can not be negative."
                 ], 422);
             }
 
@@ -636,7 +652,11 @@ class IouApiController extends Controller
                 }
             }
 
-            $remarks = $request->input('remarks');
+            $remarks = trim($request->input('remarks', ''));
+            if (empty($remarks)) {
+                return response()->json(['status' => 'error', 'message' => 'Rejection remarks are compulsory when rejecting an IOU application.'], 422);
+            }
+
             DB::table('iou_records')->where('id', $id)->update([
                 'hod_status' => 2,
                 'status'     => 2, // Rejects overall application immediately
@@ -715,7 +735,11 @@ class IouApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'This IOU is not recommended by Audit or already processed by Finance.'], 400);
             }
 
-            $remarks = $request->input('remarks');
+            $remarks = trim($request->input('remarks', ''));
+            if (empty($remarks)) {
+                return response()->json(['status' => 'error', 'message' => 'Rejection remarks are compulsory when rejecting an IOU application.'], 422);
+            }
+
             DB::table('iou_records')->where('id', $id)->update([
                 'finance_status' => 2,
                 'status'         => 2, // Rejects overall application immediately
@@ -793,7 +817,11 @@ class IouApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'This IOU is not recommended by HOD or already processed by HR.'], 400);
             }
 
-            $remarks = $request->input('remarks');
+            $remarks = trim($request->input('remarks', ''));
+            if (empty($remarks)) {
+                return response()->json(['status' => 'error', 'message' => 'Rejection remarks are compulsory when rejecting an IOU application.'], 422);
+            }
+
             DB::table('iou_records')->where('id', $id)->update([
                 'admin_status' => 2,
                 'status'       => 2, // Rejects overall application immediately
@@ -871,7 +899,11 @@ class IouApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'This IOU is not recommended by HR or already processed by Audit.'], 400);
             }
 
-            $remarks = $request->input('remarks');
+            $remarks = trim($request->input('remarks', ''));
+            if (empty($remarks)) {
+                return response()->json(['status' => 'error', 'message' => 'Rejection remarks are compulsory when rejecting an IOU application.'], 422);
+            }
+
             DB::table('iou_records')->where('id', $id)->update([
                 'audit_status' => 2,
                 'status'       => 2, // Rejects overall application immediately
@@ -1053,5 +1085,283 @@ class IouApiController extends Controller
             Log::error('IouApiController saveLimitConfig: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
+    }
+
+    /**
+     * Calculate an employee's estimated net pay for a specific month and year before applying the specified IOU.
+     */
+    public function calculateStaffNetPayBeforeIou($staffId, $year, $month, $excludeIouId = null)
+    {
+        $month = (int)$month;
+        $year = (int)$year;
+        $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+
+        $struct = DB::table('salary_structures')->where('staffId', $staffId)->first();
+
+        $basic = 0.00;
+        $housing = 0.00;
+        $transport = 0.00;
+        $medical = 0.00;
+        $utility = 0.00;
+        $meal = 0.00;
+        $taxRate = 0.00;
+        $pensionRate = 0.00;
+        $declareSalary = 0.00;
+
+        if ($struct) {
+            $basic = (float)($struct->basic_salary ?? 0);
+            $housing = (float)($struct->housing_allowance ?? 0);
+            $transport = (float)($struct->transport_allowance ?? 0);
+            $medical = (float)($struct->medical_allowance ?? 0);
+            $utility = (float)($struct->utility_allowance ?? 0);
+            $meal = (float)($struct->meal_allowance ?? 0);
+            $taxRate = (float)($struct->tax_rate ?? 0);
+            $pensionRate = (float)($struct->pension_rate ?? 0);
+            $declareSalary = (float)($struct->declare_salary ?? 0);
+        }
+
+        $totalBasicAllowances = $basic + $housing + $transport + $medical + $utility + $meal;
+
+        // Custom Allowances / Bonuses for month
+        $totalEarningVars = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('bonus_allowance_setups')) {
+            $bonuses = DB::table('bonus_allowance_setups')
+                ->where('staff_id', $staffId)
+                ->where('is_active', 1)
+                ->where('start_month', '<=', $currentMonthStr)
+                ->where(function ($q) use ($currentMonthStr) {
+                    $q->whereNull('end_month')
+                      ->orWhere('end_month', '=', '')
+                      ->orWhere('end_month', '>=', $currentMonthStr);
+                })
+                ->get();
+            $totalEarningVars = (float)$bonuses->sum('amount');
+        }
+
+        $grossPay = $totalBasicAllowances + $totalEarningVars;
+        $taxBase = ($declareSalary > 0) ? $declareSalary : $totalBasicAllowances;
+
+        // 1. PAYE Tax
+        $annualGross = $taxBase * 12.0;
+        $annualPension = 0.00;
+        if ($struct && (int)($struct->pen_act ?? 0) === 1) {
+            $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
+            $annualPension = ($annualGross * 0.5) * $rate;
+        }
+        $annualTaxable = max(0.00, $annualGross - $annualPension);
+        $annualTax = 0.00;
+        if ($annualTaxable > 800000.00) {
+            $taxableRemaining = $annualTaxable - 800000.00;
+            $band1 = min(2200000.00, $taxableRemaining);
+            $annualTax += $band1 * 0.15;
+            $taxableRemaining -= $band1;
+            if ($taxableRemaining > 0) {
+                $band2 = min(9000000.00, $taxableRemaining);
+                $annualTax += $band2 * 0.18;
+                $taxableRemaining -= $band2;
+            }
+            if ($taxableRemaining > 0) {
+                $band3 = min(13000000.00, $taxableRemaining);
+                $annualTax += $band3 * 0.21;
+                $taxableRemaining -= $band3;
+            }
+            if ($taxableRemaining > 0) {
+                $band4 = min(25000000.00, $taxableRemaining);
+                $annualTax += $band4 * 0.23;
+                $taxableRemaining -= $band4;
+            }
+            if ($taxableRemaining > 0) {
+                $annualTax += $taxableRemaining * 0.25;
+            }
+        }
+        $payeTax = round($annualTax / 12.0, 2);
+
+        // 2. Pension
+        $pension = 0.00;
+        if ($struct && (int)($struct->pen_act ?? 0) === 1) {
+            $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
+            $pension = round(($totalBasicAllowances * 0.5) * $rate, 2);
+        }
+
+        // 3. Retention
+        $retention = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('first_salary_structure')) {
+            $firstStruct = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+            if ($firstStruct && (int)($firstStruct->reten_act ?? 0) === 1 && (int)($firstStruct->num_rente_months ?? 0) < 20) {
+                $retentionBase = (float)($firstStruct->basic_salary ?? 0) +
+                                 (float)($firstStruct->housing_allowance ?? 0) +
+                                 (float)($firstStruct->transport_allowance ?? 0) +
+                                 (float)($firstStruct->medical_allowance ?? 0) +
+                                 (float)($firstStruct->utility_allowance ?? 0) +
+                                 (float)($firstStruct->meal_allowance ?? 0);
+                $retention = round(0.05 * $retentionBase, 2);
+            }
+        }
+
+        // 4. Other Approved/Active IOUs in this month (excluding current IOU ID)
+        $iouQuery = DB::table('iou_records')
+            ->where('staff_id', $staffId)
+            ->where('status', '!=', 2)
+            ->whereYear('iou_date', $year)
+            ->whereMonth('iou_date', $month);
+        if ($excludeIouId) {
+            $iouQuery->where('id', '!=', $excludeIouId);
+        }
+        $otherIouSum = (float)$iouQuery->sum('amount');
+
+        // 5. Medical Loan Setup
+        $medicalLoanDeduct = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('medical_loan_deduction_setups')) {
+            $medLoan = DB::table('medical_loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->where('start_month', '<=', $currentMonthStr)
+                ->where('end_month', '>=', $currentMonthStr)
+                ->orderBy('id', 'desc')->first();
+            if ($medLoan) {
+                $medicalLoanDeduct = min((float)$medLoan->monthly_deduction, (float)$medLoan->balance_remaining);
+            }
+        }
+
+        // 6. Coop Loan Setup
+        $coopLoanDeduct = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('coop_loan_deduction_setups')) {
+            $coopLoan = DB::table('coop_loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->where('start_month', '<=', $currentMonthStr)
+                ->where('end_month', '>=', $currentMonthStr)
+                ->orderBy('id', 'desc')->first();
+            if ($coopLoan) {
+                $coopLoanDeduct = min((float)$coopLoan->monthly_deduction, (float)$coopLoan->balance_remaining);
+            }
+        }
+
+        // 7. Coop Savings Setup
+        $coopSavingsDeduct = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('coop_savings_setups')) {
+            $coopSavings = DB::table('coop_savings_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('start_month', '<=', $currentMonthStr)
+                ->orderBy('id', 'desc')->first();
+            if ($coopSavings) {
+                $coopSavingsDeduct = (float)$coopSavings->monthly_saving;
+            }
+        }
+
+        // 8. Coop Asset Finance Setup
+        $coopAssetDeduct = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('coop_asset_finance_deduction_setups')) {
+            $coopAsset = DB::table('coop_asset_finance_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->where('start_month', '<=', $currentMonthStr)
+                ->where(function ($q) use ($currentMonthStr) {
+                    $q->whereNull('end_month')
+                      ->orWhere('end_month', '=', '')
+                      ->orWhere('end_month', '>=', $currentMonthStr);
+                })
+                ->orderBy('id', 'desc')->first();
+            if ($coopAsset) {
+                $coopAssetDeduct = min((float)$coopAsset->monthly_deduction, (float)$coopAsset->balance_remaining);
+            }
+        }
+
+        // 9. Surcharge Setup
+        $surchargeDeduct = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('surcharge_deduction_setups')) {
+            $surcharge = DB::table('surcharge_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->where('start_month', '<=', $currentMonthStr)
+                ->where(function ($q) use ($currentMonthStr) {
+                    $q->whereNull('end_month')
+                      ->orWhere('end_month', '=', '')
+                      ->orWhere('end_month', '>=', $currentMonthStr);
+                })
+                ->orderBy('id', 'desc')->first();
+            if ($surcharge) {
+                $surchargeDeduct = min((float)$surcharge->monthly_deduction, (float)$surcharge->balance_remaining);
+            }
+        }
+
+        // 10. Absence Penalty Setup
+        $absencePenaltyDeduct = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('absence_penalty_deduction_setups')) {
+            $absencePenalty = DB::table('absence_penalty_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('start_month', '<=', $currentMonthStr)
+                ->where(function ($q) use ($currentMonthStr) {
+                    $q->whereNull('end_month')
+                      ->orWhere('end_month', '=', '')
+                      ->orWhere('end_month', '>=', $currentMonthStr);
+                })
+                ->orderBy('id', 'desc')->first();
+            if ($absencePenalty) {
+                $absencePenaltyDeduct = min((float)$absencePenalty->monthly_deduction, (float)($absencePenalty->balance_remaining > 0 ? $absencePenalty->balance_remaining : $absencePenalty->total_amount));
+            }
+        }
+
+        // 11. Loan Deduction
+        $loanDeduct = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('loan_deduction_setups')) {
+            $loanSetup = DB::table('loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->where('start_month', '<=', $currentMonthStr)
+                ->where('end_month', '>=', $currentMonthStr)
+                ->orderBy('id', 'desc')->first();
+            if ($loanSetup) {
+                $loanDeduct = min((float)$loanSetup->monthly_deduction, (float)$loanSetup->balance_remaining);
+            }
+        }
+        if ($loanDeduct == 0.00 && \Illuminate\Support\Facades\Schema::hasTable('employee_loans')) {
+            $empLoan = DB::table('employee_loans')
+                ->where('staffId', $staffId)
+                ->whereRaw("LOWER(status) = 'approved'")
+                ->where('balance', '>', 0)
+                ->orderBy('id', 'desc')->first();
+            if ($empLoan) {
+                $loanDeduct = min((float)$empLoan->monthly_deduction, (float)$empLoan->balance);
+            }
+        }
+
+        // 12. Other Deductions Setup
+        $otherDeduct = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups')) {
+            $otherSetup = DB::table('other_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->where('start_month', '<=', $currentMonthStr)
+                ->where(function ($q) use ($currentMonthStr) {
+                    $q->whereNull('end_month')
+                      ->orWhere('end_month', '=', '')
+                      ->orWhere('end_month', '>=', $currentMonthStr);
+                })
+                ->orderBy('id', 'desc')->first();
+            if ($otherSetup) {
+                $otherDeduct = min((float)$otherSetup->monthly_deduction, (float)$otherSetup->balance_remaining);
+            }
+        }
+
+        $totalDeductions = $payeTax + $pension + $retention + $otherIouSum + $medicalLoanDeduct +
+                           $coopLoanDeduct + $coopSavingsDeduct + $coopAssetDeduct + $surchargeDeduct +
+                           $absencePenaltyDeduct + $loanDeduct + $otherDeduct;
+
+        $availableNetPay = max(0.00, round($grossPay - $totalDeductions, 2));
+
+        return [
+            'gross_pay' => round($grossPay, 2),
+            'total_deductions_before_iou' => round($totalDeductions, 2),
+            'available_net_pay' => $availableNetPay,
+        ];
     }
 }

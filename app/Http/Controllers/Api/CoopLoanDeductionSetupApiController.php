@@ -123,9 +123,16 @@ class CoopLoanDeductionSetupApiController extends Controller
             ];
 
             if ($id) {
-                $exists = DB::table('coop_loan_deduction_setups')->where('id', $id)->exists();
-                if (!$exists) {
+                $existing = DB::table('coop_loan_deduction_setups')->where('id', $id)->first();
+                if (!$existing) {
                     return response()->json(['status' => 'error', 'message' => 'Deduction setup not found.'], 404);
+                }
+                $newIsActive = isset($validated['is_active']) ? (int)$validated['is_active'] : 1;
+                if ((int)$existing->is_active === 1 && $newIsActive === 0 && empty($ctx['isSuperAdmin'])) {
+                    return response()->json([
+                        'status'  => 'error',
+                        'message' => 'Permission denied: Only Super Administrators are authorized to manually deactivate Cooperative Loan Deduction Setup.'
+                    ], 403);
                 }
                 DB::table('coop_loan_deduction_setups')->where('id', $id)->update($data);
                 $message = 'Cooperative loan deduction setup updated successfully.';
@@ -160,14 +167,20 @@ class CoopLoanDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-
-
             $setup = DB::table('coop_loan_deduction_setups')->where('id', $id)->first();
             if (!$setup) {
                 return response()->json(['status' => 'error', 'message' => 'Setup not found.'], 404);
             }
 
             $newStatus = $setup->is_active == 1 ? 0 : 1;
+
+            // Only Super Administrators are authorized to manually deactivate
+            if ($newStatus === 0 && empty($ctx['isSuperAdmin'])) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Permission denied: Only Super Administrators are authorized to manually deactivate Cooperative Loan Deduction Setup.'
+                ], 403);
+            }
 
             DB::table('coop_loan_deduction_setups')->where('id', $id)->update([
                 'is_active' => $newStatus,

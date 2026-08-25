@@ -352,6 +352,7 @@ class ReportApiController extends Controller
 
     /**
      * GET /api/nextjs/reports/user-activities
+     * Retrieve live user activity and audit trail.
      */
     public function getUserActivities(Request $request)
     {
@@ -361,32 +362,242 @@ class ReportApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
             }
 
+            $search = trim($request->input('search', ''));
+            $activityType = trim($request->input('activity_type', ''));
+            $module = trim($request->input('module', ''));
+            $fromDate = $request->input('from_date');
+            $toDate = $request->input('to_date');
+            $userId = $request->input('user_id');
+            $limit = (int)$request->input('limit', 200);
+            if ($limit <= 0 || $limit > 1000) {
+                $limit = 200;
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('user_activity_logs')) {
+                $query = DB::table('user_activity_logs')
+                    ->select(
+                        'id',
+                        'user_id',
+                        'staff_id',
+                        'user_name as user',
+                        'role_name as role',
+                        'activity_type',
+                        'action',
+                        'module',
+                        'method',
+                        'url',
+                        'ip_address as ipAddress',
+                        'details',
+                        'created_at as date'
+                    )
+                    ->orderBy('created_at', 'desc');
+
+                if (!empty($search)) {
+                    $query->where(function($q) use ($search) {
+                        $q->where('user_name', 'like', "%{$search}%")
+                          ->orWhere('action', 'like', "%{$search}%")
+                          ->orWhere('role_name', 'like', "%{$search}%")
+                          ->orWhere('module', 'like', "%{$search}%")
+                          ->orWhere('ip_address', 'like', "%{$search}%")
+                          ->orWhere('details', 'like', "%{$search}%");
+                    });
+                }
+
+                if (!empty($activityType) && $activityType !== 'all') {
+                    $query->where('activity_type', $activityType);
+                }
+
+                if (!empty($module) && $module !== 'all') {
+                    $query->where('module', $module);
+                }
+
+                if (!empty($fromDate)) {
+                    $query->whereDate('created_at', '>=', $fromDate);
+                }
+
+                if (!empty($toDate)) {
+                    $query->whereDate('created_at', '<=', $toDate);
+                }
+
+                if (!empty($userId)) {
+                    $query->where('user_id', $userId);
+                }
+
+                $records = $query->limit($limit)->get()->map(function($row) {
+                    return [
+                        'id' => $row->id,
+                        'user' => $row->user ?: 'System User',
+                        'role' => $row->role ?: 'Staff',
+                        'activity_type' => $row->activity_type ?: 'general',
+                        'action' => $row->action,
+                        'module' => $row->module ?: 'System',
+                        'method' => $row->method ?: 'POST',
+                        'date' => $row->date ? date('Y-m-d H:i:s', strtotime($row->date)) : date('Y-m-d H:i:s'),
+                        'ipAddress' => $row->ipAddress ?: '127.0.0.1',
+                        'details' => $row->details
+                    ];
+                });
+
+                // Compute high-level metrics for dashboard cards
+                $today = date('Y-m-d');
+                $totalLoginsToday = DB::table('user_activity_logs')
+                    ->where('activity_type', 'login')
+                    ->whereDate('created_at', $today)
+                    ->count();
+
+                $totalLogoutsToday = DB::table('user_activity_logs')
+                    ->where('activity_type', 'logout')
+                    ->whereDate('created_at', $today)
+                    ->count();
+
+                $totalActionsToday = DB::table('user_activity_logs')
+                    ->whereNotIn('activity_type', ['login', 'logout'])
+                    ->whereDate('created_at', $today)
+                    ->count();
+
+                $activeUsersCount = DB::table('user_activity_logs')
+                    ->whereDate('created_at', $today)
+                    ->distinct('user_id')
+                    ->count('user_id');
+
+                $summary = [
+                    'total_records' => $records->count(),
+                    'logins_today' => $totalLoginsToday,
+                    'logouts_today' => $totalLogoutsToday,
+                    'actions_today' => $totalActionsToday,
+                    'active_users_today' => $activeUsersCount ?: 1
+                ];
+
+                return response()->json([
+                    'status' => 'success',
+                    'data' => $records,
+                    'summary' => $summary
+                ]);
+            }
+
+            // Fallback for legacy audit_log table
             $records = DB::table('audit_log as al')
-                ->join('users as u', 'u.id', '=', 'al.user_id')
-                ->select('u.name as user', 'al.operation as action', 'al.date', 'al.referer as ipAddress')
+                ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
+                ->select(
+                    DB::raw("COALESCE(u.name, 'User') as user"),
+                    'al.operation as action',
+                    'al.date',
+                    'al.referer as ipAddress'
+                )
                 ->orderBy('al.date', 'desc')
-                ->limit(50)
+                ->limit(100)
                 ->get()
                 ->map(function ($row) {
                     return [
                         'user' => $row->user,
+                        'role' => 'Staff',
+                        'activity_type' => str_contains(strtolower($row->action), 'login') ? 'login' : (str_contains(strtolower($row->action), 'logout') ? 'logout' : 'general'),
                         'action' => $row->action,
+                        'module' => 'System',
+                        'method' => 'POST',
                         'date' => $row->date,
                         'ipAddress' => $row->ipAddress ?: '127.0.0.1'
                     ];
                 });
 
-            if ($records->isEmpty()) {
-                $records = collect([
-                    ['user' => 'SUPERADMIN', 'action' => 'User Login Successful', 'date' => date('Y-m-d H:i:s'), 'ipAddress' => '192.168.1.10'],
-                    ['user' => 'AUDITOR', 'action' => 'Viewed Payroll Summaries', 'date' => date('Y-m-d H:i:s', strtotime('-10 mins')), 'ipAddress' => '192.168.1.15'],
-                    ['user' => 'HR ADMIN', 'action' => 'Updated Staff Profile Details', 'date' => date('Y-m-d H:i:s', strtotime('-30 mins')), 'ipAddress' => '192.168.1.12']
-                ]);
-            }
-
-            return response()->json(['status' => 'success', 'data' => $records]);
+            return response()->json([
+                'status' => 'success',
+                'data' => $records,
+                'summary' => [
+                    'total_records' => $records->count(),
+                    'logins_today' => 0,
+                    'logouts_today' => 0,
+                    'actions_today' => $records->count(),
+                    'active_users_today' => 1
+                ]
+            ]);
         } catch (\Throwable $th) {
             Log::error('ReportApiController getUserActivities: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/nextjs/reports/user-activities/export
+     * Export full activity log to CSV.
+     */
+    public function exportUserActivities(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+            }
+
+            $search = trim($request->input('search', ''));
+            $activityType = trim($request->input('activity_type', ''));
+            $fromDate = $request->input('from_date');
+            $toDate = $request->input('to_date');
+
+            $query = DB::table('user_activity_logs')
+                ->orderBy('created_at', 'desc');
+
+            if (!empty($search)) {
+                $query->where(function($q) use ($search) {
+                    $q->where('user_name', 'like', "%{$search}%")
+                      ->orWhere('action', 'like', "%{$search}%")
+                      ->orWhere('role_name', 'like', "%{$search}%")
+                      ->orWhere('module', 'like', "%{$search}%")
+                      ->orWhere('ip_address', 'like', "%{$search}%");
+                });
+            }
+
+            if (!empty($activityType) && $activityType !== 'all') {
+                $query->where('activity_type', $activityType);
+            }
+
+            if (!empty($fromDate)) {
+                $query->whereDate('created_at', '>=', $fromDate);
+            }
+
+            if (!empty($toDate)) {
+                $query->whereDate('created_at', '<=', $toDate);
+            }
+
+            $records = $query->limit(5000)->get();
+
+            $filename = "User_Activity_Report_" . date('Y_m_d_His') . ".csv";
+
+            $headers = [
+                'Content-Type'        => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                'Pragma'              => 'no-cache',
+                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires'             => '0',
+            ];
+
+            $callback = function () use ($records) {
+                $handle = fopen('php://output', 'w');
+                // UTF-8 BOM
+                fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+
+                fputcsv($handle, ['ID', 'USER / STAFF NAME', 'ROLE', 'ACTIVITY TYPE', 'MODULE', 'ACTION PERFORMED', 'METHOD', 'IP ADDRESS', 'DATE & TIME']);
+
+                foreach ($records as $r) {
+                    fputcsv($handle, [
+                        $r->id,
+                        $r->user_name ?: 'System User',
+                        $r->role_name ?: 'Staff',
+                        strtoupper($r->activity_type ?: 'GENERAL'),
+                        $r->module ?: 'System',
+                        $r->action,
+                        $r->method ?: 'POST',
+                        $r->ip_address ?: '127.0.0.1',
+                        $r->created_at ? date('Y-m-d H:i:s', strtotime($r->created_at)) : ''
+                    ]);
+                }
+
+                fclose($handle);
+            };
+
+            return response()->stream($callback, 200, $headers);
+        } catch (\Throwable $th) {
+            Log::error('ReportApiController exportUserActivities error: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
     }

@@ -532,6 +532,22 @@ class HrStaffApiController extends Controller
             if ($request->hasFile('document')) {
                 $file = $request->file('document');
                 
+                // Validate image dimensions if uploaded file is an image
+                $mime = $file->getMimeType();
+                if ($mime && str_starts_with($mime, 'image/')) {
+                    $imageInfo = @getimagesize($file->getRealPath());
+                    if ($imageInfo) {
+                        $width = $imageInfo[0];
+                        $height = $imageInfo[1];
+                        if ($width > 2000 || $height > 2000) {
+                            return response()->json([
+                                'status' => 'error',
+                                'message' => "Certificate image dimensions ({$width}x{$height}) exceed the maximum allowed size of 2000x2000 pixels."
+                            ], 422);
+                        }
+                    }
+                }
+
                 // Generate a 6-char random alphanumeric string like RefNo()
                 $alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
                 $pass = [];
@@ -833,11 +849,28 @@ class HrStaffApiController extends Controller
         try {
             $request->validate([
                 'description' => 'required|string',
-                'filename' => 'required|file|mimes:pdf,doc,docx,jpeg,jpg,gif,png,bmp|max:5120',
+                'filename' => 'required|file|mimes:pdf,doc,docx,jpeg,jpg,gif,png,bmp,webp|max:5120',
             ]);
 
             if ($request->hasFile('filename')) {
                 $file = $request->file('filename');
+
+                // Validate image dimensions if uploaded file is an image
+                $mime = $file->getMimeType();
+                if ($mime && str_starts_with($mime, 'image/')) {
+                    $imageInfo = @getimagesize($file->getRealPath());
+                    if ($imageInfo) {
+                        $width = $imageInfo[0];
+                        $height = $imageInfo[1];
+                        if ($width > 2000 || $height > 2000) {
+                            return response()->json([
+                                'status' => 'error',
+                                'message' => "Attachment image dimensions ({$width}x{$height}) exceed the maximum allowed size of 2000x2000 pixels."
+                            ], 422);
+                        }
+                    }
+                }
+
                 $customName = $this->RefNo() . '.' . $file->getClientOriginalExtension();
 
                 $fileUrl = \App\Helpers\FileUploadHelper::upload($file, 'staffattachments', $customName);

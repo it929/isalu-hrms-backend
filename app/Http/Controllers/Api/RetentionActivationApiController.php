@@ -10,6 +10,8 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class RetentionActivationApiController extends Controller
 {
+    use ResolveUserContextTrait;
+
     private function checkAuth(Request $request): bool
     {
         $userId = $request->header('X-User-Id');
@@ -30,6 +32,9 @@ class RetentionActivationApiController extends Controller
         }
 
         try {
+            $ctx = $this->getUserContext($request);
+            $isSuperAdmin = $ctx ? (bool)$ctx['isSuperAdmin'] : false;
+
             $search = trim($request->input('search', ''));
             $query = DB::table('tblper as p')
                 ->leftJoin('first_salary_structure as fss', 'fss.staffId', '=', 'p.ID')
@@ -49,34 +54,35 @@ class RetentionActivationApiController extends Controller
                         COALESCE(fss.medical_allowance, 0.00) +
                         COALESCE(fss.utility_allowance, 0.00) +
                         COALESCE(fss.meal_allowance, 0.00)
-                    ) as basic_salary')
+                    ) as gross_salary'),
+                    DB::raw('COALESCE(fss.basic_salary, 0.00) as basic_salary')
                 );
 
-            if ($search !== '') {
+            if (!empty($search)) {
                 $query->where(function ($q) use ($search) {
-                    $q->where('p.fileNo', 'like', "%{$search}%")
-                      ->orWhere('p.surname', 'like', "%{$search}%")
-                      ->orWhere('p.first_name', 'like', "%{$search}%")
-                      ->orWhere('p.othernames', 'like', "%{$search}%");
+                    $q->where('p.surname', 'LIKE', "%{$search}%")
+                      ->orWhere('p.first_name', 'LIKE', "%{$search}%")
+                      ->orWhere('p.fileNo', 'LIKE', "%{$search}%")
+                      ->orWhere('p.ID', 'LIKE', "%{$search}%");
                 });
             }
+
+            $staffRecords = $query->orderBy('p.surname', 'asc')->get();
 
             $payrollDeductions = DB::table('payroll_conpt')
                 ->select('staffID', DB::raw('SUM(retention) as total_retention_deducted'))
                 ->groupBy('staffID')
                 ->pluck('total_retention_deducted', 'staffID');
 
-            $records = $query->orderBy('p.surname', 'asc')->get()->map(function ($row) use ($payrollDeductions) {
+            $records = $staffRecords->map(function ($row) use ($payrollDeductions) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
-                $row->reten_act = (int) $row->reten_act;
-                $row->basic_salary = (float) $row->basic_salary;
-                $row->num_rente_months = (int) ($row->num_rente_months ?? 0);
+                $row->reten_act = (int)$row->reten_act;
+                $row->num_rente_months = (int)$row->num_rente_months;
                 $row->remaining_months = max(0, 20 - $row->num_rente_months);
+                $row->gross_salary = (float)$row->gross_salary;
+                $row->basic_salary = (float)$row->basic_salary;
                 $row->monthly_retention = round($row->basic_salary * 0.05, 2);
-                
-                $fromPayroll = isset($payrollDeductions[$row->id]) ? (float)$payrollDeductions[$row->id] : 0.00;
-                $calculatedDeducted = round($row->num_rente_months * $row->monthly_retention, 2);
-                $row->total_retention_deducted = max($fromPayroll, $calculatedDeducted);
+                $row->total_retention_deducted = isset($payrollDeductions[$row->id]) ? (float)$payrollDeductions[$row->id] : 0.00;
                 $row->total_retention_target = round($row->monthly_retention * 20, 2);
 
                 return $row;
@@ -84,7 +90,8 @@ class RetentionActivationApiController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $records
+                'data' => $records,
+                'isSuperAdmin' => $isSuperAdmin,
             ]);
         } catch (\Throwable $th) {
             Log::error('RetentionActivationAPI index: ' . $th->getMessage());
@@ -101,7 +108,8 @@ class RetentionActivationApiController extends Controller
      */
     public function toggleRetention(Request $request)
     {
-        if (!$this->checkAuth($request)) {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Unauthorized'
@@ -115,7 +123,15 @@ class RetentionActivationApiController extends Controller
             ]);
 
             $staffId = $request->input('staff_id');
-            $retenAct = $request->input('reten_act');
+            $retenAct = (int)$request->input('reten_act');
+
+            // Only Super Administrators are authorized to manually deactivate retention
+            if ($retenAct === 0 && empty($ctx['isSuperAdmin'])) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Permission denied: Only Super Administrators are authorized to manually deactivate staff retention.'
+                ], 403);
+            }
 
             $existing = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
 
@@ -158,7 +174,8 @@ class RetentionActivationApiController extends Controller
      */
     public function bulkToggleRetention(Request $request)
     {
-        if (!$this->checkAuth($request)) {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Unauthorized'
@@ -173,7 +190,16 @@ class RetentionActivationApiController extends Controller
             ]);
 
             $staffIds = $request->input('staff_ids');
-            $retenAct = $request->input('reten_act');
+            $retenAct = (int)$request->input('reten_act');
+
+            // Only Super Administrators are authorized to manually deactivate retention
+            if ($retenAct === 0 && empty($ctx['isSuperAdmin'])) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Permission denied: Only Super Administrators are authorized to manually deactivate staff retention.'
+                ], 403);
+            }
+
             $successCount = 0;
 
             DB::beginTransaction();

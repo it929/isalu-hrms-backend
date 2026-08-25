@@ -131,7 +131,7 @@ class RetentionActivationApiTest extends TestCase
             'reten_act' => 1
         ]);
 
-        // Toggle off
+        // Toggle off as Super Admin -> Succeeds (200)
         $response = $this->postJson('/api/nextjs/payroll/retention-activation/toggle', [
             'staff_id' => $this->testEmployeeId,
             'reten_act' => 0
@@ -143,6 +143,35 @@ class RetentionActivationApiTest extends TestCase
             'staffId' => $this->testEmployeeId,
             'reten_act' => 0
         ]);
+
+        // Toggle on as Super Admin
+        $this->postJson('/api/nextjs/payroll/retention-activation/toggle', [
+            'staff_id' => $this->testEmployeeId,
+            'reten_act' => 1
+        ], $headers);
+
+        // Non-superadmin user trying to deactivate -> Must fail (403)
+        $nonSuperUserId = DB::table('users')->insertGetId([
+            'username' => 'regular_staff_' . time(),
+            'email' => 'regular_' . time() . '@example.com',
+            'password' => bcrypt('password'),
+        ]);
+        DB::table('assign_user_role')->insert([
+            'userID' => $nonSuperUserId,
+            'roleID' => 9999,
+        ]);
+
+        $nonSuperHeaders = ['X-User-Id' => $nonSuperUserId];
+        $failResponse = $this->postJson('/api/nextjs/payroll/retention-activation/toggle', [
+            'staff_id' => $this->testEmployeeId,
+            'reten_act' => 0
+        ], $nonSuperHeaders);
+
+        $failResponse->assertStatus(403)
+            ->assertJson([
+                'status' => 'error'
+            ]);
+        $this->assertStringContainsString('Super Administrators', $failResponse->json('message'));
     }
 
     /**
