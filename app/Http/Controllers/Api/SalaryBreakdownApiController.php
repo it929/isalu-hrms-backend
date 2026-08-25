@@ -545,13 +545,18 @@ class SalaryBreakdownApiController extends Controller
                 // Ignore if LOA table is not available
             }
 
+            $daysInPayrollMonth = (int) \Carbon\Carbon::create($year, $month, 1)->daysInMonth;
+            if ($daysInPayrollMonth < 28 || $daysInPayrollMonth > 31) {
+                $daysInPayrollMonth = 30;
+            }
+
             // Check if employee joined mid-month (doj)
             $dojDaysDeducted = 0;
             if (!empty($staff->doj)) {
                 try {
                     $dojDate = \Carbon\Carbon::parse($staff->doj);
                     if ($dojDate->year === $year && $dojDate->month === $month) {
-                        $daysBefore = max(0, min(30, $dojDate->day - 1));
+                        $daysBefore = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
                         $dojDaysDeducted = $daysBefore;
                     }
                 } catch (\Throwable $e) { /* ignore */ }
@@ -585,14 +590,14 @@ class SalaryBreakdownApiController extends Controller
                 $otherDeduct = (float)$computedRecord->other_deductions;
                 $totalDeductions = (float)$computedRecord->total_deductions;
                 $netPay = (float)$computedRecord->net_pay;
-                $paidDays = isset($computedRecord->paid_days) ? (int)$computedRecord->paid_days : 30;
-                $loaDays = max(0, 30 - $paidDays);
+                $paidDays = isset($computedRecord->paid_days) ? (int)$computedRecord->paid_days : $daysInPayrollMonth;
+                $loaDays = max(0, $daysInPayrollMonth - $paidDays);
             } else {
-                $paidDays = max(0, 30 - $loaDays - $dojDaysDeducted);
-                $leaveOfAbsenceDeduct = ($grossPay / 30.0) * $loaDays;
+                $paidDays = max(0, $daysInPayrollMonth - $loaDays - $dojDaysDeducted);
+                $leaveOfAbsenceDeduct = ($grossPay / (float)$daysInPayrollMonth) * $loaDays;
 
-                // Method 1: Prorate Monthly PAYE Tax by Paid Days / 30
-                $payeTax = round($fullMonthlyTax * ($paidDays / 30.0), 2);
+                // Method 1: Prorate Monthly PAYE Tax by Paid Days / Days in Month
+                $payeTax = round($fullMonthlyTax * ($paidDays / (float)$daysInPayrollMonth), 2);
                 // Pension is calculated based on full gross (not prorated)
                 $pension = $fullMonthlyPension;
 
@@ -600,7 +605,7 @@ class SalaryBreakdownApiController extends Controller
                                    $coopSavingsDeduct + $coopAssetDeduct + $surchargeDeduct + $absencePenaltyDeduct +
                                    $loanDeduct + $otherDeduct + $leaveOfAbsenceDeduct;
 
-                $netPay = max(0.00, $grossPay - $totalDeductions);
+                $netPay = round($grossPay - $totalDeductions, 2);
             }
 
             return response()->json([
@@ -1577,18 +1582,22 @@ class SalaryBreakdownApiController extends Controller
             $grossPay = $basicAllowances + $varAllowances;
 
             // Check if employee joined mid-month (doj)
+            $daysInPayrollMonth = (int) \Carbon\Carbon::create($year, $month, 1)->daysInMonth;
+            if ($daysInPayrollMonth < 28 || $daysInPayrollMonth > 31) {
+                $daysInPayrollMonth = 30;
+            }
             $loaDays = $loaDaysByStaff[$sid] ?? 0;
             $dojDaysDeducted = 0;
             if (!empty($staff->doj)) {
                 try {
                     $dojDate = \Carbon\Carbon::parse($staff->doj);
                     if ($dojDate->year === $year && $dojDate->month === $month) {
-                        $daysBefore = max(0, min(30, $dojDate->day - 1));
+                        $daysBefore = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
                         $dojDaysDeducted = $daysBefore;
                     }
                 } catch (\Throwable $e) { /* ignore */ }
             }
-            $paidDays = max(0, 30 - $loaDays - $dojDaysDeducted);
+            $paidDays = max(0, $daysInPayrollMonth - $loaDays - $dojDaysDeducted);
 
             // PAYE Tax (Nigeria 2025/2026 progressive bands)
             $annualGross = $declareSalary * 12.0;
@@ -1624,8 +1633,8 @@ class SalaryBreakdownApiController extends Controller
                 }
             }
             $fullMonthlyTax = round($annualTax / 12.0, 2);
-            // Method 1: Prorate Monthly PAYE Tax by Paid Days / 30
-            $payeTax = round($fullMonthlyTax * ($paidDays / 30.0), 2);
+            // Method 1: Prorate Monthly PAYE Tax by Paid Days / Days in Month
+            $payeTax = round($fullMonthlyTax * ($paidDays / (float)$daysInPayrollMonth), 2);
 
             // Pension (calculated on full basic allowances / gross, not prorated)
             $pension = 0.00;
@@ -1703,7 +1712,7 @@ class SalaryBreakdownApiController extends Controller
             $otherDeduct = $othSetup ? min((float)$othSetup->monthly_deduction, $othBal) : 0.00;
 
             // Leave of Absence
-            $leaveOfAbsence = round(($grossPay / 30.0) * $loaDays, 2);
+            $leaveOfAbsence = round(($grossPay / (float)$daysInPayrollMonth) * $loaDays, 2);
 
             $totalDeductions = round(
                 $payeTax + $pension + $retention + $iou + $medLoan + $coopLoan +
@@ -1712,7 +1721,7 @@ class SalaryBreakdownApiController extends Controller
                 2
             );
 
-            $netPay = max(0.00, round($grossPay - $totalDeductions, 2));
+            $netPay = round($grossPay - $totalDeductions, 2);
 
             // Balances for spreadsheet
             $revolvingLoanBal = $lSetup ? (float)$lSetup->balance_remaining : ($empLoan ? (float)$empLoan->balance : 0.00);

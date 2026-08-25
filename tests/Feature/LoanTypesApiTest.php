@@ -56,8 +56,10 @@ class LoanTypesApiTest extends TestCase
         $names = array_column($data, 'name');
 
         $this->assertContains('Personal Loan', $names);
-        $this->assertContains('Medical Loan', $names);
         $this->assertContains('Car Loan', $names);
+        $this->assertNotContains('Salary Advance', $names);
+        $this->assertNotContains('Cooperative Loan', $names);
+        $this->assertNotContains('Medical Loan', $names);
     }
 
     /**

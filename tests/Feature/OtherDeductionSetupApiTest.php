@@ -46,6 +46,7 @@ class OtherDeductionSetupApiTest extends TestCase
             'monthly_deduction' => 15000.00,
             'start_month' => '2026-06',
             'end_month' => '2026-08',
+            'remarks' => 'Staff training and uniform deduction',
             'is_active' => 1,
         ], $headers);
 
@@ -58,6 +59,7 @@ class OtherDeductionSetupApiTest extends TestCase
             'total_amount' => 45000.00,
             'duration_months' => 3,
             'monthly_deduction' => 15000.00,
+            'remarks' => 'Staff training and uniform deduction',
         ]);
 
         // Get the setup ID

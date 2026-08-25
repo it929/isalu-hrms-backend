@@ -157,7 +157,7 @@ class EmployeeLoanApiController extends Controller
                 'loan_type' => 'required|string|max:255',
                 'loan_amount' => 'required|numeric|min:0',
                 'balance' => 'nullable|numeric|min:0',
-                'monthly_deduction' => 'required|numeric|min:0',
+                'monthly_deduction' => 'nullable|numeric|min:0',
                 'status' => 'nullable|string|max:50',
             ]);
 
@@ -238,7 +238,7 @@ class EmployeeLoanApiController extends Controller
                 'loan_type' => $validated['loan_type'],
                 'loan_amount' => $loanAmount,
                 'balance' => $balance,
-                'monthly_deduction' => (float) $validated['monthly_deduction'],
+                'monthly_deduction' => isset($validated['monthly_deduction']) ? (float) $validated['monthly_deduction'] : 0.00,
                 'status' => $status,
                 'updated_at' => now(),
             ];
@@ -325,6 +325,11 @@ class EmployeeLoanApiController extends Controller
     {
         try {
             $types = DB::table('loan_types')
+                ->whereNotIn(DB::raw('LOWER(name)'), [
+                    'salary advance',
+                    'cooperative loan',
+                    'medical loan'
+                ])
                 ->select('id', 'name')
                 ->orderBy('id', 'asc')
                 ->get();

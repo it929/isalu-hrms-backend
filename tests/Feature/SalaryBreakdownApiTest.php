@@ -166,4 +166,66 @@ class SalaryBreakdownApiTest extends TestCase
         $this->assertEquals(6666.67, $computedData['deductions']['leave_of_absence']['amount']);
         $this->assertEquals('Computed Payroll', $computedData['summary']['status']);
     }
+
+    public function test_salary_breakdown_allows_negative_net_pay_when_deductions_exceed_gross()
+    {
+        $user = DB::table('tblper')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in tblper');
+            return;
+        }
+
+        DB::table('assign_user_role')->insertOrIgnore([
+            'userID' => $user->UserID ?? 1,
+            'roleID' => 1,
+        ]);
+
+        // Gross = 50,000
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $user->ID],
+            [
+                'basic_salary' => 10000.00,
+                'housing_allowance' => 10000.00,
+                'transport_allowance' => 10000.00,
+                'medical_allowance' => 10000.00,
+                'utility_allowance' => 5000.00,
+                'meal_allowance' => 5000.00,
+                'declare_salary' => 50000.00,
+                'pen_act' => 0,
+            ]
+        );
+
+        // Deductions totaling 55,000 (e.g. Coop Savings 30,000 + Loan 25,000)
+        DB::table('coop_savings_setups')->updateOrInsert(
+            ['staffId' => $user->ID],
+            [
+                'monthly_saving' => 30000.00,
+                'saving_balance' => 30000.00,
+                'start_month' => '2029-01',
+                'is_active' => 1
+            ]
+        );
+
+        DB::table('loan_deduction_setups')->updateOrInsert(
+            ['staffId' => $user->ID],
+            [
+                'monthly_deduction' => 25000.00,
+                'balance_remaining' => 100000.00,
+                'start_month' => '2029-01',
+                'end_month' => '2029-12',
+                'is_active' => 1
+            ]
+        );
+
+        $headers = ['X-User-Id' => $user->UserID ?? 1];
+
+        $response = $this->getJson('/api/nextjs/payroll/salary-breakdown?staff_id=' . $user->ID . '&month=5&year=2029', $headers);
+        $response->assertStatus(200);
+        $data = $response->json();
+
+        // Gross = 50,000; Total Deductions = 55,000; Net Pay = -5,000
+        $this->assertEquals(50000.00, $data['earnings']['gross_pay']);
+        $this->assertEquals(55000.00, $data['deductions']['total_deductions']);
+        $this->assertEquals(-5000.00, $data['summary']['net_pay']);
+    }
 }

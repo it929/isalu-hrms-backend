@@ -47,7 +47,8 @@ class OtherDeductionSetupApiController extends Controller
                     $q->where('p.fileNo', 'like', "%{$search}%")
                       ->orWhere('p.surname', 'like', "%{$search}%")
                       ->orWhere('p.first_name', 'like', "%{$search}%")
-                      ->orWhere('p.othernames', 'like', "%{$search}%");
+                      ->orWhere('p.othernames', 'like', "%{$search}%")
+                      ->orWhere('ods.remarks', 'like', "%{$search}%");
                 });
             }
 
@@ -99,6 +100,7 @@ class OtherDeductionSetupApiController extends Controller
                 'balance_remaining' => 'nullable|numeric|min:0',
                 'start_month' => 'required|string|regex:/^\d{4}-\d{2}$/',
                 'end_month' => 'nullable|string|regex:/^\d{4}-\d{2}$/',
+                'remarks' => 'nullable|string|max:1000',
                 'is_active' => 'nullable|integer|in:0,1',
             ]);
 
@@ -131,6 +133,7 @@ class OtherDeductionSetupApiController extends Controller
                 'balance_remaining' => $balanceRemaining,
                 'start_month' => $validated['start_month'],
                 'end_month' => $endMonth,
+                'remarks' => $validated['remarks'] ?? null,
                 'is_active' => $validated['is_active'] ?? 1,
                 'updated_at' => now(),
             ];
@@ -249,8 +252,8 @@ class OtherDeductionSetupApiController extends Controller
                 'Expires'             => '0',
             ];
 
-            $columns = ['Staff ID', 'Deduction Type (one_time/spread)', 'Total Amount', 'Duration Months', 'Start Month (YYYY-MM)'];
-            $exampleRow = ['1024', 'spread', '45000.00', '3', '2026-06'];
+            $columns = ['Staff ID', 'Deduction Type (one_time/spread)', 'Total Amount', 'Duration Months', 'Start Month (YYYY-MM)', 'Remarks'];
+            $exampleRow = ['1024', 'spread', '45000.00', '3', '2026-06', 'Staff uniform and ID card replacement'];
 
             $callback = function () use ($columns, $exampleRow) {
                 $handle = fopen('php://output', 'w');
@@ -308,6 +311,7 @@ class OtherDeductionSetupApiController extends Controller
             $amountIdx = -1;
             $durationIdx = -1;
             $startIdx = -1;
+            $remarksIdx = -1;
 
             foreach ($headers as $index => $header) {
                 if (strpos($header, 'staff id') !== false || strpos($header, 'staff_id') !== false || $header === 'id' || $header === 'staffid') {
@@ -322,6 +326,8 @@ class OtherDeductionSetupApiController extends Controller
                     $durationIdx = $index;
                 } elseif (strpos($header, 'start') !== false || strpos($header, 'period') !== false) {
                     $startIdx = $index;
+                } elseif (strpos($header, 'remark') !== false || strpos($header, 'note') !== false || strpos($header, 'desc') !== false || strpos($header, 'reason') !== false) {
+                    $remarksIdx = $index;
                 }
             }
 
@@ -331,6 +337,7 @@ class OtherDeductionSetupApiController extends Controller
             if ($amountIdx === -1) $amountIdx = 2;
             if ($durationIdx === -1) $durationIdx = 3;
             if ($startIdx === -1) $startIdx = 4;
+            if ($remarksIdx === -1 && isset($headers[5])) $remarksIdx = 5;
 
             $importedCount = 0;
             $warnings = [];
@@ -417,6 +424,9 @@ class OtherDeductionSetupApiController extends Controller
                     }
                 }
 
+                // Parse remarks
+                $remarks = ($remarksIdx !== -1 && isset($row[$remarksIdx])) ? trim((string)$row[$remarksIdx]) : null;
+
                 // Calculate end month & monthly deduction
                 if ($deductionType === 'one_time') {
                     $monthlyDeduction = $totalAmount;
@@ -446,6 +456,7 @@ class OtherDeductionSetupApiController extends Controller
                         'balance_remaining' => $totalAmount,
                         'start_month' => $startMonth,
                         'end_month' => $endMonth,
+                        'remarks' => $remarks ?: null,
                         'is_active' => 1,
                         'updated_at' => now(),
                         'created_at' => now()

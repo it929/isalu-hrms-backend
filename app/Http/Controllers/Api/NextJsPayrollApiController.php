@@ -975,19 +975,23 @@ class NextJsPayrollApiController extends Controller
                     $declareSalary = (float)$struct->declare_salary;
                 }
 
-                // 2. Paid days (30 - Leave of Absence days - Mid-Month Hire Days)
+                // 2. Paid days (Days in Month - Leave of Absence days - Mid-Month Hire Days)
+                $daysInPayrollMonth = (int) \Carbon\Carbon::create($year, $month, 1)->daysInMonth;
+                if ($daysInPayrollMonth < 28 || $daysInPayrollMonth > 31) {
+                    $daysInPayrollMonth = 30;
+                }
                 $loaDays = $this->getLoaDaysForMonth($emp->ID, $year, $month);
                 $dojDaysDeducted = 0;
                 if (!empty($emp->doj)) {
                     try {
                         $dojDate = \Carbon\Carbon::parse($emp->doj);
                         if ($dojDate->year === $year && $dojDate->month === $month) {
-                            $daysBefore = max(0, min(30, $dojDate->day - 1));
+                            $daysBefore = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
                             $dojDaysDeducted = $daysBefore;
                         }
                     } catch (\Throwable $e) { /* ignore */ }
                 }
-                $paidDays = max(0, 30 - $loaDays - $dojDaysDeducted);
+                $paidDays = max(0, $daysInPayrollMonth - $loaDays - $dojDaysDeducted);
 
                 // Check if there is an active coop loan setup
                 $currentMonthStr = sprintf("%04d-%02d", $year, $month);
@@ -1301,8 +1305,8 @@ class NextJsPayrollApiController extends Controller
                 }
                 
                 $fullMonthlyTax = round($annualTax / 12.0, 2);
-                // Method 1: Prorate Monthly PAYE Tax by Paid Days / 30
-                $payeTax = round($fullMonthlyTax * ($paidDays / 30.0), 2);
+                // Method 1: Prorate Monthly PAYE Tax by Paid Days / Days in Month
+                $payeTax = round($fullMonthlyTax * ($paidDays / (float)$daysInPayrollMonth), 2);
 
                 $pension = 0.00;
                 if ($struct && $struct->pen_act == 1) {
@@ -1320,8 +1324,8 @@ class NextJsPayrollApiController extends Controller
                     ->whereBetween('iou_date', [$firstDay, $lastDay])
                     ->sum('amount');
 
-                // Compute leave of absence deduction: (grossPay / 30) * days_of_absent
-                $leaveOfAbsenceDeduction = ($grossPay / 30.0) * $loaDays;
+                // Compute leave of absence deduction: (grossPay / daysInPayrollMonth) * days_of_absent
+                $leaveOfAbsenceDeduction = ($grossPay / (float)$daysInPayrollMonth) * $loaDays;
 
                 // Compute retention using first_salary_structure if active and num_rente_months is less than 20
                 $firstStruct = DB::table('first_salary_structure')->where('staffId', $emp->ID)->first();
@@ -2123,247 +2127,14 @@ class NextJsPayrollApiController extends Controller
                 'MAY' => 5, 'JUNE' => 6, 'JULY' => 7, 'AUGUST' => 8,
                 'SEPTEMBER' => 9, 'OCTOBER' => 10, 'NOVEMBER' => 11, 'DECEMBER' => 12
             ];
-            $month = $monthNames[strtoupper($monthName)] ?? 0;
+            $month = $monthNames[strtoupper($monthName)] ?? (int)date('n');
 
-            // 1. Try to read directly from computed payroll if it exists
-            $conpt = DB::table('payroll_conpt')
-                ->where('staffID', $staffId)
-                ->where('month', $month)
-                ->where('year', $year)
-                ->first();
-
-            if ($conpt) {
-                return response()->json([
-                    'status' => 'success',
-                    'net_pay' => (float)$conpt->net_pay,
-                    'month' => $monthName,
-                    'year' => $year,
-                    'is_estimated' => false
-                ]);
-            }
-
-            // 2. Otherwise, estimate dynamic net pay based on active salary structures and active deduction setups
-            $emp = DB::table('tblper')->where('ID', $staffId)->first();
-            if (!$emp || $emp->rank == 2 || $emp->staff_status != 1) {
-                return response()->json([
-                    'status' => 'success',
-                    'net_pay' => 0.00,
-                    'month' => $monthName,
-                    'year' => $year,
-                    'is_estimated' => true
-                ]);
-            }
-
-            $struct = DB::table('salary_structures')
-                ->where('staffId', $staffId)
-                ->first();
-
-            $basic = 0.00;
-            $housing = 0.00;
-            $transport = 0.00;
-            $medical = 0.00;
-            $utility = 0.00;
-            $meal = 0.00;
-            $taxRate = 0.00;
-            $pensionRate = 0.00;
-            $declareSalary = 0.00;
-
-            if ($struct) {
-                $basic = (float)$struct->basic_salary;
-                $housing = (float)$struct->housing_allowance;
-                $transport = (float)$struct->transport_allowance;
-                $medical = (float)$struct->medical_allowance;
-                $utility = (float)$struct->utility_allowance;
-                $meal = (float)$struct->meal_allowance;
-                $taxRate = (float)$struct->tax_rate;
-                $pensionRate = (float)$struct->pension_rate;
-                $declareSalary = (float)$struct->declare_salary;
-            }
-
-            $totalIncome = $basic + $housing + $transport + $medical + $utility + $meal;
-            $grossPay = $totalIncome; // Assume 0 variable earnings for estimation
-            $declareIncome = $declareSalary;
-
-            // PAYE and Pension
-            $annualGross = $declareIncome * 12.0;
-            $annualPension = 0.00;
-            if ($struct && $struct->pen_act == 1) {
-                $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
-                $annualPension = ($annualGross * 0.5) * $rate;
-            }
-            $annualTaxable = max(0.00, $annualGross - $annualPension);
-
-            $annualTax = 0.00;
-            if ($annualTaxable > 800000.00) {
-                $taxableRemaining = $annualTaxable - 800000.00;
-                
-                $band1 = min(2200000.00, $taxableRemaining);
-                $annualTax += $band1 * 0.15;
-                $taxableRemaining -= $band1;
-                
-                if ($taxableRemaining > 0) {
-                    $band2 = min(9000000.00, $taxableRemaining);
-                    $annualTax += $band2 * 0.18;
-                    $taxableRemaining -= $band2;
-                }
-                
-                if ($taxableRemaining > 0) {
-                    $band3 = min(13000000.00, $taxableRemaining);
-                    $annualTax += $band3 * 0.21;
-                    $taxableRemaining -= $band3;
-                }
-                
-                if ($taxableRemaining > 0) {
-                    $band4 = min(25000000.00, $taxableRemaining);
-                    $annualTax += $band4 * 0.23;
-                    $taxableRemaining -= $band4;
-                }
-                
-                if ($taxableRemaining > 0) {
-                    $annualTax += $taxableRemaining * 0.25;
-                }
-            }
-            $payeTax = round($annualTax / 12.0, 2);
-
-            $pension = 0.00;
-            if ($struct && $struct->pen_act == 1) {
-                $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
-                $pension = ($totalIncome * 0.5) * $rate;
-            }
-
-            // Deductions from setups
-            $currentMonthStr = sprintf("%04d-%02d", $year, $month);
-
-            $coopLoanSetup = DB::table('coop_loan_deduction_setups')
-                ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->where('balance_remaining', '>', 0)
-                ->where('start_month', '<=', $currentMonthStr)
-                ->where('end_month', '>=', $currentMonthStr)
-                ->orderBy('id', 'desc')->first();
-            $coopLoanRpyt = $coopLoanSetup ? min((float)$coopLoanSetup->monthly_deduction, (float)$coopLoanSetup->balance_remaining) : 0.00;
-
-            $coopSavingsSetup = DB::table('coop_savings_setups')
-                ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->where('start_month', '<=', $currentMonthStr)
-                ->orderBy('id', 'desc')->first();
-            $coopSavings = $coopSavingsSetup ? (float)$coopSavingsSetup->monthly_saving : 0.00;
-
-            $surchargeSetup = DB::table('surcharge_deduction_setups')
-                ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->where('balance_remaining', '>', 0)
-                ->where('start_month', '<=', $currentMonthStr)
-                ->where(function($q) use ($currentMonthStr) {
-                    $q->whereNull('end_month')
-                      ->orWhere('end_month', '=', '')
-                      ->orWhere('end_month', '>=', $currentMonthStr);
-                })
-                ->orderBy('id', 'desc')->first();
-            $surcharges = $surchargeSetup ? min((float)$surchargeSetup->monthly_deduction, (float)$surchargeSetup->balance_remaining) : 0.00;
-
-            $medicalLoanSetup = DB::table('medical_loan_deduction_setups')
-                ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->where('balance_remaining', '>', 0)
-                ->where('start_month', '<=', $currentMonthStr)
-                ->where('end_month', '>=', $currentMonthStr)
-                ->orderBy('id', 'desc')->first();
-            $medicalLoan = $medicalLoanSetup ? min((float)$medicalLoanSetup->monthly_deduction, (float)$medicalLoanSetup->balance_remaining) : 0.00;
-
-            $absencePenaltySetup = DB::table('absence_penalty_deduction_setups')
-                ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->where('balance_remaining', '>', 0)
-                ->where('start_month', '<=', $currentMonthStr)
-                ->where(function($q) use ($currentMonthStr) {
-                    $q->whereNull('end_month')
-                      ->orWhere('end_month', '=', '')
-                      ->orWhere('end_month', '>=', $currentMonthStr);
-                })
-                ->orderBy('id', 'desc')->first();
-            $absencePenalty = $absencePenaltySetup ? min((float)$absencePenaltySetup->monthly_deduction, (float)$absencePenaltySetup->balance_remaining) : 0.00;
-
-            $otherDeductionSetup = DB::table('other_deduction_setups')
-                ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->where('balance_remaining', '>', 0)
-                ->where('start_month', '<=', $currentMonthStr)
-                ->where(function($q) use ($currentMonthStr) {
-                    $q->whereNull('end_month')
-                      ->orWhere('end_month', '=', '')
-                      ->orWhere('end_month', '>=', $currentMonthStr);
-                })
-                ->orderBy('id', 'desc')->first();
-            $otherDeductions = $otherDeductionSetup ? min((float)$otherDeductionSetup->monthly_deduction, (float)$otherDeductionSetup->balance_remaining) : 0.00;
-
-            $coopAssetFinanceSetup = DB::table('coop_asset_finance_deduction_setups')
-                ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->where('balance_remaining', '>', 0)
-                ->where('start_month', '<=', $currentMonthStr)
-                ->where(function($q) use ($currentMonthStr) {
-                    $q->whereNull('end_month')
-                      ->orWhere('end_month', '=', '')
-                      ->orWhere('end_month', '>=', $currentMonthStr);
-                })
-                ->orderBy('id', 'desc')->first();
-            $coopAssetFinance = $coopAssetFinanceSetup ? min((float)$coopAssetFinanceSetup->monthly_deduction, (float)$coopAssetFinanceSetup->balance_remaining) : 0.00;
-
-            $loanSetup = DB::table('loan_deduction_setups')
-                ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->where('balance_remaining', '>', 0)
-                ->where('start_month', '<=', $currentMonthStr)
-                ->where('end_month', '>=', $currentMonthStr)
-                ->orderBy('id', 'desc')->first();
-            $loanDeduction = 0.00;
-            if ($loanSetup) {
-                $loanDeduction = min((float)$loanSetup->monthly_deduction, (float)$loanSetup->balance_remaining);
-            } else {
-                $employeeLoanSetup = DB::table('employee_loans')
-                    ->where('staffId', $staffId)
-                    ->whereRaw("LOWER(status) = 'approved'")
-                    ->where('balance', '>', 0)
-                    ->orderBy('id', 'desc')->first();
-                if ($employeeLoanSetup) {
-                    $loanDeduction = min((float)$employeeLoanSetup->monthly_deduction, (float)$employeeLoanSetup->balance);
-                }
-            }
-
-            // Approved IOUs
-            $firstDay = \Carbon\Carbon::create($year, $month, 1)->startOfMonth()->format('Y-m-d');
-            $lastDay = \Carbon\Carbon::create($year, $month, 1)->endOfMonth()->format('Y-m-d');
-            $iouSum = (float)DB::table('iou_records')
-                ->where('staff_id', $staffId)
-                ->where('status', 1)
-                ->whereBetween('iou_date', [$firstDay, $lastDay])
-                ->sum('amount');
-
-            // Retention
-            $retention = 0.00;
-            $firstStruct = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
-            if ($firstStruct && $firstStruct->reten_act == 1 && $firstStruct->num_rente_months < 20) {
-                $retentionBase = (float)$firstStruct->basic_salary +
-                                 (float)$firstStruct->housing_allowance +
-                                 (float)$firstStruct->transport_allowance +
-                                 (float)$firstStruct->medical_allowance +
-                                 (float)$firstStruct->utility_allowance +
-                                 (float)$firstStruct->meal_allowance;
-                $retention = round(0.05 * $retentionBase, 2);
-            }
-
-            // Leave of Absence days estimation
-            $loaDays = $this->getLoaDaysForMonth($staffId, $year, $month);
-            $leaveOfAbsenceDeduction = ($grossPay / 30.0) * $loaDays;
-
-            $totalDeductions = $payeTax + $pension + $loanDeduction + $coopSavings + $otherDeductions + $iouSum + $absencePenalty + $retention + $surcharges + $medicalLoan + $coopAssetFinance + $leaveOfAbsenceDeduction;
-            $netPay = max(0.00, $grossPay - $totalDeductions);
+            $iouController = app(\App\Http\Controllers\Api\IouApiController::class);
+            $netPayInfo = $iouController->calculateStaffNetPayBeforeIou($staffId, $year, $month);
 
             return response()->json([
                 'status' => 'success',
-                'net_pay' => $netPay,
+                'net_pay' => $netPayInfo['available_net_pay'],
                 'month' => $monthName,
                 'year' => $year,
                 'is_estimated' => true

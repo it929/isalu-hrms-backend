@@ -67,6 +67,9 @@ class NextJsApiController extends Controller
 
             $roleName = $role ? $role->rolename : 'Staff';
 
+            // Log user login activity
+            \App\Services\UserActivityLogger::logLogin($user, $request, $roleName);
+
             return response()->json([
                 'status' => 'success',
                 'user' => $userData,
@@ -78,6 +81,34 @@ class NextJsApiController extends Controller
             'status' => 'error',
             'message' => 'Invalid credentials'
         ], 401);
+    }
+
+    /**
+     * Log user logout and record activity
+     */
+    public function logout(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            $user = $ctx['user'] ?? ($request->user() ?: null);
+            if (!$user) {
+                $uid = $request->header('X-User-Id') ?: $request->input('user_id');
+                if ($uid) {
+                    $user = \App\Models\User::find($uid) ?: \DB::table('users')->where('id', $uid)->first();
+                }
+            }
+
+            if ($user) {
+                \App\Services\UserActivityLogger::logLogout($user, $request);
+            }
+        } catch (\Throwable $e) {
+            \Log::error('NextJsApiController logout error: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Logged out successfully'
+        ]);
     }
 
     /**

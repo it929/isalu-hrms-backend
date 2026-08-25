@@ -54,6 +54,7 @@ class EmployeeLoanApiTest extends TestCase
             'first_name' => 'User',
             'departmentID' => $deptId1,
             'rank' => 1,
+            'staff_status' => 1,
             'is_hod' => 0
         ]);
 
@@ -63,6 +64,7 @@ class EmployeeLoanApiTest extends TestCase
             'first_name' => 'User',
             'departmentID' => $deptId1,
             'rank' => 1,
+            'staff_status' => 1,
             'is_hod' => 1
         ]);
 
@@ -72,6 +74,7 @@ class EmployeeLoanApiTest extends TestCase
             'first_name' => 'User',
             'departmentID' => $deptId2,
             'rank' => 1,
+            'staff_status' => 1,
             'is_hod' => 0
         ]);
 
@@ -81,6 +84,7 @@ class EmployeeLoanApiTest extends TestCase
             'first_name' => 'User',
             'departmentID' => $deptId1, // Same department as HOD
             'rank' => 1,
+            'staff_status' => 1,
             'is_hod' => 0
         ]);
 
@@ -90,6 +94,7 @@ class EmployeeLoanApiTest extends TestCase
             'first_name' => 'User',
             'departmentID' => $deptId2, // Different department
             'rank' => 1,
+            'staff_status' => 1,
             'is_hod' => 0
         ]);
 

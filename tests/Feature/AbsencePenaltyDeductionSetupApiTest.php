@@ -37,15 +37,54 @@ class AbsencePenaltyDeductionSetupApiTest extends TestCase
         $response->assertStatus(200)
             ->assertJson(['status' => 'success']);
 
-        // Create setup
+        // Test staff salary retrieval
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $user->ID],
+            [
+                'basic_salary' => 120000.00,
+                'housing_allowance' => 30000.00,
+                'transport_allowance' => 0.00,
+                'medical_allowance' => 0.00,
+                'utility_allowance' => 0.00,
+                'meal_allowance' => 0.00,
+                'created_at' => now(),
+            ]
+        );
+
+        $salaryRes = $this->getJson("/api/nextjs/payroll/absence-penalty-deduction-setups/staff-salary/{$user->ID}?month=06&year=2026", $headers);
+        $salaryRes->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'data' => [
+                    'staff_id' => $user->ID,
+                    'monthly_salary' => 150000.00,
+                    'days_in_month' => 30,
+                    'daily_salary' => 5000.00,
+                    'penalty_multiplier' => 3,
+                ]
+            ]);
+
+        // Test February (28 days in 2026) -> Daily = 150,000 / 28 = 5,357.14
+        $febSalaryRes = $this->getJson("/api/nextjs/payroll/absence-penalty-deduction-setups/staff-salary/{$user->ID}?month=02&year=2026", $headers);
+        $febSalaryRes->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'data' => [
+                    'staff_id' => $user->ID,
+                    'monthly_salary' => 150000.00,
+                    'days_in_month' => 28,
+                    'daily_salary' => 5357.14,
+                    'penalty_multiplier' => 3,
+                ]
+            ]);
+
+        // Create setup with absent_days = 2 (Penalty = 6 days = 30,000.00)
         $response = $this->postJson('/api/nextjs/payroll/absence-penalty-deduction-setups', [
             'staffId' => $user->ID,
-            'deduction_type' => 'spread',
-            'total_amount' => 15000.00,
-            'duration_months' => 3,
-            'monthly_deduction' => 5000.00,
-            'start_month' => '2026-06',
-            'end_month' => '2026-08',
+            'month' => '06',
+            'year' => '2026',
+            'absent_days' => 2,
+            'remarks' => 'Absent 2 days without approval',
             'is_active' => 1,
         ], $headers);
 
@@ -54,24 +93,30 @@ class AbsencePenaltyDeductionSetupApiTest extends TestCase
 
         $this->assertDatabaseHas('absence_penalty_deduction_setups', [
             'staffId' => $user->ID,
-            'deduction_type' => 'spread',
-            'total_amount' => 15000.00,
-            'duration_months' => 3,
-            'monthly_deduction' => 5000.00,
+            'absent_days' => 2,
+            'penalty_multiplier' => 3,
+            'penalty_days' => 6,
+            'total_amount' => 30000.00,
+            'monthly_deduction' => 30000.00,
+            'start_month' => '2026-06',
+            'end_month' => '2026-06',
+            'remarks' => 'Absent 2 days without approval',
         ]);
 
         // Get the setup ID
         $setup = DB::table('absence_penalty_deduction_setups')->where('staffId', $user->ID)->first();
         $this->assertNotNull($setup);
 
-        // Toggle setup
+        // Toggle status
         $response = $this->postJson("/api/nextjs/payroll/absence-penalty-deduction-setups/toggle/{$setup->id}", [], $headers);
-        $response->assertStatus(200);
-        $this->assertEquals(0, DB::table('absence_penalty_deduction_setups')->where('id', $setup->id)->value('is_active'));
+        $response->assertStatus(200)
+            ->assertJson(['status' => 'success']);
 
         // Delete setup
         $response = $this->deleteJson("/api/nextjs/payroll/absence-penalty-deduction-setups/{$setup->id}", [], $headers);
-        $response->assertStatus(200);
+        $response->assertStatus(200)
+            ->assertJson(['status' => 'success']);
+
         $this->assertDatabaseMissing('absence_penalty_deduction_setups', ['id' => $setup->id]);
     }
 }

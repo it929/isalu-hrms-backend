@@ -37,6 +37,7 @@ Route::prefix('nextjs')->group(function () {
     Route::get('/uploads/{path}', [\App\Http\Controllers\Api\HrStaffApiController::class, 'serveUploadedFile'])->where('path', '.*');
     Route::get('/sidebar-links', [App\Http\Controllers\Api\NextJsApiController::class, 'getSidebarLinks']);
     Route::post('/login', [\App\Http\Controllers\Api\NextJsApiController::class, 'login']);
+    Route::post('/logout', [\App\Http\Controllers\Api\NextJsApiController::class, 'logout']);
     Route::post('/forgot-password', [\App\Http\Controllers\Api\NextJsApiController::class, 'forgotPassword']);
     Route::post('/password-reset/resets/{token}', [\App\Http\Controllers\Api\NextJsApiController::class, 'resetPassword']);
     Route::post('/update-account', [\App\Http\Controllers\Api\NextJsApiController::class, 'updateAccount']);
@@ -361,6 +362,7 @@ Route::prefix('nextjs')->group(function () {
 
         // Absence Penalty Deduction Setup
         Route::prefix('absence-penalty-deduction-setups')->group(function () {
+            Route::get('/staff-salary/{staffId}', [\App\Http\Controllers\Api\AbsencePenaltyDeductionSetupApiController::class, 'getStaffSalary']);
             Route::get('/',        [\App\Http\Controllers\Api\AbsencePenaltyDeductionSetupApiController::class, 'index']);
             Route::get('/template', [\App\Http\Controllers\Api\AbsencePenaltyDeductionSetupApiController::class, 'downloadTemplate']);
             Route::post('/',       [\App\Http\Controllers\Api\AbsencePenaltyDeductionSetupApiController::class, 'store']);
@@ -493,6 +495,7 @@ Route::prefix('nextjs')->group(function () {
         Route::get('/applicants', [\App\Http\Controllers\Api\ReportApiController::class, 'getApplicants']);
         Route::get('/appraisals', [\App\Http\Controllers\Api\ReportApiController::class, 'getAppraisals']);
         Route::get('/user-activities', [\App\Http\Controllers\Api\ReportApiController::class, 'getUserActivities']);
+        Route::get('/user-activities/export', [\App\Http\Controllers\Api\ReportApiController::class, 'exportUserActivities']);
         Route::get('/payroll-audits', [\App\Http\Controllers\Api\ReportApiController::class, 'getPayrollAudits']);
         Route::get('/employee-changes', [\App\Http\Controllers\Api\ReportApiController::class, 'getEmployeeChanges']);
     });
