@@ -982,10 +982,19 @@ class NextJsPayrollApiController extends Controller
                 }
                 $loaDays = $this->getLoaDaysForMonth($emp->ID, $year, $month);
                 $dojDaysDeducted = 0;
-                if (!empty($emp->doj)) {
+                $effectiveJoinDate = !empty($emp->appointment_date) && $emp->appointment_date !== '0000-00-00'
+                    ? $emp->appointment_date
+                    : (!empty($emp->doj) && $emp->doj !== '0000-00-00' ? $emp->doj : null);
+
+                if (!empty($effectiveJoinDate)) {
                     try {
-                        $dojDate = \Carbon\Carbon::parse($emp->doj);
-                        if ($dojDate->year === $year && $dojDate->month === $month) {
+                        $dojDate = \Carbon\Carbon::parse($effectiveJoinDate);
+                        $startOfMonth = \Carbon\Carbon::create($year, $month, 1)->startOfMonth();
+                        $endOfMonth = \Carbon\Carbon::create($year, $month, 1)->endOfMonth();
+
+                        if ($dojDate->greaterThan($endOfMonth)) {
+                            $dojDaysDeducted = $daysInPayrollMonth;
+                        } elseif ($dojDate->year === $year && $dojDate->month === $month) {
                             $daysBefore = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
                             $dojDaysDeducted = $daysBefore;
                         }
@@ -1325,11 +1334,12 @@ class NextJsPayrollApiController extends Controller
                     ->sum('amount');
 
                 // Compute leave of absence deduction: (grossPay / daysInPayrollMonth) * days_of_absent
-                $leaveOfAbsenceDeduction = ($grossPay / (float)$daysInPayrollMonth) * $loaDays;
+                $leaveOfAbsenceDeduction = round(($grossPay / (float)$daysInPayrollMonth) * $loaDays, 2);
+                $midMonthDeduction = round(($grossPay / (float)$daysInPayrollMonth) * $dojDaysDeducted, 2);
 
                 // Compute retention using first_salary_structure if active and num_rente_months is less than 20
                 $firstStruct = DB::table('first_salary_structure')->where('staffId', $emp->ID)->first();
-                if ($firstStruct && $firstStruct->reten_act == 1) {
+                if ($firstStruct && $firstStruct->reten_act == 1 && $paidDays > 0) {
                     if ($firstStruct->num_rente_months < 20) {
                         $retentionBase = (float)$firstStruct->basic_salary +
                                          (float)$firstStruct->housing_allowance +
@@ -1346,9 +1356,13 @@ class NextJsPayrollApiController extends Controller
                     }
                 }
 
-
-                $totalDeductions = $payeTax + $pension + $loanDeduction + $coopSavings + $otherDeductions + $iouSum + $absencePenalty + $retention + $surcharges + $medicalLoan + $coopLoanRpyt + $coopAssetFinance + $leaveOfAbsenceDeduction;
-                $netPay = $grossPay - $totalDeductions;
+                $totalDeductions = round(
+                    $payeTax + $pension + $loanDeduction + $coopSavings + $otherDeductions +
+                    $iouSum + $absencePenalty + $retention + $surcharges + $medicalLoan +
+                    $coopLoanRpyt + $coopAssetFinance + $leaveOfAbsenceDeduction + $midMonthDeduction,
+                    2
+                );
+                $netPay = ($paidDays === 0) ? 0.00 : round($grossPay - $totalDeductions, 2);
 
                 // 5. Submit detailed row into payroll_conpt table
                 DB::table('payroll_conpt')->insert([
