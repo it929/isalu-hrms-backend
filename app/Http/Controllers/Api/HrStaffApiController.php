@@ -226,6 +226,7 @@ class HrStaffApiController extends Controller
                     'tblper.email',
                     'tblper.dob',
                     'tblper.doj',
+                    'tblper.appointment_date',
                     'tblper.maritalstatus',
                     'tbldesignation.designation',
                     'tbldepartment.department',
@@ -235,6 +236,32 @@ class HrStaffApiController extends Controller
                     'tblper.staff_status'
                 )
                 ->orderBy('tblper.surname', 'asc');
+
+            // Optional Appointment Month and Year filtering
+            $month = $request->input('month');
+            $year = $request->input('year');
+
+            if (!empty($year)) {
+                $query->where(function ($q) use ($year) {
+                    $q->whereYear('tblper.appointment_date', $year)
+                      ->orWhereYear('tblper.doj', $year)
+                      ->orWhere('tblper.appointment_date', 'like', "{$year}-%")
+                      ->orWhere('tblper.appointment_date', 'like', "%-{$year}")
+                      ->orWhere('tblper.doj', 'like', "{$year}-%")
+                      ->orWhere('tblper.doj', 'like', "%-{$year}");
+                });
+            }
+
+            if (!empty($month)) {
+                $monthNum = (int)$month;
+                $monthPadded = str_pad((string)$monthNum, 2, '0', STR_PAD_LEFT);
+                $query->where(function ($q) use ($monthNum, $monthPadded) {
+                    $q->whereMonth('tblper.appointment_date', $monthNum)
+                      ->orWhereMonth('tblper.doj', $monthNum)
+                      ->orWhere('tblper.appointment_date', 'like', "%-{$monthPadded}-%")
+                      ->orWhere('tblper.doj', 'like', "%-{$monthPadded}-%");
+                });
+            }
 
             // If the user is a regular staff member, restrict to only their own record
             if (!$isPrivileged) {
