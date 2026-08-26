@@ -54,7 +54,8 @@ class RetentionActivationApiController extends Controller
                         COALESCE(fss.medical_allowance, 0.00) +
                         COALESCE(fss.utility_allowance, 0.00) +
                         COALESCE(fss.meal_allowance, 0.00)
-                    ) as gross_salary'),
+                    ) as allowance_gross'),
+                    DB::raw('COALESCE(fss.declare_salary, 0.00) as declare_salary'),
                     DB::raw('COALESCE(fss.basic_salary, 0.00) as basic_salary')
                 );
 
@@ -79,9 +80,15 @@ class RetentionActivationApiController extends Controller
                 $row->reten_act = (int)$row->reten_act;
                 $row->num_rente_months = (int)$row->num_rente_months;
                 $row->remaining_months = max(0, 20 - $row->num_rente_months);
-                $row->gross_salary = (float)$row->gross_salary;
+
+                // Compute 5% retention based on first salary structure (basic + housing + transport + medical + utility + meal)
+                $firstGross = (float)$row->allowance_gross > 0 
+                    ? (float)$row->allowance_gross 
+                    : (float)$row->declare_salary;
+
+                $row->gross_salary = $firstGross;
                 $row->basic_salary = (float)$row->basic_salary;
-                $row->monthly_retention = round($row->basic_salary * 0.05, 2);
+                $row->monthly_retention = round($firstGross * 0.05, 2);
                 $row->total_retention_deducted = isset($payrollDeductions[$row->id]) ? (float)$payrollDeductions[$row->id] : 0.00;
                 $row->total_retention_target = round($row->monthly_retention * 20, 2);
 

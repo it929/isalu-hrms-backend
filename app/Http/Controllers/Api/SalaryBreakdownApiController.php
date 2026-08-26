@@ -352,12 +352,15 @@ class SalaryBreakdownApiController extends Controller
                 $retentionMonths = (int)($firstStruct->num_rente_months ?? 0);
                 $retentionRemainingMonths = max(0, 20 - $retentionMonths);
                 if ($isRetentionActive && $retentionMonths < 20) {
-                    $retentionBase = (float)$firstStruct->basic_salary +
-                                     (float)$firstStruct->housing_allowance +
-                                     (float)$firstStruct->transport_allowance +
-                                     (float)$firstStruct->medical_allowance +
-                                     (float)$firstStruct->utility_allowance +
-                                     (float)$firstStruct->meal_allowance;
+                    $allowancesTotal = (float)$firstStruct->basic_salary +
+                                       (float)$firstStruct->housing_allowance +
+                                       (float)$firstStruct->transport_allowance +
+                                       (float)$firstStruct->medical_allowance +
+                                       (float)$firstStruct->utility_allowance +
+                                       (float)$firstStruct->meal_allowance;
+                    $retentionBase = (float)($firstStruct->declare_salary ?? 0) > 0 
+                        ? (float)$firstStruct->declare_salary 
+                        : $allowancesTotal;
                     $retention = round(0.05 * $retentionBase, 2);
                 }
             }
@@ -1690,12 +1693,15 @@ class SalaryBreakdownApiController extends Controller
             if ($firstStruct && $firstStruct->reten_act == 1 && $paidDays > 0) {
                 $retentionMonths = (int)($firstStruct->num_rente_months ?? 0);
                 if ($retentionMonths < 20) {
-                    $retentionBase = (float)$firstStruct->basic_salary +
-                                     (float)$firstStruct->housing_allowance +
-                                     (float)$firstStruct->transport_allowance +
-                                     (float)$firstStruct->medical_allowance +
-                                     (float)$firstStruct->utility_allowance +
-                                     (float)$firstStruct->meal_allowance;
+                    $allowancesTotal = (float)$firstStruct->basic_salary +
+                                       (float)$firstStruct->housing_allowance +
+                                       (float)$firstStruct->transport_allowance +
+                                       (float)$firstStruct->medical_allowance +
+                                       (float)$firstStruct->utility_allowance +
+                                       (float)$firstStruct->meal_allowance;
+                    $retentionBase = (float)($firstStruct->declare_salary ?? 0) > 0 
+                        ? (float)$firstStruct->declare_salary 
+                        : $allowancesTotal;
                     $retention = round(0.05 * $retentionBase, 2);
                 }
             }

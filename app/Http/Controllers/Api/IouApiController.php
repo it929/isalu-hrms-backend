@@ -61,7 +61,11 @@ class IouApiController extends Controller
                 }
             }
 
-            $staff = $query->get()->map(function ($row) {
+            $firstStructures = \Illuminate\Support\Facades\Schema::hasTable('first_salary_structure') 
+                ? DB::table('first_salary_structure')->get()->keyBy('staffId') 
+                : collect();
+
+            $staff = $query->get()->map(function ($row) use ($firstStructures) {
                 $fullName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 
                 $grossSalary = (float)($row->basic_salary ?? 0.00) +
@@ -73,7 +77,21 @@ class IouApiController extends Controller
 
                 $canTakeIou = (int)($row->can_take_iou ?? 1);
                 $maxIouAmount = (float)($row->max_iou_amount ?? 0.00);
-                $maxIou = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.70);
+
+                // Check staff retention completion status
+                $firstStruct = $firstStructures[$row->id] ?? null;
+                $isRetentionActive = false;
+                $hasCompletedRetention = true;
+                $retentionMonths = 0;
+                if ($firstStruct && (int)($firstStruct->reten_act ?? 0) === 1) {
+                    $isRetentionActive = true;
+                    $retentionMonths = (int)($firstStruct->num_rente_months ?? 0);
+                    $hasCompletedRetention = ($retentionMonths >= 20);
+                }
+
+                // If staff has NOT yet completed retention (reten_act = 1 and months < 20), limit is 50% of salary
+                $limitPercentage = ($isRetentionActive && !$hasCompletedRetention) ? 50 : 70;
+                $maxIou = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * ($limitPercentage / 100.0));
 
                 $hasUploadedEducation = DB::table('tbleducations')
                     ->where('staffid', $row->id)
@@ -82,15 +100,20 @@ class IouApiController extends Controller
                     ->exists();
 
                 return [
-                    'id'                     => $row->id,
-                    'fileNo'                 => $row->fileNo ?? '',
-                    'name'                   => $fullName,
-                    'label'                  => $fullName,
-                    'salary'                 => $grossSalary,
-                    'max_iou'                => $maxIou,
-                    'can_take_iou'           => $canTakeIou,
-                    'max_iou_amount'         => $maxIouAmount,
-                    'has_uploaded_education' => $hasUploadedEducation,
+                    'id'                        => $row->id,
+                    'fileNo'                    => $row->fileNo ?? '',
+                    'name'                      => $fullName,
+                    'label'                     => $fullName,
+                    'salary'                    => $grossSalary,
+                    'max_iou'                   => $maxIou,
+                    'limit_percentage'          => $limitPercentage,
+                    'is_retention_active'       => $isRetentionActive,
+                    'has_completed_retention'   => $hasCompletedRetention,
+                    'retention_months'          => $retentionMonths,
+                    'remaining_retention_months'=> max(0, 20 - $retentionMonths),
+                    'can_take_iou'              => $canTakeIou,
+                    'max_iou_amount'            => $maxIouAmount,
+                    'has_uploaded_education'    => $hasUploadedEducation,
                 ];
             });
 
@@ -161,7 +184,20 @@ class IouApiController extends Controller
                 $maxIouAmount = (float)($struct->max_iou_amount ?? 0.00);
             }
 
-            $maxLimit = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.70);
+            // Check staff retention completion status
+            $firstStruct = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+            $isRetentionActive = false;
+            $hasCompletedRetention = true;
+            $retentionMonths = 0;
+            if ($firstStruct && (int)($firstStruct->reten_act ?? 0) === 1) {
+                $isRetentionActive = true;
+                $retentionMonths = (int)($firstStruct->num_rente_months ?? 0);
+                $hasCompletedRetention = ($retentionMonths >= 20);
+            }
+
+            // If staff has NOT yet completed retention, limit is 50% of salary
+            $limitPercentage = ($isRetentionActive && !$hasCompletedRetention) ? 50 : 70;
+            $maxLimit = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * ($limitPercentage / 100.0));
 
             // Sum already used amount for this month and year (all non-rejected: status != 2)
             $query = DB::table('iou_records')
@@ -183,14 +219,19 @@ class IouApiController extends Controller
             return response()->json([
                 'status' => 'success',
                 'data' => [
-                    'gross_salary' => $grossSalary,
-                    'max_limit' => $maxLimit,
-                    'used_amount' => $usedAmount,
-                    'remaining_limit' => $remainingLimit,
-                    'available_net_pay' => $availableNetPay,
-                    'month_name' => date('F Y', $time),
-                    'can_take_iou' => $canTakeIou,
-                    'max_iou_amount' => $maxIouAmount,
+                    'gross_salary'               => $grossSalary,
+                    'max_limit'                  => $maxLimit,
+                    'limit_percentage'           => $limitPercentage,
+                    'is_retention_active'        => $isRetentionActive,
+                    'has_completed_retention'    => $hasCompletedRetention,
+                    'retention_months'           => $retentionMonths,
+                    'remaining_retention_months' => max(0, 20 - $retentionMonths),
+                    'used_amount'                => $usedAmount,
+                    'remaining_limit'            => $remainingLimit,
+                    'available_net_pay'          => $availableNetPay,
+                    'month_name'                 => date('F Y', $time),
+                    'can_take_iou'               => $canTakeIou,
+                    'max_iou_amount'             => $maxIouAmount,
                 ]
             ]);
         } catch (\Throwable $th) {
@@ -377,7 +418,20 @@ class IouApiController extends Controller
                 ], 422);
             }
 
-            $maxAllowed = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * 0.70);
+            // Check staff retention completion status
+            $firstStruct = DB::table('first_salary_structure')->where('staffId', $validated['staff_id'])->first();
+            $isRetentionActive = false;
+            $hasCompletedRetention = true;
+            $retentionMonths = 0;
+            if ($firstStruct && (int)($firstStruct->reten_act ?? 0) === 1) {
+                $isRetentionActive = true;
+                $retentionMonths = (int)($firstStruct->num_rente_months ?? 0);
+                $hasCompletedRetention = ($retentionMonths >= 20);
+            }
+
+            // If staff has NOT yet completed retention, limit is 50% of salary
+            $limitPercentage = ($isRetentionActive && !$hasCompletedRetention) ? 50 : 70;
+            $maxAllowed = $maxIouAmount > 0.00 ? $maxIouAmount : ($grossSalary * ($limitPercentage / 100.0));
             $amount = (float) $validated['amount'];
             $id = $validated['id'] ?? null;
 
@@ -406,7 +460,14 @@ class IouApiController extends Controller
                 $formattedRequested = number_format($amount, 2);
                 $monthName = date('F Y', $time);
                 
-                $limitReason = $maxIouAmount > 0.00 ? "custom allowed limit" : "maximum allowed limit of 70% of the employee's salary";
+                if ($maxIouAmount > 0.00) {
+                    $limitReason = "custom allowed limit";
+                } elseif ($limitPercentage === 50) {
+                    $limitReason = "maximum allowed limit of 50% of the employee's salary (retention in progress: Month {$retentionMonths} of 20)";
+                } else {
+                    $limitReason = "maximum allowed limit of 70% of the employee's salary";
+                }
+
                 if ($alreadyUsed > 0) {
                     $msg = "The IOU amount (₦{$formattedRequested}) plus already applied IOUs for {$monthName} (₦{$formattedAlready}) exceeds the {$limitReason} (₦{$formattedMax}).";
                 } else {
@@ -933,6 +994,10 @@ class IouApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Administrative privileges required.'], 401);
             }
 
+            $firstStructures = \Illuminate\Support\Facades\Schema::hasTable('first_salary_structure')
+                ? DB::table('first_salary_structure')->get()->keyBy('staffId')
+                : collect();
+
             $staff = DB::table('tblper as p')
                 ->leftJoin('salary_structures as ss', 'ss.staffId', '=', 'p.ID')
                 ->where('p.rank', '!=', 2)
@@ -954,7 +1019,7 @@ class IouApiController extends Controller
                 )
                 ->orderBy('p.surname', 'asc')
                 ->get()
-                ->map(function ($row) {
+                ->map(function ($row) use ($firstStructures) {
                     $grossSalary = (float)($row->basic_salary ?? 0.00) +
                                    (float)($row->housing_allowance ?? 0.00) +
                                    (float)($row->transport_allowance ?? 0.00) +
@@ -962,13 +1027,30 @@ class IouApiController extends Controller
                                    (float)($row->utility_allowance ?? 0.00) +
                                    (float)($row->meal_allowance ?? 0.00);
 
+                    $firstStruct = $firstStructures[$row->id] ?? null;
+                    $isRetentionActive = false;
+                    $hasCompletedRetention = true;
+                    $retentionMonths = 0;
+                    if ($firstStruct && (int)($firstStruct->reten_act ?? 0) === 1) {
+                        $isRetentionActive = true;
+                        $retentionMonths = (int)($firstStruct->num_rente_months ?? 0);
+                        $hasCompletedRetention = ($retentionMonths >= 20);
+                    }
+
+                    $limitPercentage = ($isRetentionActive && !$hasCompletedRetention) ? 50 : 70;
+
                     return [
-                        'id' => $row->id,
-                        'fileNo' => $row->fileNo ?? '',
-                        'name' => trim("{$row->surname} {$row->first_name} {$row->othernames}"),
-                        'can_take_iou' => (int) $row->can_take_iou,
-                        'max_iou_amount' => (float) $row->max_iou_amount,
-                        'gross_salary' => $grossSalary,
+                        'id'                        => $row->id,
+                        'fileNo'                    => $row->fileNo ?? '',
+                        'name'                      => trim("{$row->surname} {$row->first_name} {$row->othernames}"),
+                        'can_take_iou'              => (int) $row->can_take_iou,
+                        'max_iou_amount'            => (float) $row->max_iou_amount,
+                        'limit_percentage'          => $limitPercentage,
+                        'is_retention_active'       => $isRetentionActive,
+                        'has_completed_retention'   => $hasCompletedRetention,
+                        'retention_months'          => $retentionMonths,
+                        'remaining_retention_months'=> max(0, 20 - $retentionMonths),
+                        'gross_salary'              => $grossSalary,
                     ];
                 });
 
@@ -1015,6 +1097,18 @@ class IouApiController extends Controller
                 $maxIouAmount = (float)($struct->max_iou_amount ?? 0.00);
             }
 
+            $firstStruct = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+            $isRetentionActive = false;
+            $hasCompletedRetention = true;
+            $retentionMonths = 0;
+            if ($firstStruct && (int)($firstStruct->reten_act ?? 0) === 1) {
+                $isRetentionActive = true;
+                $retentionMonths = (int)($firstStruct->num_rente_months ?? 0);
+                $hasCompletedRetention = ($retentionMonths >= 20);
+            }
+
+            $limitPercentage = ($isRetentionActive && !$hasCompletedRetention) ? 50 : 70;
+
             $remainingCoopLoan = (float) DB::table('coop_loan_deduction_setups')
                 ->where('staffId', $staffId)
                 ->where('is_active', 1)
@@ -1028,14 +1122,19 @@ class IouApiController extends Controller
             return response()->json([
                 'status' => 'success',
                 'data' => [
-                    'id' => $person->ID,
-                    'fileNo' => $person->fileNo,
-                    'name' => trim("{$person->surname} {$person->first_name} {$person->othernames}"),
-                    'gross_salary' => $grossSalary,
-                    'can_take_iou' => $canTakeIou,
-                    'max_iou_amount' => $maxIouAmount,
-                    'remaining_coop_loan' => $remainingCoopLoan,
-                    'remaining_medical_loan' => $remainingMedicalLoan,
+                    'id'                        => $person->ID,
+                    'fileNo'                    => $person->fileNo,
+                    'name'                      => trim("{$person->surname} {$person->first_name} {$person->othernames}"),
+                    'gross_salary'              => $grossSalary,
+                    'can_take_iou'              => $canTakeIou,
+                    'max_iou_amount'            => $maxIouAmount,
+                    'limit_percentage'          => $limitPercentage,
+                    'is_retention_active'       => $isRetentionActive,
+                    'has_completed_retention'   => $hasCompletedRetention,
+                    'retention_months'          => $retentionMonths,
+                    'remaining_retention_months'=> max(0, 20 - $retentionMonths),
+                    'remaining_coop_loan'       => $remainingCoopLoan,
+                    'remaining_medical_loan'    => $remainingMedicalLoan,
                 ]
             ]);
         } catch (\Throwable $th) {
