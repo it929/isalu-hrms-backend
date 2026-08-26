@@ -1341,12 +1341,15 @@ class NextJsPayrollApiController extends Controller
                 $firstStruct = DB::table('first_salary_structure')->where('staffId', $emp->ID)->first();
                 if ($firstStruct && $firstStruct->reten_act == 1 && $paidDays > 0) {
                     if ($firstStruct->num_rente_months < 20) {
-                        $retentionBase = (float)$firstStruct->basic_salary +
-                                         (float)$firstStruct->housing_allowance +
-                                         (float)$firstStruct->transport_allowance +
-                                         (float)$firstStruct->medical_allowance +
-                                         (float)$firstStruct->utility_allowance +
-                                         (float)$firstStruct->meal_allowance;
+                        $allowancesTotal = (float)$firstStruct->basic_salary +
+                                           (float)$firstStruct->housing_allowance +
+                                           (float)$firstStruct->transport_allowance +
+                                           (float)$firstStruct->medical_allowance +
+                                           (float)$firstStruct->utility_allowance +
+                                           (float)$firstStruct->meal_allowance;
+                        $retentionBase = (float)($firstStruct->declare_salary ?? 0) > 0 
+                            ? (float)$firstStruct->declare_salary 
+                            : $allowancesTotal;
                         $retention = round(0.05 * $retentionBase, 2);
 
                         // Increment num_rente_months by 1
