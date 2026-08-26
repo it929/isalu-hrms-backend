@@ -140,6 +140,7 @@ class SalaryBreakdownApiController extends Controller
                     'p.email',
                     'p.phone',
                     'p.doj',
+                    'p.appointment_date',
                     'p.AccNo as account_number',
                     'bl.bank as bank_name',
                     'd.department',
@@ -451,15 +452,15 @@ class SalaryBreakdownApiController extends Controller
                 })
                 ->orderBy('id', 'desc')
                 ->first();
-            $absencePenaltyBal = 0.00;
+            $absBal = 0.00;
             if ($absencePenaltySetup) {
-                $absencePenaltyBal = (float)$absencePenaltySetup->balance_remaining > 0
+                $absBal = (float)$absencePenaltySetup->balance_remaining > 0
                     ? (float)$absencePenaltySetup->balance_remaining
                     : ((float)$absencePenaltySetup->total_amount > 0 ? (float)$absencePenaltySetup->total_amount : (float)$absencePenaltySetup->monthly_deduction);
             }
-            $absencePenaltyDeduct = $absencePenaltySetup ? min((float)$absencePenaltySetup->monthly_deduction, $absencePenaltyBal) : 0.00;
+            $absencePenaltyDeduct = $absencePenaltySetup ? min((float)$absencePenaltySetup->monthly_deduction, $absBal) : 0.00;
 
-            // 11. Regular Employee Loan Setup
+            // 11. Regular Loan Setup
             $loanSetup = DB::table('loan_deduction_setups')
                 ->where('staffId', $staffId)
                 ->where('is_active', 1)
@@ -473,7 +474,7 @@ class SalaryBreakdownApiController extends Controller
             if ($loanSetup) {
                 $loanDeduct = min((float)$loanSetup->monthly_deduction, (float)$loanSetup->balance_remaining);
                 $loanBalance = (float)$loanSetup->balance_remaining;
-            } else {
+            } elseif (\Illuminate\Support\Facades\Schema::hasTable('employee_loans')) {
                 $empLoan = DB::table('employee_loans')
                     ->where('staffId', $staffId)
                     ->whereRaw("LOWER(status) = 'approved'")
@@ -550,13 +551,27 @@ class SalaryBreakdownApiController extends Controller
                 $daysInPayrollMonth = 30;
             }
 
-            // Check if employee joined mid-month (doj)
+            // Check if employee joined mid-month (doj or appointment_date)
+            $effectiveJoinDate = !empty($staff->appointment_date) && $staff->appointment_date !== '0000-00-00'
+                ? $staff->appointment_date
+                : (!empty($staff->doj) && $staff->doj !== '0000-00-00' ? $staff->doj : null);
+
             $dojDaysDeducted = 0;
-            if (!empty($staff->doj)) {
+            $isFutureAppointment = false;
+            $appointmentDay = 1;
+            if (!empty($effectiveJoinDate)) {
                 try {
-                    $dojDate = \Carbon\Carbon::parse($staff->doj);
-                    if ($dojDate->year === $year && $dojDate->month === $month) {
-                        $daysBefore = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
+                    $dojDate = \Carbon\Carbon::parse($effectiveJoinDate);
+                    $startOfMonth = \Carbon\Carbon::create($year, $month, 1)->startOfMonth();
+                    $endOfMonth = \Carbon\Carbon::create($year, $month, 1)->endOfMonth();
+
+                    if ($dojDate->greaterThan($endOfMonth)) {
+                        // Appointed in a future month – not active in this period
+                        $isFutureAppointment = true;
+                        $dojDaysDeducted = $daysInPayrollMonth;
+                    } elseif ($dojDate->year === $year && $dojDate->month === $month) {
+                        $appointmentDay = (int)$dojDate->day;
+                        $daysBefore = max(0, min($daysInPayrollMonth, $appointmentDay - 1));
                         $dojDaysDeducted = $daysBefore;
                     }
                 } catch (\Throwable $e) { /* ignore */ }
@@ -592,20 +607,23 @@ class SalaryBreakdownApiController extends Controller
                 $netPay = (float)$computedRecord->net_pay;
                 $paidDays = isset($computedRecord->paid_days) ? (int)$computedRecord->paid_days : $daysInPayrollMonth;
                 $loaDays = max(0, $daysInPayrollMonth - $paidDays);
+                $midMonthAdjustment = max(0.00, round(($grossPay / (float)$daysInPayrollMonth) * $dojDaysDeducted, 2));
             } else {
                 $paidDays = max(0, $daysInPayrollMonth - $loaDays - $dojDaysDeducted);
-                $leaveOfAbsenceDeduct = ($grossPay / (float)$daysInPayrollMonth) * $loaDays;
+                $leaveOfAbsenceDeduct = round(($grossPay / (float)$daysInPayrollMonth) * $loaDays, 2);
+                $midMonthAdjustment = round(($grossPay / (float)$daysInPayrollMonth) * $dojDaysDeducted, 2);
 
                 // Method 1: Prorate Monthly PAYE Tax by Paid Days / Days in Month
-                $payeTax = round($fullMonthlyTax * ($paidDays / (float)$daysInPayrollMonth), 2);
-                // Pension is calculated based on full gross (not prorated)
-                $pension = $fullMonthlyPension;
+                $payeTax = ($paidDays > 0) ? round($fullMonthlyTax * ($paidDays / (float)$daysInPayrollMonth), 2) : 0.00;
+                // Pension and retention applied only if staff has paid days
+                $pension = ($paidDays > 0) ? $fullMonthlyPension : 0.00;
+                $retention = ($paidDays > 0) ? $retention : 0.00;
 
                 $totalDeductions = $payeTax + $pension + $retention + $iouSum + $medicalLoanDeduct + $coopLoanDeduct +
                                    $coopSavingsDeduct + $coopAssetDeduct + $surchargeDeduct + $absencePenaltyDeduct +
-                                   $loanDeduct + $otherDeduct + $leaveOfAbsenceDeduct;
+                                   $loanDeduct + $otherDeduct + $leaveOfAbsenceDeduct + $midMonthAdjustment;
 
-                $netPay = round($grossPay - $totalDeductions, 2);
+                $netPay = ($paidDays === 0) ? 0.00 : round($grossPay - $totalDeductions, 2);
             }
 
             return response()->json([
@@ -728,6 +746,14 @@ class SalaryBreakdownApiController extends Controller
                         'is_active' => ($leaveOfAbsenceDeduct > 0 || $loaDays > 0),
                         'label' => 'Leave of Absence (Unpaid Days)'
                     ],
+                    'mid_month_adjustment' => [
+                        'amount' => round($midMonthAdjustment, 2),
+                        'unworked_days' => $dojDaysDeducted,
+                        'paid_days' => $paidDays,
+                        'appointment_date' => $effectiveJoinDate,
+                        'is_active' => ($midMonthAdjustment > 0),
+                        'label' => 'Mid-Month Appointment Adjustment (' . $dojDaysDeducted . ' Unworked Days)'
+                    ],
                     'other_deductions' => [
                         'amount' => $otherDeduct,
                         'balance_remaining' => $otherDeductSetup ? (float)$otherDeductSetup->balance_remaining : 0.00,
@@ -745,9 +771,13 @@ class SalaryBreakdownApiController extends Controller
                 ],
                 'summary' => [
                     'gross_pay' => round($grossPay, 2),
+                    'prorated_gross' => round(max(0.00, $grossPay - $midMonthAdjustment - $leaveOfAbsenceDeduct), 2),
                     'total_deductions' => round($totalDeductions, 2),
                     'net_pay' => round($netPay, 2),
                     'paid_days' => $paidDays,
+                    'days_in_month' => $daysInPayrollMonth,
+                    'days_unworked_before_appointment' => $dojDaysDeducted,
+                    'appointment_date' => $effectiveJoinDate,
                     'days_absent' => $loaDays,
                     'status' => $isComputed ? 'Computed Payroll' : 'Pre-Compute Estimate'
                 ],
@@ -1386,6 +1416,7 @@ class SalaryBreakdownApiController extends Controller
             'p.ID as id',
             'p.fileNo as file_no',
             'p.doj',
+            'p.appointment_date',
             DB::raw("CONCAT(p.surname, ' ', p.first_name, ' ', COALESCE(p.othernames, '')) as name"),
             'dept.department',
             'des.designation',
@@ -1581,23 +1612,34 @@ class SalaryBreakdownApiController extends Controller
             $customAllowances = $customAllowancesByStaff[$sid] ?? 0.00;
             $grossPay = $basicAllowances + $varAllowances;
 
-            // Check if employee joined mid-month (doj)
+            // Check if employee joined mid-month (doj or appointment_date)
             $daysInPayrollMonth = (int) \Carbon\Carbon::create($year, $month, 1)->daysInMonth;
             if ($daysInPayrollMonth < 28 || $daysInPayrollMonth > 31) {
                 $daysInPayrollMonth = 30;
             }
             $loaDays = $loaDaysByStaff[$sid] ?? 0;
             $dojDaysDeducted = 0;
-            if (!empty($staff->doj)) {
+            $effectiveJoinDate = !empty($staff->appointment_date) && $staff->appointment_date !== '0000-00-00'
+                ? $staff->appointment_date
+                : (!empty($staff->doj) && $staff->doj !== '0000-00-00' ? $staff->doj : null);
+
+            if (!empty($effectiveJoinDate)) {
                 try {
-                    $dojDate = \Carbon\Carbon::parse($staff->doj);
-                    if ($dojDate->year === $year && $dojDate->month === $month) {
+                    $dojDate = \Carbon\Carbon::parse($effectiveJoinDate);
+                    $startOfMonth = \Carbon\Carbon::create($year, $month, 1)->startOfMonth();
+                    $endOfMonth = \Carbon\Carbon::create($year, $month, 1)->endOfMonth();
+
+                    if ($dojDate->greaterThan($endOfMonth)) {
+                        $dojDaysDeducted = $daysInPayrollMonth;
+                    } elseif ($dojDate->year === $year && $dojDate->month === $month) {
                         $daysBefore = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
                         $dojDaysDeducted = $daysBefore;
                     }
                 } catch (\Throwable $e) { /* ignore */ }
             }
             $paidDays = max(0, $daysInPayrollMonth - $loaDays - $dojDaysDeducted);
+            $midMonthAdjustment = round(($grossPay / (float)$daysInPayrollMonth) * $dojDaysDeducted, 2);
+            $leaveOfAbsence = round(($grossPay / (float)$daysInPayrollMonth) * $loaDays, 2);
 
             // PAYE Tax (Nigeria 2025/2026 progressive bands)
             $annualGross = $declareSalary * 12.0;
@@ -1634,18 +1676,18 @@ class SalaryBreakdownApiController extends Controller
             }
             $fullMonthlyTax = round($annualTax / 12.0, 2);
             // Method 1: Prorate Monthly PAYE Tax by Paid Days / Days in Month
-            $payeTax = round($fullMonthlyTax * ($paidDays / (float)$daysInPayrollMonth), 2);
+            $payeTax = ($paidDays > 0) ? round($fullMonthlyTax * ($paidDays / (float)$daysInPayrollMonth), 2) : 0.00;
 
-            // Pension (calculated on full basic allowances / gross, not prorated)
+            // Pension (applied only if staff worked in this month)
             $pension = 0.00;
-            if ($penAct == 1) {
+            if ($penAct == 1 && $paidDays > 0) {
                 $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
                 $pension = round(($basicAllowances * 0.5) * $rate, 2);
             }
 
             // Retention
             $retention = 0.00;
-            if ($firstStruct && $firstStruct->reten_act == 1) {
+            if ($firstStruct && $firstStruct->reten_act == 1 && $paidDays > 0) {
                 $retentionMonths = (int)($firstStruct->num_rente_months ?? 0);
                 if ($retentionMonths < 20) {
                     $retentionBase = (float)$firstStruct->basic_salary +
@@ -1711,17 +1753,14 @@ class SalaryBreakdownApiController extends Controller
             }
             $otherDeduct = $othSetup ? min((float)$othSetup->monthly_deduction, $othBal) : 0.00;
 
-            // Leave of Absence
-            $leaveOfAbsence = round(($grossPay / (float)$daysInPayrollMonth) * $loaDays, 2);
-
             $totalDeductions = round(
                 $payeTax + $pension + $retention + $iou + $medLoan + $coopLoan +
                 $coopSavings + $coopAsset + $surcharge + $absencePenalty +
-                $regularLoan + $otherDeduct + $leaveOfAbsence,
+                $regularLoan + $otherDeduct + $leaveOfAbsence + $midMonthAdjustment,
                 2
             );
 
-            $netPay = round($grossPay - $totalDeductions, 2);
+            $netPay = ($paidDays === 0) ? 0.00 : round($grossPay - $totalDeductions, 2);
 
             // Balances for spreadsheet
             $revolvingLoanBal = $lSetup ? (float)$lSetup->balance_remaining : ($empLoan ? (float)$empLoan->balance : 0.00);
