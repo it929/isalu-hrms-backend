@@ -294,6 +294,7 @@ class LogUserActivityMiddleware
         }
 
         // ── 2. Leave & Leave of Absence (LOA) ──
+        if (str_contains($cleanPath, 'hr/apply-leave/recall') && $method === 'POST') return "Recalled Staff From Leave & Returned Unused Days" . $this->getApplicationStaffDetails('leave', $id);
         if (str_contains($cleanPath, 'hr/apply-leave/hod-approve')) return "HOD Recommended Leave Application" . $this->getApplicationStaffDetails('leave', $id);
         if (str_contains($cleanPath, 'hr/apply-leave/hod-reject')) return "HOD Rejected Leave Application" . $this->getApplicationStaffDetails('leave', $id);
         if (str_contains($cleanPath, 'hr/apply-leave/admin-approve')) return "Admin Approved Leave Application" . $this->getApplicationStaffDetails('leave', $id);

@@ -167,6 +167,7 @@ class HrLeaveApiController extends Controller
             ->join('tblper', 'tblper.ID', '=', 'leave_record.staffId')
             ->join('tblleave_type', 'tblleave_type.id', '=', 'leave_record.leave_type_id')
             ->join('tbldepartment', 'tbldepartment.id', '=', 'tblper.departmentID')
+            ->leftJoin('users as recalled_user', 'recalled_user.id', '=', 'leave_record.recalled_by')
             ->select(
                 'leave_record.*',
                 'tblper.surname',
@@ -174,50 +175,22 @@ class HrLeaveApiController extends Controller
                 'tblper.othernames',
                 'tblper.office_shift',
                 'tbldepartment.department',
-                'tblleave_type.leaveType'
+                'tblleave_type.leaveType',
+                'recalled_user.name as recalled_by_name'
             )
             ->orderBy('leave_record.id', 'DESC');
 
         $employee = $ctx['employee'];
 
-        if ($ctx['isSuperAdmin'] || $ctx['isAuditStaff']) {
+        if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
             $records = $baseQuery->get();
         } else {
-            $baseQuery->where(function ($query) use ($ctx, $employee) {
-                $hasCondition = false;
-
-                // 1. Own records
-                if ($employee) {
-                    $query->where('leave_record.staffId', $employee->ID);
-                    $hasCondition = true;
-                }
-
-                // 2. HR Head sees HOD-approved (1) or finalized (2, 4) records
-                if ($ctx['isAdminStaff']) {
-                    if ($hasCondition) {
-                        $query->orWhereIn('leave_record.status', [1, 2, 4]);
-                    } else {
-                        $query->whereIn('leave_record.status', [1, 2, 4]);
-                    }
-                    $hasCondition = true;
-                }
-
-                // 3. HOD sees records of staff in their department
-                if ($employee && $ctx['isHod']) {
-                    $hodDeptId = ($ctx['isDelegatedHod'] ?? false) ? $ctx['delegated_department_id'] : $employee->departmentID;
-                    if ($hasCondition) {
-                        $query->orWhere('tblper.departmentID', $hodDeptId);
-                    } else {
-                        $query->where('tblper.departmentID', $hodDeptId);
-                    }
-                    $hasCondition = true;
-                }
-
-                // Fallback if no roles matched
-                if (!$hasCondition) {
-                    $query->where('leave_record.id', 0);
-                }
-            });
+            // Regular staff and non-HR staff strictly see only their own leave applications
+            if ($employee) {
+                $baseQuery->where('leave_record.staffId', $employee->ID);
+            } else {
+                $baseQuery->where('leave_record.id', 0);
+            }
             $records = $baseQuery->get();
         }
 
@@ -226,21 +199,40 @@ class HrLeaveApiController extends Controller
             $start = Carbon::parse($r->start_date);
             $end   = Carbon::parse($r->end_date);
             
-            if ($r->office_shift == 1) {
-                $days = 0;
-                $current = $start->copy();
-                while ($current->lte($end)) {
-                    if (!$current->isWeekend()) {
-                        $days++;
+            $calcDays = function(Carbon $s, Carbon $e, $shift) {
+                if ($s->gt($e)) return 0;
+                if ($shift == 1) {
+                    $days = 0;
+                    $current = $s->copy();
+                    while ($current->lte($e)) {
+                        if (!$current->isWeekend()) {
+                            $days++;
+                        }
+                        $current->addDay();
                     }
-                    $current->addDay();
+                    return $days;
                 }
-                $r->duration_days = $days;
+                return (int)$s->diffInDays($e) + 1;
+            };
+
+            if (!empty($r->is_recalled) && $r->days_used !== null) {
+                $r->duration_days = (int)$r->days_used;
             } else {
-                $r->duration_days = $start->diffInDays($end) + 1;
+                $r->duration_days = $calcDays($start, $end, $r->office_shift);
+            }
+
+            if (!empty($r->original_end_date)) {
+                $origEnd = Carbon::parse($r->original_end_date);
+                $r->original_duration_days = $calcDays($start, $origEnd, $r->office_shift);
+            } else {
+                $r->original_duration_days = $r->duration_days;
             }
             
+            $r->is_recalled = (int)($r->is_recalled ?? 0);
+            $r->days_used = $r->days_used !== null ? (int)$r->days_used : null;
+            $r->unused_days_returned = $r->unused_days_returned !== null ? (int)$r->unused_days_returned : null;
             $r->date_applied  = Carbon::parse($r->created_at)->format('d M, Y');
+            $r->recalled_at_formatted = $r->recalled_at ? Carbon::parse($r->recalled_at)->format('d M, Y H:i') : null;
             return $r;
         });
 
@@ -502,6 +494,222 @@ class HrLeaveApiController extends Controller
         }
         DB::table('leave_record')->where('id', $id)->update(['status' => 4]);
         return response()->json(['status' => 'success', 'message' => 'Leave rejected by Admin.']);
+    }
+
+    /**
+     * GET /api/nextjs/hr/apply-leave/recall-preview/{id}
+     * Preview recall calculations before submitting.
+     */
+    public function previewRecallLeave(Request $request, $id)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'])) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized: Only HR Head and Super Admin can recall staff from leave.'], 403);
+        }
+
+        $record = DB::table('leave_record')
+            ->join('tblper', 'tblper.ID', '=', 'leave_record.staffId')
+            ->join('tblleave_type', 'tblleave_type.id', '=', 'leave_record.leave_type_id')
+            ->join('tbldepartment', 'tbldepartment.id', '=', 'tblper.departmentID')
+            ->where('leave_record.id', $id)
+            ->select(
+                'leave_record.*',
+                'tblper.surname',
+                'tblper.first_name',
+                'tblper.othernames',
+                'tblper.office_shift',
+                'tbldepartment.department',
+                'tblleave_type.leaveType'
+            )
+            ->first();
+
+        if (!$record) {
+            return response()->json(['status' => 'error', 'message' => 'Leave record not found.'], 404);
+        }
+
+        if ($record->status != 2) {
+            return response()->json(['status' => 'error', 'message' => 'Only fully approved leave records can be recalled.'], 400);
+        }
+
+        if (!empty($record->is_recalled)) {
+            return response()->json(['status' => 'error', 'message' => 'This leave record has already been recalled.'], 400);
+        }
+
+        $resumptionDateStr = $request->query('resumption_date');
+        if (!$resumptionDateStr) {
+            return response()->json(['status' => 'error', 'message' => 'Resumption date is required for recall preview.'], 422);
+        }
+
+        $startDate = Carbon::parse($record->start_date);
+        $endDate = Carbon::parse($record->end_date);
+        $resumptionDate = Carbon::parse($resumptionDateStr);
+
+        if ($resumptionDate->lt($startDate)) {
+            return response()->json(['status' => 'error', 'message' => "Resumption date cannot be earlier than the leave start date ({$startDate->format('d M, Y')})."], 422);
+        }
+
+        if ($resumptionDate->gt($endDate)) {
+            return response()->json(['status' => 'error', 'message' => "Resumption date cannot be later than the leave end date ({$endDate->format('d M, Y')})."], 422);
+        }
+
+        $calcDays = function(Carbon $s, Carbon $e, $shift) {
+            if ($s->gt($e)) return 0;
+            if ($shift == 1) {
+                $days = 0;
+                $current = $s->copy();
+                while ($current->lte($e)) {
+                    if (!$current->isWeekend()) {
+                        $days++;
+                    }
+                    $current->addDay();
+                }
+                return $days;
+            }
+            return (int)$s->diffInDays($e) + 1;
+        };
+
+        $originalTotalDays = $calcDays($startDate, $endDate, $record->office_shift);
+
+        if ($resumptionDate->equalTo($startDate)) {
+            $daysUsed = 0;
+            $curtailedEndDate = $startDate->toDateString();
+            $unusedDaysReturned = $originalTotalDays;
+        } else {
+            $lastLeaveDay = $resumptionDate->copy()->subDay();
+            $daysUsed = $calcDays($startDate, $lastLeaveDay, $record->office_shift);
+            $unusedDaysReturned = max(0, $originalTotalDays - $daysUsed);
+            $curtailedEndDate = $lastLeaveDay->toDateString();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => [
+                'record_id'            => $record->id,
+                'staff_name'           => trim("{$record->surname} {$record->first_name} {$record->othernames}"),
+                'department'           => $record->department,
+                'leave_type'           => $record->leaveType,
+                'office_shift'         => $record->office_shift,
+                'start_date'           => $startDate->toDateString(),
+                'start_date_formatted' => $startDate->format('d M, Y'),
+                'original_end_date'    => $endDate->toDateString(),
+                'original_end_date_formatted' => $endDate->format('d M, Y'),
+                'original_total_days'  => $originalTotalDays,
+                'resumption_date'      => $resumptionDate->toDateString(),
+                'resumption_date_formatted' => $resumptionDate->format('d M, Y'),
+                'curtailed_end_date'   => $curtailedEndDate,
+                'curtailed_end_date_formatted' => Carbon::parse($curtailedEndDate)->format('d M, Y'),
+                'days_used'            => $daysUsed,
+                'unused_days_returned' => $unusedDaysReturned,
+            ]
+        ]);
+    }
+
+    /**
+     * POST /api/nextjs/hr/apply-leave/recall/{id}
+     * Process staff leave recall and return unused days to staff balance.
+     */
+    public function recallLeave(Request $request, $id)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'])) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized: Only HR Head and Super Admin can recall staff from leave.'], 403);
+        }
+
+        $validated = $request->validate([
+            'resumption_date' => 'required|date',
+            'recall_reason'   => 'required|string|max:1000',
+        ]);
+
+        $record = DB::table('leave_record')
+            ->join('tblper', 'tblper.ID', '=', 'leave_record.staffId')
+            ->join('tblleave_type', 'tblleave_type.id', '=', 'leave_record.leave_type_id')
+            ->where('leave_record.id', $id)
+            ->select('leave_record.*', 'tblper.surname', 'tblper.first_name', 'tblper.othernames', 'tblper.office_shift', 'tblleave_type.leaveType')
+            ->first();
+
+        if (!$record) {
+            return response()->json(['status' => 'error', 'message' => 'Leave record not found.'], 404);
+        }
+
+        if ($record->status != 2) {
+            return response()->json(['status' => 'error', 'message' => 'Only fully approved leave records can be recalled.'], 400);
+        }
+
+        if (!empty($record->is_recalled)) {
+            return response()->json(['status' => 'error', 'message' => 'This leave record has already been recalled.'], 400);
+        }
+
+        $startDate = Carbon::parse($record->start_date);
+        $endDate = Carbon::parse($record->end_date);
+        $resumptionDate = Carbon::parse($validated['resumption_date']);
+
+        if ($resumptionDate->lt($startDate)) {
+            return response()->json(['status' => 'error', 'message' => "Resumption date cannot be earlier than the leave start date ({$startDate->format('d M, Y')})."], 422);
+        }
+
+        if ($resumptionDate->gt($endDate)) {
+            return response()->json(['status' => 'error', 'message' => "Resumption date cannot be later than the leave end date ({$endDate->format('d M, Y')})."], 422);
+        }
+
+        $calcDays = function(Carbon $s, Carbon $e, $shift) {
+            if ($s->gt($e)) return 0;
+            if ($shift == 1) {
+                $days = 0;
+                $current = $s->copy();
+                while ($current->lte($e)) {
+                    if (!$current->isWeekend()) {
+                        $days++;
+                    }
+                    $current->addDay();
+                }
+                return $days;
+            }
+            return (int)$s->diffInDays($e) + 1;
+        };
+
+        $originalTotalDays = $calcDays($startDate, $endDate, $record->office_shift);
+
+        if ($resumptionDate->equalTo($startDate)) {
+            $daysUsed = 0;
+            $curtailedEndDate = $startDate->toDateString();
+            $unusedDaysReturned = $originalTotalDays;
+            $newStatus = 5; // Recalled before start -> 0 days counted
+        } else {
+            $lastLeaveDay = $resumptionDate->copy()->subDay();
+            $daysUsed = $calcDays($startDate, $lastLeaveDay, $record->office_shift);
+            $unusedDaysReturned = max(0, $originalTotalDays - $daysUsed);
+            $curtailedEndDate = $lastLeaveDay->toDateString();
+            $newStatus = 2; // Approved & curtailed
+        }
+
+        $userId = $ctx['userId'] ?? null;
+
+        DB::table('leave_record')->where('id', $id)->update([
+            'is_recalled'          => 1,
+            'original_end_date'    => $record->end_date,
+            'end_date'             => $curtailedEndDate,
+            'recall_date'          => $resumptionDate->toDateString(),
+            'days_used'            => $daysUsed,
+            'unused_days_returned' => $unusedDaysReturned,
+            'recall_reason'        => $validated['recall_reason'],
+            'recalled_by'          => $userId,
+            'recalled_at'          => now(),
+            'status'               => $newStatus,
+            'updated_at'           => now(),
+        ]);
+
+        $staffName = trim("{$record->surname} {$record->first_name} {$record->othernames}");
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Staff {$staffName} successfully recalled from leave. {$unusedDaysReturned} unused day(s) have been returned to their leave balance.",
+            'data'    => [
+                'days_used'            => $daysUsed,
+                'unused_days_returned' => $unusedDaysReturned,
+                'recall_date'          => $resumptionDate->toDateString(),
+                'curtailed_end_date'   => $curtailedEndDate,
+            ]
+        ]);
     }
 
     /**

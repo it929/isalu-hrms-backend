@@ -18,6 +18,84 @@ class OtherDeductionSetupApiController extends Controller
     
 
     /**
+     * GET /api/nextjs/payroll/other-deduction-setups/staff-salary/{staffId}
+     * Retrieve staff monthly salary and calculate daily rate based on days in the selected month.
+     */
+    public function getStaffSalary(Request $request, $staffId)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            $staff = DB::table('tblper')->where('ID', $staffId)->first();
+            if (!$staff) {
+                return response()->json(['status' => 'error', 'message' => 'Staff not found.'], 404);
+            }
+
+            $month = $request->input('month');
+            $year = (int) $request->input('year', date('Y'));
+
+            if (!empty($month) && is_numeric($month)) {
+                $monthNum = (int)$month;
+            } elseif (!empty($month)) {
+                $monthNum = (int) date('m', strtotime("1 {$month} {$year}"));
+            } else {
+                $monthNum = (int) date('m');
+            }
+
+            $daysInMonth = (int) date('t', strtotime(sprintf("%04d-%02d-01", $year, $monthNum)));
+            if ($daysInMonth < 28 || $daysInMonth > 31) {
+                $daysInMonth = 30;
+            }
+
+            $struct = DB::table('salary_structures')->where('staffId', $staffId)->first();
+            $monthlySalary = 0.00;
+            if ($struct) {
+                $monthlySalary = (float)$struct->basic_salary +
+                                 (float)$struct->housing_allowance +
+                                 (float)$struct->transport_allowance +
+                                 (float)$struct->medical_allowance +
+                                 (float)$struct->utility_allowance +
+                                 (float)$struct->meal_allowance;
+                if ($monthlySalary <= 0 && (float)$struct->declare_salary > 0) {
+                    $monthlySalary = (float)$struct->declare_salary;
+                }
+            }
+
+            if ($monthlySalary <= 0) {
+                $firstStruct = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+                if ($firstStruct) {
+                    $monthlySalary = (float)$firstStruct->basic_salary +
+                                     (float)$firstStruct->housing_allowance +
+                                     (float)$firstStruct->transport_allowance +
+                                     (float)$firstStruct->medical_allowance +
+                                     (float)$firstStruct->utility_allowance +
+                                     (float)$firstStruct->meal_allowance;
+                }
+            }
+
+            $dailySalary = round($monthlySalary / (float)$daysInMonth, 2);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'staff_id' => $staff->ID,
+                    'file_no' => $staff->fileNo ?? '',
+                    'name' => trim("{$staff->surname} {$staff->first_name} {$staff->othernames}"),
+                    'monthly_salary' => $monthlySalary,
+                    'days_in_month' => $daysInMonth,
+                    'daily_salary' => $dailySalary,
+                ]
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('OtherDeductionSetupApiController getStaffSalary: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
      * GET /api/nextjs/payroll/other-deduction-setups
      * Fetch existing setups.
      */
@@ -57,6 +135,11 @@ class OtherDeductionSetupApiController extends Controller
             $records = $query->orderBy('ods.id', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $row->is_active = (int) $row->is_active;
+                $row->calculation_mode = $row->calculation_mode ?? 'amount';
+                $row->deduction_days = $row->deduction_days !== null ? (float)$row->deduction_days : null;
+                $row->daily_rate = $row->daily_rate !== null ? (float)$row->daily_rate : null;
+                $row->monthly_salary = $row->monthly_salary !== null ? (float)$row->monthly_salary : null;
+                $row->days_in_month = $row->days_in_month !== null ? (int)$row->days_in_month : null;
                 return $row;
             });
 
@@ -93,7 +176,12 @@ class OtherDeductionSetupApiController extends Controller
             $validated = $request->validate([
                 'id' => 'nullable|integer',
                 'staffId' => 'required|integer|exists:tblper,ID',
+                'calculation_mode' => 'nullable|string|in:amount,days',
                 'deduction_type' => 'required|string|in:one_time,spread',
+                'deduction_days' => 'nullable|numeric|min:0.01',
+                'daily_rate' => 'nullable|numeric|min:0',
+                'monthly_salary' => 'nullable|numeric|min:0',
+                'days_in_month' => 'nullable|integer|min:28|max:31',
                 'total_amount' => 'required|numeric|min:0',
                 'duration_months' => 'nullable|integer|min:1',
                 'monthly_deduction' => 'required|numeric|min:0',
@@ -104,13 +192,17 @@ class OtherDeductionSetupApiController extends Controller
                 'is_active' => 'nullable|integer|in:0,1',
             ]);
 
-
-
             $id = $validated['id'] ?? null;
+            $calculationMode = $validated['calculation_mode'] ?? 'amount';
             $totalAmount = (float) $validated['total_amount'];
             $deductionType = $validated['deduction_type'];
 
-            if ($deductionType === 'one_time') {
+            if ($calculationMode === 'days') {
+                $deductionType = 'one_time';
+                $durationMonths = 1;
+                $monthlyDeduction = $totalAmount;
+                $endMonth = $validated['start_month'];
+            } elseif ($deductionType === 'one_time') {
                 $durationMonths = 1;
                 $monthlyDeduction = $totalAmount;
                 $endMonth = $validated['start_month'];
@@ -124,9 +216,47 @@ class OtherDeductionSetupApiController extends Controller
                 ? (float) $validated['balance_remaining']
                 : $totalAmount;
 
+            // Check if deduction amount causes net pay to become negative
+            $startMonthStr = $validated['start_month'];
+            $monthParts = explode('-', $startMonthStr);
+            $startYear = (int)$monthParts[0];
+            $startMonthNum = (int)$monthParts[1];
+
+            $breakdownCtrl = app(\App\Http\Controllers\Api\SalaryBreakdownApiController::class);
+            $breakdownReq = Request::create("/api/nextjs/payroll/salary-breakdown?staff_id={$validated['staffId']}&month={$startMonthNum}&year={$startYear}", 'GET', [], [], [], [
+                'HTTP_X_USER_ID' => $ctx['userId'] ?? 1,
+            ]);
+            $breakdownRes = $breakdownCtrl->getBreakdown($breakdownReq);
+            $breakdownData = json_decode($breakdownRes->getContent(), true);
+
+            if (isset($breakdownData['status']) && $breakdownData['status'] === 'success' && isset($breakdownData['summary'])) {
+                $currentNetPay = (float)($breakdownData['summary']['net_pay'] ?? 0.00);
+
+                // If editing existing setup, restore the existing deduction amount so we evaluate against baseline
+                if ($id) {
+                    $existingSetup = DB::table('other_deduction_setups')->where('id', $id)->first();
+                    if ($existingSetup && $existingSetup->is_active == 1) {
+                        $existingAmt = (float)$existingSetup->monthly_deduction;
+                        $currentNetPay += $existingAmt;
+                    }
+                }
+
+                if ($monthlyDeduction > $currentNetPay) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => "Deduction declined: Monthly deduction of ₦" . number_format($monthlyDeduction, 2) . " exceeds staff member's available Net Pay (₦" . number_format($currentNetPay, 2) . "). Net pay cannot be negative."
+                    ], 422);
+                }
+            }
+
             $data = [
                 'staffId' => $validated['staffId'],
+                'calculation_mode' => $calculationMode,
                 'deduction_type' => $deductionType,
+                'deduction_days' => $calculationMode === 'days' && isset($validated['deduction_days']) ? (float)$validated['deduction_days'] : null,
+                'daily_rate' => $calculationMode === 'days' && isset($validated['daily_rate']) ? (float)$validated['daily_rate'] : null,
+                'monthly_salary' => $calculationMode === 'days' && isset($validated['monthly_salary']) ? (float)$validated['monthly_salary'] : null,
+                'days_in_month' => $calculationMode === 'days' && isset($validated['days_in_month']) ? (int)$validated['days_in_month'] : null,
                 'total_amount' => $totalAmount,
                 'duration_months' => $durationMonths,
                 'monthly_deduction' => $monthlyDeduction,

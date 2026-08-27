@@ -626,7 +626,7 @@ class SalaryBreakdownApiController extends Controller
                                    $coopSavingsDeduct + $coopAssetDeduct + $surchargeDeduct + $absencePenaltyDeduct +
                                    $loanDeduct + $otherDeduct + $leaveOfAbsenceDeduct + $midMonthAdjustment;
 
-                $netPay = ($paidDays === 0) ? 0.00 : round($grossPay - $totalDeductions, 2);
+                $netPay = ($paidDays === 0) ? 0.00 : max(0.00, round($grossPay - $totalDeductions, 2));
             }
 
             return response()->json([
@@ -699,6 +699,7 @@ class SalaryBreakdownApiController extends Controller
                     ],
                     'medical_loan' => [
                         'amount' => $medicalLoanDeduct,
+                        'monthly_deduction' => $medicalLoanDeduct,
                         'balance_remaining' => $medLoanSetup ? (float)$medLoanSetup->balance_remaining : 0.00,
                         'monthly_rate' => $medLoanSetup ? (float)$medLoanSetup->monthly_deduction : $medicalLoanDeduct,
                         'is_active' => ($medicalLoanDeduct > 0 || $medLoanSetup !== null),
@@ -706,12 +707,14 @@ class SalaryBreakdownApiController extends Controller
                     ],
                     'coop_loan' => [
                         'amount' => $coopLoanDeduct,
+                        'monthly_deduction' => $coopLoanDeduct,
                         'balance_remaining' => $coopLoanSetup ? (float)$coopLoanSetup->balance_remaining : 0.00,
                         'is_active' => ($coopLoanDeduct > 0 || $coopLoanSetup !== null),
                         'label' => 'Cooperative Loan Repayment'
                     ],
                     'coop_savings' => [
                         'amount' => $coopSavingsDeduct,
+                        'monthly_deduction' => $coopSavingsDeduct,
                         'balance' => $coopSavingsBalance,
                         'saving_balance' => $coopSavingsBalance,
                         'balance_remaining' => $coopSavingsBalance,
@@ -720,30 +723,35 @@ class SalaryBreakdownApiController extends Controller
                     ],
                     'coop_asset_finance' => [
                         'amount' => $coopAssetDeduct,
+                        'monthly_deduction' => $coopAssetDeduct,
                         'balance_remaining' => $coopAssetSetup ? (float)$coopAssetSetup->balance_remaining : 0.00,
                         'is_active' => ($coopAssetDeduct > 0 || $coopAssetSetup !== null),
                         'label' => 'Cooperative Asset Finance'
                     ],
                     'surcharges' => [
                         'amount' => $surchargeDeduct,
+                        'monthly_deduction' => $surchargeDeduct,
                         'balance_remaining' => $surchargeSetup ? (float)$surchargeSetup->balance_remaining : 0.00,
                         'is_active' => ($surchargeDeduct > 0 || $surchargeSetup !== null),
                         'label' => 'Surcharge'
                     ],
                     'absence_penalty' => [
                         'amount' => $absencePenaltyDeduct,
+                        'monthly_deduction' => $absencePenaltyDeduct,
                         'balance_remaining' => $absencePenaltySetup ? (float)$absencePenaltySetup->balance_remaining : 0.00,
                         'is_active' => ($absencePenaltyDeduct > 0 || $absencePenaltySetup !== null),
                         'label' => 'Absence Penalty'
                     ],
                     'regular_loan' => [
                         'amount' => $loanDeduct,
+                        'monthly_deduction' => $loanDeduct,
                         'balance_remaining' => $loanBalance,
                         'is_active' => ($loanDeduct > 0),
                         'label' => 'Employee Loan'
                     ],
                     'leave_of_absence' => [
                         'amount' => round($leaveOfAbsenceDeduct, 2),
+                        'monthly_deduction' => round($leaveOfAbsenceDeduct, 2),
                         'days_absent' => $loaDays,
                         'paid_days' => $paidDays,
                         'is_active' => ($leaveOfAbsenceDeduct > 0 || $loaDays > 0),
@@ -751,6 +759,7 @@ class SalaryBreakdownApiController extends Controller
                     ],
                     'mid_month_adjustment' => [
                         'amount' => round($midMonthAdjustment, 2),
+                        'monthly_deduction' => round($midMonthAdjustment, 2),
                         'unworked_days' => $dojDaysDeducted,
                         'paid_days' => $paidDays,
                         'appointment_date' => $effectiveJoinDate,
@@ -759,6 +768,7 @@ class SalaryBreakdownApiController extends Controller
                     ],
                     'other_deductions' => [
                         'amount' => $otherDeduct,
+                        'monthly_deduction' => $otherDeduct,
                         'balance_remaining' => $otherDeductSetup ? (float)$otherDeductSetup->balance_remaining : 0.00,
                         'is_active' => ($otherDeduct > 0 || $otherDeductSetup !== null),
                         'label' => 'Other Deductions'

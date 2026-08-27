@@ -2628,6 +2628,7 @@ class NextJsPayrollApiController extends Controller
                     'status' => 'success',
                     'gross_pay' => 0.00,
                     'net_pay' => 0.00,
+                    'total_deductions' => 0.00,
                     'month' => null,
                     'year' => null,
                     'is_estimated' => false
@@ -2643,13 +2644,63 @@ class NextJsPayrollApiController extends Controller
             ];
             $month = $monthNames[strtoupper($monthName)] ?? (int)date('n');
 
+            $excludeType = $request->query('exclude_type');
+            $excludeId = $request->query('exclude_id');
+
+            // Use the canonical SalaryBreakdownApiController calculation engine
+            $breakdownCtrl = app(\App\Http\Controllers\Api\SalaryBreakdownApiController::class);
+            $breakdownReq = Request::create("/api/nextjs/payroll/salary-breakdown?staff_id={$staffId}&month={$month}&year={$year}", 'GET', [], [], [], [
+                'HTTP_X_USER_ID' => $ctx['userId'] ?? 1,
+            ]);
+            $breakdownRes = $breakdownCtrl->getBreakdown($breakdownReq);
+            $breakdownData = json_decode($breakdownRes->getContent(), true);
+
+            if (isset($breakdownData['status']) && $breakdownData['status'] === 'success' && isset($breakdownData['summary'])) {
+                $grossPay = (float)($breakdownData['summary']['gross_pay'] ?? 0.00);
+                $totalDeductions = (float)($breakdownData['summary']['total_deductions'] ?? 0.00);
+                $netPay = (float)($breakdownData['summary']['net_pay'] ?? 0.00);
+                $deductions = $breakdownData['deductions'] ?? [];
+
+                // If excluding a specific deduction category when creating/editing that setup
+                if ($excludeType === 'other_deduction' && isset($deductions['other_deductions']['amount'])) {
+                    $otherAmt = (float)$deductions['other_deductions']['amount'];
+                    $totalDeductions = max(0.00, $totalDeductions - $otherAmt);
+                    $netPay = max(0.00, round($grossPay - $totalDeductions, 2));
+                } elseif ($excludeType === 'loan' && isset($deductions['regular_loan']['amount'])) {
+                    $loanAmt = (float)$deductions['regular_loan']['amount'];
+                    $totalDeductions = max(0.00, $totalDeductions - $loanAmt);
+                    $netPay = max(0.00, round($grossPay - $totalDeductions, 2));
+                } elseif ($excludeType === 'coop_loan' && isset($deductions['coop_loan']['amount'])) {
+                    $coopLoanAmt = (float)$deductions['coop_loan']['amount'];
+                    $totalDeductions = max(0.00, $totalDeductions - $coopLoanAmt);
+                    $netPay = max(0.00, round($grossPay - $totalDeductions, 2));
+                } elseif ($excludeType === 'iou' && isset($deductions['iou']['amount'])) {
+                    $iouAmt = (float)$deductions['iou']['amount'];
+                    $totalDeductions = max(0.00, $totalDeductions - $iouAmt);
+                    $netPay = max(0.00, round($grossPay - $totalDeductions, 2));
+                }
+
+                return response()->json([
+                    'status' => 'success',
+                    'gross_pay' => $grossPay,
+                    'net_pay' => $netPay,
+                    'total_deductions' => $totalDeductions,
+                    'breakdown' => $deductions,
+                    'month' => $monthName,
+                    'year' => $year,
+                    'is_estimated' => !($breakdownData['period']['is_computed'] ?? false)
+                ]);
+            }
+
+            // Fallback to IouApiController if breakdown not available
             $iouController = app(\App\Http\Controllers\Api\IouApiController::class);
-            $netPayInfo = $iouController->calculateStaffNetPayBeforeIou($staffId, $year, $month);
+            $netPayInfo = $iouController->calculateStaffNetPayBeforeIou($staffId, $year, $month, null, $excludeType, $excludeId);
 
             return response()->json([
                 'status' => 'success',
                 'gross_pay' => (float)($netPayInfo['gross_pay'] ?? 0.00),
-                'net_pay' => (float)($netPayInfo['available_net_pay'] ?? 0.00),
+                'net_pay' => (float)($netPayInfo['available_net_pay'] ?? $netPayInfo['net_pay'] ?? 0.00),
+                'total_deductions' => (float)($netPayInfo['total_deductions'] ?? $netPayInfo['total_deductions_before_iou'] ?? 0.00),
                 'month' => $monthName,
                 'year' => $year,
                 'is_estimated' => true
