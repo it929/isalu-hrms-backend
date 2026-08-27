@@ -130,6 +130,8 @@ Route::prefix('nextjs')->group(function () {
         Route::post('/',                    [\App\Http\Controllers\Api\HrLeaveApiController::class, 'saveApplyLeave']);
         Route::put('/{id}',                 [\App\Http\Controllers\Api\HrLeaveApiController::class, 'updateApplyLeave']);
         Route::get('/calculate-end-date',   [\App\Http\Controllers\Api\HrLeaveApiController::class, 'calculateEndDate']);
+        Route::get('/recall-preview/{id}',  [\App\Http\Controllers\Api\HrLeaveApiController::class, 'previewRecallLeave']);
+        Route::post('/recall/{id}',         [\App\Http\Controllers\Api\HrLeaveApiController::class, 'recallLeave']);
         Route::get('/hod-approve/{id}',     [\App\Http\Controllers\Api\HrLeaveApiController::class, 'hodApprove']);
         Route::get('/hod-reject/{id}',      [\App\Http\Controllers\Api\HrLeaveApiController::class, 'hodReject']);
         Route::get('/admin-approve/{id}',   [\App\Http\Controllers\Api\HrLeaveApiController::class, 'adminApprove']);
@@ -375,6 +377,7 @@ Route::prefix('nextjs')->group(function () {
         // Other Deduction Setup
         Route::prefix('other-deduction-setups')->group(function () {
             Route::get('/',        [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'index']);
+            Route::get('/staff-salary/{staffId}', [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'getStaffSalary']);
             Route::get('/template', [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'downloadTemplate']);
             Route::post('/',       [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'store']);
             Route::post('/toggle/{id}', [\App\Http\Controllers\Api\OtherDeductionSetupApiController::class, 'toggleStatus']);
