@@ -182,7 +182,8 @@ Route::prefix('nextjs')->group(function () {
     Route::prefix('payroll')->group(function () {
         Route::get('/metadata', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getMetadata']);
         Route::get('/',         [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getPayrollList']);
-        Route::get('/export',   [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'exportPayroll']);
+        Route::get('/export',                  [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'exportPayroll']);
+        Route::get('/export-variance-summary', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'exportPayrollVarianceSummary']);
         Route::post('/compute', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'computeSalary']);
         Route::get('/payslip/init', [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getPayslipInit']);
         Route::get('/payslip',  [\App\Http\Controllers\Api\NextJsPayrollApiController::class, 'getPayslip']);
