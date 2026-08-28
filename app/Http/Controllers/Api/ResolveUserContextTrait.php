@@ -29,13 +29,18 @@ trait ResolveUserContextTrait
             return strtolower($role);
         })->toArray();
 
-        $isSuperAdmin = in_array(1, $roleIds) || in_array('super administrator', $roleNames) || in_array('superadmin', $roleNames);
+        $isSuperAdmin = in_array(1, $roleIds) 
+            || in_array('super administrator', $roleNames) 
+            || in_array('superadmin', $roleNames)
+            || in_array('super admin', $roleNames)
+            || in_array('administrator', $roleNames)
+            || in_array('admin', $roleNames);
 
-        $adminStaff = in_array(48, $roleIds) || in_array(68, $roleIds) || in_array('hr head', $roleNames) || in_array('head of hr', $roleNames);
+        $adminStaff = in_array(48, $roleIds) || in_array(68, $roleIds) || in_array('hr head', $roleNames) || in_array('head of hr', $roleNames) || in_array('hr', $roleNames);
 
-        $isAuditStaff = in_array(34, $roleIds) || in_array(35, $roleIds) || in_array(70, $roleIds) || in_array('audit head', $roleNames) || in_array('head of audit', $roleNames);
+        $isAuditStaff = in_array(34, $roleIds) || in_array(35, $roleIds) || in_array(70, $roleIds) || in_array('audit head', $roleNames) || in_array('head of audit', $roleNames) || in_array('audit', $roleNames);
 
-        $isFinanceStaff = in_array(36, $roleIds) || in_array(37, $roleIds) || in_array(69, $roleIds) || in_array('finance head', $roleNames) || in_array('head of finance', $roleNames);
+        $isFinanceStaff = in_array(36, $roleIds) || in_array(37, $roleIds) || in_array(69, $roleIds) || in_array('finance head', $roleNames) || in_array('head of finance', $roleNames) || in_array('finance', $roleNames);
 
         $employee = DB::table('tblper')->where('UserID', $userId)->first();
         if (!$employee && is_numeric($userId)) {

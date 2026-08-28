@@ -247,4 +247,34 @@ class LoaVisibilityApiTest extends TestCase
             DB::table('tblper')->where('ID', $staffId)->delete();
         }
     }
+
+    public function test_loa_export_spreadsheet_endpoint()
+    {
+        $user = DB::table('tblper')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user available for testing LOA export');
+            return;
+        }
+
+        // Assign HR role to view all records
+        DB::table('assign_user_role')->where('userID', $user->UserID)->delete();
+        DB::table('assign_user_role')->insert([
+            'userID' => $user->UserID,
+            'roleID' => 68,
+        ]);
+
+        $headers = ['X-User-Id' => $user->UserID];
+
+        $res = $this->get('/api/nextjs/hr/apply-loa/export', $headers);
+        $res->assertStatus(200);
+        $this->assertStringContainsString('text/csv', $res->headers->get('Content-Type'));
+
+        $csv = $res->streamedContent();
+        $this->assertStringContainsString('ISALU HRMS — LEAVE OF ABSENCE (LOA) APPLICATIONS & DEDUCTION REPORT', $csv);
+        $this->assertStringContainsString('Staff ID', $csv);
+        $this->assertStringContainsString('Staff Name', $csv);
+        $this->assertStringContainsString('Estimated LOA Deduction (NGN)', $csv);
+        $this->assertStringContainsString('TOTAL', $csv);
+    }
 }
+

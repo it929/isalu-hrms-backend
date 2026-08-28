@@ -631,4 +631,85 @@ class IouApiTest extends TestCase
         $this->assertEquals(2, $record->hod_status);
         $this->assertEquals('Department budget exceeded', $record->remarks);
     }
+
+    /**
+     * Test deadline validation: Applications submitted with date after 25th of the month are rejected.
+     */
+    public function test_iou_deadline_25th_of_month_validation()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in DB.');
+        }
+
+        $staff = DB::table('tblper')->first();
+        if (!$staff) {
+            $this->markTestSkipped('No staff record found in tblper.');
+        }
+
+        $headers = $this->getHeaders($user->id);
+
+        // Set salary structure so staff is eligible
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $staff->ID],
+            [
+                'basic_salary' => 100000.00,
+                'housing_allowance' => 40000.00,
+                'transport_allowance' => 20000.00,
+                'medical_allowance' => 10000.00,
+                'utility_allowance' => 15000.00,
+                'meal_allowance' => 15000.00,
+                'can_take_iou' => 1,
+                'max_iou_amount' => 0.00,
+            ]
+        );
+
+        // 1. Attempt submitting IOU with date on the 26th (past the 25th deadline) -> must fail with 422
+        $payloadAfter25th = [
+            'staff_id'       => $staff->ID,
+            'amount'         => 30000.00,
+            'reason'         => 'Test after 25th deadline',
+            'iou_date'       => '2034-03-26', // 26th is past the 25th deadline
+            'repayment_date' => '2034-04-15',
+        ];
+
+        $resAfter25th = $this->postJson('/api/nextjs/payroll/ious', $payloadAfter25th, $headers);
+        $resAfter25th->assertStatus(422)
+            ->assertJson([
+                'status' => 'error'
+            ]);
+        $this->assertStringContainsString('25th of the month', $resAfter25th->json('message'));
+
+        // 2. Check getUsedLimit endpoint returns is_past_deadline = true for date after 25th
+        $resLimitAfter25th = $this->getJson("/api/nextjs/payroll/ious/used-limit?staff_id={$staff->ID}&date=2034-03-26", $headers);
+        $resLimitAfter25th->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'data' => [
+                    'is_past_deadline' => true,
+                ]
+            ]);
+
+        // 3. Attempt submitting IOU with date on the 25th (on deadline) in future month -> must succeed
+        $payloadOn25th = [
+            'staff_id'       => $staff->ID,
+            'amount'         => 30000.00,
+            'reason'         => 'Test on 25th deadline',
+            'iou_date'       => '2034-03-25', // 25th is allowed
+            'repayment_date' => '2034-04-15',
+        ];
+
+        $resOn25th = $this->postJson('/api/nextjs/payroll/ious', $payloadOn25th, $headers);
+        $resOn25th->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'IOU application submitted successfully.'
+            ]);
+
+        // Clean up
+        if ($resOn25th->json('id')) {
+            DB::table('iou_records')->where('id', $resOn25th->json('id'))->delete();
+        }
+    }
 }
+

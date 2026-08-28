@@ -182,7 +182,8 @@ class HrLeaveApiController extends Controller
 
         $employee = $ctx['employee'];
 
-        if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) {
+        if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
+            // Super Admin, HR Head, and Audit Head see ALL leave records
             $records = $baseQuery->get();
         } else {
             // Regular staff and non-HR staff strictly see only their own leave applications
@@ -922,6 +923,7 @@ class HrLeaveApiController extends Controller
                 'tblper.first_name',
                 'tblper.othernames',
                 'tblper.office_shift',
+                'tblper.departmentID as department_id',
                 'tbldepartment.department'
             )
             ->orderBy('leave_of_absent.id', 'DESC');
@@ -983,12 +985,7 @@ class HrLeaveApiController extends Controller
                 $r->duration_days = $start->diffInDays($end) + 1;
             }
 
-            // Capture exact number of days in the month (e.g. 28, 29, 30, or 31 days)
-            $daysInMonth = $start->daysInMonth;
-            $r->days_in_month = $daysInMonth;
-            $r->month_name = $start->format('F Y');
-
-            // Calculate salary rate and deduction
+            // Calculate salary structure
             $struct = $salaryMap[$r->staffId] ?? null;
             $monthlySalary = 0.00;
             if ($struct) {
@@ -1014,12 +1011,61 @@ class HrLeaveApiController extends Controller
                 }
             }
 
-            $dailyRate = $daysInMonth > 0 ? round($monthlySalary / $daysInMonth, 2) : 0.00;
+            // Cross-month prorated calculation
+            $currentMonth = $start->copy()->startOfMonth();
+            $endMonth = $end->copy()->startOfMonth();
+            $totalEstimatedDeduction = 0.00;
+            $monthBreakdowns = [];
+
+            while ($currentMonth->lte($endMonth)) {
+                $mStart = $currentMonth->copy()->startOfMonth();
+                $mEnd = $currentMonth->copy()->endOfMonth();
+                $daysInThisMonth = (int)$currentMonth->daysInMonth;
+                $mName = $currentMonth->format('F Y');
+
+                $overlapStart = $start->greaterThan($mStart) ? $start : $mStart;
+                $overlapEnd = $end->lessThan($mEnd) ? $end : $mEnd;
+
+                $mDays = 0;
+                if ($r->office_shift == 1) {
+                    $cur = $overlapStart->copy();
+                    while ($cur->lte($overlapEnd)) {
+                        if (!$cur->isWeekend()) {
+                            $mDays++;
+                        }
+                        $cur->addDay();
+                    }
+                } else {
+                    $mDays = $overlapStart->diffInDays($overlapEnd) + 1;
+                }
+
+                $mDailyRate = $daysInThisMonth > 0 ? round($monthlySalary / $daysInThisMonth, 2) : 0.00;
+                $mDeduction = round($mDailyRate * $mDays, 2);
+                $totalEstimatedDeduction += $mDeduction;
+
+                $monthBreakdowns[] = [
+                    'month_name'    => $mName,
+                    'days_in_month' => $daysInThisMonth,
+                    'days_on_leave' => $mDays,
+                    'daily_rate'    => $mDailyRate,
+                    'deduction'     => $mDeduction,
+                ];
+
+                $currentMonth->addMonth();
+            }
+
+            $primaryDaysInMonth = (int)$start->daysInMonth;
+            $primaryDailyRate = $primaryDaysInMonth > 0 ? round($monthlySalary / $primaryDaysInMonth, 2) : 0.00;
+
             $r->monthly_salary = $monthlySalary;
-            $r->daily_rate = $dailyRate;
-            $r->estimated_deduction = round($dailyRate * $r->duration_days, 2);
-            
-            $r->date_applied  = Carbon::parse($r->created_at)->format('d M, Y');
+            $r->daily_rate = $primaryDailyRate;
+            $r->days_in_month = $primaryDaysInMonth;
+            $r->month_name = count($monthBreakdowns) > 1 
+                ? ($start->format('M Y') . ' – ' . $end->format('M Y'))
+                : $start->format('F Y');
+            $r->estimated_deduction = round($totalEstimatedDeduction, 2);
+            $r->month_breakdowns = $monthBreakdowns;
+            $r->date_applied = Carbon::parse($r->created_at)->format('d M, Y');
             return $r;
         });
 
@@ -1028,6 +1074,168 @@ class HrLeaveApiController extends Controller
             'loaRecords' => $records,
         ]);
     }
+
+    /**
+     * GET /api/nextjs/hr/apply-loa/export
+     * Export Leave of Absence (LOA) records to a formatted CSV spreadsheet.
+     */
+    public function exportLoaSpreadsheet(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+        }
+
+        // Fetch records with role filtering applied
+        $res = $this->getLoaRecords($request);
+        $data = $res->getData(true);
+        $records = $data['loaRecords'] ?? [];
+
+        // Apply filters if passed
+        $statusFilter = $request->query('status', 'all');
+        $startDateFilter = $request->query('start_date');
+        $endDateFilter = $request->query('end_date');
+        $search = trim($request->query('search', ''));
+
+        $records = collect($records)->filter(function ($rec) use ($statusFilter, $startDateFilter, $endDateFilter, $search) {
+            if ($search !== '') {
+                $q = strtolower($search);
+                $name = strtolower(trim(($rec['surname'] ?? '') . ' ' . ($rec['first_name'] ?? '') . ' ' . ($rec['othernames'] ?? '')));
+                $dept = strtolower($rec['department'] ?? '');
+                $reason = strtolower($rec['reason_of_leave'] ?? '');
+                $staffId = (string)($rec['staffId'] ?? '');
+                if (!str_contains($name, $q) && !str_contains($dept, $q) && !str_contains($reason, $q) && !str_contains($staffId, $q)) {
+                    return false;
+                }
+            }
+
+            if ($startDateFilter) {
+                $start = Carbon::parse($startDateFilter)->startOfDay();
+                $applied = Carbon::parse($rec['created_at'] ?? $rec['date_applied'])->startOfDay();
+                if ($applied->lt($start)) return false;
+            }
+
+            if ($endDateFilter) {
+                $end = Carbon::parse($endDateFilter)->endOfDay();
+                $applied = Carbon::parse($rec['created_at'] ?? $rec['date_applied'])->startOfDay();
+                if ($applied->gt($end)) return false;
+            }
+
+            if ($statusFilter !== 'all') {
+                $status = (int)$rec['status'];
+                $isPending = !in_array($status, [1, 2, 3, 4]);
+                $isApproved = in_array($status, [1, 2]);
+                $isRejected = in_array($status, [3, 4]);
+
+                if ($statusFilter === 'pending' && !$isPending) return false;
+                if ($statusFilter === 'approved' && !$isApproved) return false;
+                if ($statusFilter === 'rejected' && !$isRejected) return false;
+            }
+
+            return true;
+        })->values();
+
+        $filename = "Leave_of_Absence_Records_" . date('Y_m_d_His') . ".csv";
+
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Pragma'              => 'no-cache',
+            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires'             => '0',
+        ];
+
+        $callback = function () use ($records) {
+            $handle = fopen('php://output', 'w');
+            fputs($handle, "\xEF\xBB\xBF"); // UTF-8 BOM
+
+            // Title block
+            fputcsv($handle, ['ISALU HRMS — LEAVE OF ABSENCE (LOA) APPLICATIONS & DEDUCTION REPORT']);
+            fputcsv($handle, ['Generated on: ' . date('d M Y, h:i A') . ' | Total Records: ' . $records->count()]);
+            fputcsv($handle, []);
+
+            // Column Headers
+            fputcsv($handle, [
+                'S/N',
+                'Staff ID',
+                'Staff Name',
+                'Department',
+                'Start Date',
+                'End Date',
+                'Duration (Days)',
+                'Days in Month',
+                'Target Month',
+                'Monthly Gross Salary (NGN)',
+                'Daily Salary Rate (NGN)',
+                'Estimated LOA Deduction (NGN)',
+                'Date Applied',
+                'Status',
+                'Reason for Leave of Absence'
+            ]);
+
+            $totalDeductions = 0.0;
+            $totalDays = 0;
+
+            foreach ($records as $index => $r) {
+                $name = trim(($r['surname'] ?? '') . ' ' . ($r['first_name'] ?? '') . ' ' . ($r['othernames'] ?? ''));
+                $statusText = match ((int)($r['status'] ?? 0)) {
+                    1 => 'HOD Approved',
+                    2 => 'HR Approved',
+                    3 => 'HOD Rejected',
+                    4 => 'HR Rejected',
+                    default => 'Pending',
+                };
+
+                $deduction = (float)($r['estimated_deduction'] ?? 0.0);
+                $duration = (int)($r['duration_days'] ?? 0);
+                $totalDeductions += $deduction;
+                $totalDays += $duration;
+
+                fputcsv($handle, [
+                    $index + 1,
+                    $r['staffId'] ?? '',
+                    $name,
+                    $r['department'] ?? '',
+                    Carbon::parse($r['start_date'])->format('d M, Y'),
+                    Carbon::parse($r['end_date'])->format('d M, Y'),
+                    $duration,
+                    $r['days_in_month'] ?? '',
+                    $r['month_name'] ?? '',
+                    number_format((float)($r['monthly_salary'] ?? 0.0), 2),
+                    number_format((float)($r['daily_rate'] ?? 0.0), 2),
+                    number_format($deduction, 2),
+                    $r['date_applied'] ?? Carbon::parse($r['created_at'])->format('d M, Y'),
+                    $statusText,
+                    $r['reason_of_leave'] ?? ''
+                ]);
+            }
+
+            // Summary Totals Row
+            fputcsv($handle, []);
+            fputcsv($handle, [
+                'TOTAL',
+                '',
+                '',
+                '',
+                '',
+                '',
+                $totalDays . ' days',
+                '',
+                '',
+                '',
+                '',
+                number_format($totalDeductions, 2),
+                '',
+                '',
+                ''
+            ]);
+
+            fclose($handle);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
 
     /**
      * POST /api/nextjs/hr/apply-loa
@@ -1136,17 +1344,23 @@ class HrLeaveApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'HOD or delegated leave approval privileges required.'], 403);
         }
 
-        if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-            $record = DB::table('leave_of_absent')->where('id', $id)->first();
-            if ($record) {
-                $employee = DB::table('tblper')->where('ID', $record->staffId)->first();
-                $activeDeptId = (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) 
-                    ? $ctx['delegated_department_id'] 
-                    : ($ctx['employee'] ? $ctx['employee']->departmentID : null);
+        $record = DB::table('leave_of_absent')->where('id', $id)->first();
+        if (!$record) {
+            return response()->json(['status' => 'error', 'message' => 'Leave record not found.'], 404);
+        }
 
-                if (!$employee || $employee->departmentID != $activeDeptId) {
-                    return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
-                }
+        if ($record->status != 0) {
+            return response()->json(['status' => 'error', 'message' => 'This Leave of Absence application is not in pending HOD status.'], 422);
+        }
+
+        if (!$ctx['isSuperAdmin']) {
+            $employee = DB::table('tblper')->where('ID', $record->staffId)->first();
+            $activeDeptId = (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) 
+                ? $ctx['delegated_department_id'] 
+                : ($ctx['employee'] ? $ctx['employee']->departmentID : null);
+
+            if (!$employee || $employee->departmentID != $activeDeptId) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied: You can only approve applications for staff in your department.'], 403);
             }
         }
 
@@ -1162,17 +1376,23 @@ class HrLeaveApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'HOD or delegated leave approval privileges required.'], 403);
         }
 
-        if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-            $record = DB::table('leave_of_absent')->where('id', $id)->first();
-            if ($record) {
-                $employee = DB::table('tblper')->where('ID', $record->staffId)->first();
-                $activeDeptId = (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) 
-                    ? $ctx['delegated_department_id'] 
-                    : ($ctx['employee'] ? $ctx['employee']->departmentID : null);
+        $record = DB::table('leave_of_absent')->where('id', $id)->first();
+        if (!$record) {
+            return response()->json(['status' => 'error', 'message' => 'Leave record not found.'], 404);
+        }
 
-                if (!$employee || $employee->departmentID != $activeDeptId) {
-                    return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
-                }
+        if ($record->status != 0) {
+            return response()->json(['status' => 'error', 'message' => 'This Leave of Absence application is not in pending HOD status.'], 422);
+        }
+
+        if (!$ctx['isSuperAdmin']) {
+            $employee = DB::table('tblper')->where('ID', $record->staffId)->first();
+            $activeDeptId = (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) 
+                ? $ctx['delegated_department_id'] 
+                : ($ctx['employee'] ? $ctx['employee']->departmentID : null);
+
+            if (!$employee || $employee->departmentID != $activeDeptId) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied: You can only reject applications for staff in your department.'], 403);
             }
         }
 
@@ -1187,6 +1407,19 @@ class HrLeaveApiController extends Controller
         if (!$ctx || !$this->hasHrPermission($ctx, 'hr_approve_leave')) {
             return response()->json(['status' => 'error', 'message' => 'HR or delegated leave approval privileges required.'], 403);
         }
+
+        $record = DB::table('leave_of_absent')->where('id', $id)->first();
+        if (!$record) {
+            return response()->json(['status' => 'error', 'message' => 'Leave record not found.'], 404);
+        }
+
+        if ($record->status != 1) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Cannot approve: The Head of Department (HOD) must approve this Leave of Absence application before HR HEAD can approve.'
+            ], 422);
+        }
+
         DB::table('leave_of_absent')->where('id', $id)->update(['status' => 2]);
         return response()->json(['status' => 'success', 'message' => 'Leave of absence fully approved by HR.']);
     }
@@ -1198,6 +1431,19 @@ class HrLeaveApiController extends Controller
         if (!$ctx || !$this->hasHrPermission($ctx, 'hr_approve_leave')) {
             return response()->json(['status' => 'error', 'message' => 'HR or delegated leave approval privileges required.'], 403);
         }
+
+        $record = DB::table('leave_of_absent')->where('id', $id)->first();
+        if (!$record) {
+            return response()->json(['status' => 'error', 'message' => 'Leave record not found.'], 404);
+        }
+
+        if ($record->status != 1) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Cannot reject at HR stage: HOD has not approved this Leave of Absence application yet.'
+            ], 422);
+        }
+
         DB::table('leave_of_absent')->where('id', $id)->update(['status' => 4]);
         return response()->json(['status' => 'success', 'message' => 'Leave of absence rejected by Admin.']);
     }
