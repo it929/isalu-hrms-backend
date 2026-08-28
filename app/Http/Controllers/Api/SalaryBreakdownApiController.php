@@ -33,11 +33,14 @@ class SalaryBreakdownApiController extends Controller
             $employee = $ctx['employee'];
             $query = DB::table('tblper')
                 ->where('rank', '!=', 2)
-                ->where('staff_status', 1)
+                ->where(function($q) {
+                    $q->where('staff_status', 1)
+                      ->orWhereNull('staff_status');
+                })
                 ->select('ID as id', 'fileNo as file_no', 'surname', 'first_name', 'othernames', 'departmentID');
 
-            if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
-                // All staff
+            if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff'] || $ctx['isFinanceStaff']) {
+                // Super Admin, HR, Audit, Finance can see all staff
             } elseif ($employee && $employee->is_hod == 1) {
                 $query->where('departmentID', $employee->departmentID);
             } elseif ($employee) {
@@ -626,7 +629,7 @@ class SalaryBreakdownApiController extends Controller
                                    $coopSavingsDeduct + $coopAssetDeduct + $surchargeDeduct + $absencePenaltyDeduct +
                                    $loanDeduct + $otherDeduct + $leaveOfAbsenceDeduct + $midMonthAdjustment;
 
-                $netPay = ($paidDays === 0) ? 0.00 : max(0.00, round($grossPay - $totalDeductions, 2));
+                $netPay = ($paidDays === 0) ? 0.00 : round($grossPay - $totalDeductions, 2);
             }
 
             return response()->json([
@@ -853,10 +856,38 @@ class SalaryBreakdownApiController extends Controller
 
             $result = $this->computeOrFetchAllStaffPayroll($month, $year, $departmentId, $search);
 
+            // Compute high-level previous vs current variance summary
+            $prevMonth = ($month === 1) ? 12 : ($month - 1);
+            $prevYear = ($month === 1) ? ($year - 1) : $year;
+            $prevResult = $this->computeOrFetchAllStaffPayroll($prevMonth, $prevYear, $departmentId);
+            
+            $calcDelta = function($curr, $prev) {
+                $diff = round($curr - $prev, 2);
+                $pct = ($prev > 0) ? round(($diff / $prev) * 100, 2) : ($curr > 0 ? 100.0 : 0.0);
+                return [
+                    'previous' => round($prev, 2),
+                    'current' => round($curr, 2),
+                    'diff' => $diff,
+                    'percent_change' => $pct,
+                    'is_increase' => $diff > 0,
+                    'is_decrease' => $diff < 0,
+                ];
+            };
+
+            $varianceSummary = [
+                'previous_period' => $prevResult['period'],
+                'current_period' => $result['period'],
+                'staff_count' => $calcDelta($result['summary']['total_staff'] ?? 0, $prevResult['summary']['total_staff'] ?? 0),
+                'gross_income' => $calcDelta($result['summary']['total_gross'] ?? 0, $prevResult['summary']['total_gross'] ?? 0),
+                'total_deductions' => $calcDelta($result['summary']['total_deductions'] ?? 0, $prevResult['summary']['total_deductions'] ?? 0),
+                'net_pay' => $calcDelta($result['summary']['total_net_pay'] ?? 0, $prevResult['summary']['total_net_pay'] ?? 0),
+            ];
+
             return response()->json([
                 'status' => 'success',
                 'data' => $result['records'],
                 'summary' => $result['summary'],
+                'variance_summary' => $varianceSummary,
                 'period' => $result['period'],
                 'departments' => $result['departments'],
                 'is_computed' => $result['is_computed'],
@@ -872,6 +903,410 @@ class SalaryBreakdownApiController extends Controller
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
     }
+
+    /**
+     * GET /api/nextjs/payroll/salary-breakdown/variance
+     * Retrieve full payroll variance report comparing current month with previous month.
+     * Accessible by: Super Admin, HR Head, Finance Head, Audit Head.
+     */
+    public function getVarianceSummary(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            $canAccess = ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isFinanceStaff'] || $ctx['isAuditStaff']);
+            if (!$canAccess) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized. Super Admin, HR Head, Finance Head, or Audit Head access is required.'], 403);
+            }
+
+            $defaultMonth = (int)date('n');
+            $defaultYear = (int)date('Y');
+            try {
+                $activeMonthRow = DB::table('tblactivemonth')->first();
+                if ($activeMonthRow) {
+                    if (is_numeric($activeMonthRow->month)) {
+                        $defaultMonth = (int)$activeMonthRow->month;
+                    } else {
+                        $mNum = date('n', strtotime("1 {$activeMonthRow->month} 2000"));
+                        if ($mNum) $defaultMonth = (int)$mNum;
+                    }
+                    if (!empty($activeMonthRow->year)) {
+                        $defaultYear = (int)$activeMonthRow->year;
+                    }
+                }
+            } catch (\Throwable $e) { /* fallback */ }
+
+            $month = (int)$request->query('month', $defaultMonth);
+            $year = (int)$request->query('year', $defaultYear);
+            $departmentId = $request->query('department_id');
+            $search = trim($request->query('search', ''));
+
+            $variance = $this->computePayrollVariance($month, $year, $departmentId, $search);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $variance,
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('SalaryBreakdownApiController getVarianceSummary: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/nextjs/payroll/salary-breakdown/variance/export
+     * Export Monthly Payroll Variance Report to CSV.
+     */
+    public function exportVarianceReport(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            $month = (int)$request->query('month', date('n'));
+            $year = (int)$request->query('year', date('Y'));
+            $departmentId = $request->query('department_id');
+            $search = trim($request->query('search', ''));
+
+            $variance = $this->computePayrollVariance($month, $year, $departmentId, $search);
+
+            $currStr = $variance['current_period']['period_str'];
+            $prevStr = $variance['previous_period']['period_str'];
+            $currMonthName = $variance['current_period']['month_name'];
+            $prevMonthName = $variance['previous_period']['month_name'];
+
+            $deptName = '';
+            if (!empty($departmentId) && \Illuminate\Support\Facades\Schema::hasTable('tbldepartment')) {
+                $dObj = DB::table('tbldepartment')->where('id', $departmentId)->first();
+                if ($dObj) {
+                    $deptName = $dObj->department;
+                }
+            }
+
+            $deptSuffix = $deptName ? '_' . preg_replace('/[^a-zA-Z0-9]/', '_', $deptName) : '';
+            $filename = "Payroll_Variance_Summary_{$currMonthName}_{$year}{$deptSuffix}.csv";
+
+            $headers = [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                'Pragma' => 'no-cache',
+                'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires' => '0'
+            ];
+
+            $callback = function() use ($variance, $currStr, $prevStr, $currMonthName, $prevMonthName, $year, $deptName) {
+                $handle = fopen('php://output', 'w');
+                // Output UTF-8 BOM for Microsoft Excel compatibility
+                fputs($handle, "\xEF\xBB\xBF");
+
+                // Title and Subtitle
+                fputcsv($handle, ['ISALU HRMS — MONTH-ON-MONTH PAYROLL VARIANCE & SUMMARY REPORT']);
+                $periodSubtitle = "Comparing: {$prevStr} (Last Month) vs {$currStr} (Current Month)";
+                if ($deptName) {
+                    $periodSubtitle .= " | Filtered by Department: {$deptName}";
+                }
+                $periodSubtitle .= " | Generated on: " . date('d M Y, h:i A');
+                fputcsv($handle, [$periodSubtitle]);
+                fputcsv($handle, []);
+
+                // Categorize staff movements
+                $staffCollection = collect($variance['staff_variances']);
+                $newHires = $staffCollection->where('status_type', 'new_joiner')->values();
+                $exitedStaff = $staffCollection->where('status_type', 'exited')->values();
+                $salaryIncreased = $staffCollection->where('status_type', 'increased')->values();
+                $salaryDecreased = $staffCollection->where('status_type', 'decreased')->values();
+                $salaryUnchanged = $staffCollection->where('status_type', 'unchanged')->values();
+
+                $totalNewHiresGross = (float)$newHires->sum('curr_gross');
+                $totalExitedGross = (float)$exitedStaff->sum('prev_gross');
+                $totalSalaryChangesGross = (float)$salaryIncreased->sum('gross_diff') + (float)$salaryDecreased->sum('gross_diff');
+
+                $exec = $variance['executive_summary'];
+                $prevGrossTotal = (float)$exec['total_gross']['previous'];
+                $currGrossTotal = (float)$exec['total_gross']['current'];
+                $netGrossVar = (float)$exec['total_gross']['diff'];
+                $pctGrossVar = (float)$exec['total_gross']['percent_change'];
+
+                $prevStaffCount = (int)$exec['total_staff']['previous'];
+                $currStaffCount = (int)$exec['total_staff']['current'];
+                $headcountDiff = (int)$exec['total_staff']['diff'];
+
+                // ── SECTION 1: EXECUTIVE KPI SUMMARY ──
+                fputcsv($handle, ['=== 1. EXECUTIVE KPI SUMMARY ===']);
+                fputcsv($handle, ['KPI Metric', "Last Month ({$prevStr})", "This Month ({$currStr})", 'Variance Amount', 'Variance % / Headcount Details']);
+                fputcsv($handle, [
+                    'Total Gross Payroll',
+                    number_format($prevGrossTotal, 2),
+                    number_format($currGrossTotal, 2),
+                    ($netGrossVar >= 0 ? '+' : '-') . number_format(abs($netGrossVar), 2),
+                    ($pctGrossVar >= 0 ? '+' : '') . number_format($pctGrossVar, 2) . '%'
+                ]);
+                fputcsv($handle, [
+                    'Active Headcount (Staff)',
+                    $prevStaffCount,
+                    $currStaffCount,
+                    ($headcountDiff >= 0 ? "+{$headcountDiff}" : (string)$headcountDiff),
+                    "New Hires: +" . $newHires->count() . " | Resigned/Exited: -" . $exitedStaff->count() . " | Salary Changes: " . ($salaryIncreased->count() + $salaryDecreased->count())
+                ]);
+                fputcsv($handle, [
+                    'Total Deductions',
+                    number_format((float)$exec['total_deductions']['previous'], 2),
+                    number_format((float)$exec['total_deductions']['current'], 2),
+                    ((float)$exec['total_deductions']['diff'] >= 0 ? '+' : '-') . number_format(abs((float)$exec['total_deductions']['diff']), 2),
+                    ((float)$exec['total_deductions']['percent_change'] >= 0 ? '+' : '') . number_format((float)$exec['total_deductions']['percent_change'], 2) . '%'
+                ]);
+                fputcsv($handle, [
+                    'Net Pay Disbursement',
+                    number_format((float)$exec['total_net_pay']['previous'], 2),
+                    number_format((float)$exec['total_net_pay']['current'], 2),
+                    ((float)$exec['total_net_pay']['diff'] >= 0 ? '+' : '-') . number_format(abs((float)$exec['total_net_pay']['diff']), 2),
+                    ((float)$exec['total_net_pay']['percent_change'] >= 0 ? '+' : '') . number_format((float)$exec['total_net_pay']['percent_change'], 2) . '%'
+                ]);
+                fputcsv($handle, []);
+
+                // ── SECTION 2: EXACT GROSS VARIANCE RECONCILIATION (PROOF OF VARIANCE) ──
+                fputcsv($handle, ['=== 2. EXACT GROSS VARIANCE RECONCILIATION (PROOF OF VARIANCE) ===']);
+                fputcsv($handle, ['Reconciliation Component', 'Headcount', 'Gross Impact (₦)', '% Impact', 'Constituent Explanation / Primary Driver']);
+                fputcsv($handle, ["Starting Gross Payroll ({$prevStr})", $prevStaffCount, number_format($prevGrossTotal, 2), '100.00%', "Base gross salary of all active staff in previous month"]);
+                fputcsv($handle, [
+                    "(+) Gross Addition: Newly Employed Staff",
+                    $newHires->count(),
+                    number_format($totalNewHiresGross, 2),
+                    ($prevGrossTotal > 0 ? number_format(($totalNewHiresGross / $prevGrossTotal) * 100, 2) . '%' : 'N/A'),
+                    $newHires->count() . " new employee(s) joined the payroll this month"
+                ]);
+                fputcsv($handle, [
+                    "(-) Gross Reduction: Resigned / Exited Staff",
+                    $exitedStaff->count(),
+                    '-' . number_format($totalExitedGross, 2),
+                    ($prevGrossTotal > 0 ? '-' . number_format(($totalExitedGross / $prevGrossTotal) * 100, 2) . '%' : 'N/A'),
+                    $exitedStaff->count() . " staff resigned, retired, or exited before this month's payroll"
+                ]);
+                fputcsv($handle, [
+                    "(+/-) Net Salary Increments / Allowance Variations",
+                    $salaryIncreased->count() + $salaryDecreased->count(),
+                    ($totalSalaryChangesGross >= 0 ? '+' : '-') . number_format(abs($totalSalaryChangesGross), 2),
+                    ($prevGrossTotal > 0 ? ($totalSalaryChangesGross >= 0 ? '+' : '') . number_format(($totalSalaryChangesGross / $prevGrossTotal) * 100, 2) . '%' : 'N/A'),
+                    $salaryIncreased->count() . " increment(s) (+₦" . number_format((float)$salaryIncreased->sum('gross_diff'), 2) . "), " . $salaryDecreased->count() . " reduction(s) (-₦" . number_format(abs((float)$salaryDecreased->sum('gross_diff')), 2) . ")"
+                ]);
+                fputcsv($handle, ["(=) Ending Gross Payroll ({$currStr})", $currStaffCount, number_format($currGrossTotal, 2), ($prevGrossTotal > 0 ? number_format(($currGrossTotal / $prevGrossTotal) * 100, 2) . '%' : '100.00%'), "Computed total gross payroll for current active month"]);
+                $reconciledDiff = ($prevGrossTotal + $totalNewHiresGross - $totalExitedGross + $totalSalaryChangesGross) - $currGrossTotal;
+                fputcsv($handle, ["VARIANCE RECONCILIATION CHECK (Difference)", '-', number_format($reconciledDiff, 2), '0.00%', (abs($reconciledDiff) < 0.05 ? "100% Mathematically Reconciled (₦0.00 difference)" : "Discrepancy: ₦" . number_format($reconciledDiff, 2))]);
+                fputcsv($handle, []);
+
+                // ── SECTION 3: DEPARTMENT-BY-DEPARTMENT VARIANCE ANALYSIS ──
+                fputcsv($handle, ['=== 3. DEPARTMENT-BY-DEPARTMENT PAYROLL VARIANCE ANALYSIS ===']);
+                fputcsv($handle, ['Department', 'Last Month Staff', 'This Month Staff', 'Staff Diff', "Last Gross ({$prevStr}) (₦)", "This Gross ({$currStr}) (₦)", 'Gross Variance (₦)', '% Change', 'New Hires (+₦)', 'Exited Staff (-₦)', 'Salary Adjust (+/-₦)', 'Explanation / Key Drivers of Difference']);
+
+                $deptsMap = [];
+                foreach ($staffCollection as $s) {
+                    $d = $s['department'] ?: 'General';
+                    if (!isset($deptsMap[$d])) {
+                        $deptsMap[$d] = [
+                            'name' => $d,
+                            'prevCount' => 0,
+                            'currCount' => 0,
+                            'prevGross' => 0.0,
+                            'currGross' => 0.0,
+                            'newGross' => 0.0,
+                            'exitGross' => 0.0,
+                            'varGross' => 0.0,
+                            'newCount' => 0,
+                            'exitCount' => 0,
+                            'varCount' => 0,
+                        ];
+                    }
+
+                    if ($s['status_type'] !== 'new_joiner') {
+                        $deptsMap[$d]['prevCount'] += 1;
+                        $deptsMap[$d]['prevGross'] += (float)$s['prev_gross'];
+                    }
+                    if ($s['status_type'] !== 'exited') {
+                        $deptsMap[$d]['currCount'] += 1;
+                        $deptsMap[$d]['currGross'] += (float)$s['curr_gross'];
+                    }
+
+                    if ($s['status_type'] === 'new_joiner') {
+                        $deptsMap[$d]['newGross'] += (float)$s['curr_gross'];
+                        $deptsMap[$d]['newCount'] += 1;
+                    } elseif ($s['status_type'] === 'exited') {
+                        $deptsMap[$d]['exitGross'] += (float)$s['prev_gross'];
+                        $deptsMap[$d]['exitCount'] += 1;
+                    } elseif ($s['status_type'] === 'increased' || $s['status_type'] === 'decreased') {
+                        $deptsMap[$d]['varGross'] += (float)$s['gross_diff'];
+                        $deptsMap[$d]['varCount'] += 1;
+                    }
+                }
+
+                ksort($deptsMap);
+                $sumPrevStaff = 0; $sumCurrStaff = 0; $sumPrevGross = 0.0; $sumCurrGross = 0.0; $sumNewGross = 0.0; $sumExitGross = 0.0; $sumVarGross = 0.0;
+
+                foreach ($deptsMap as $dName => $d) {
+                    $sumPrevStaff += $d['prevCount'];
+                    $sumCurrStaff += $d['currCount'];
+                    $sumPrevGross += $d['prevGross'];
+                    $sumCurrGross += $d['currGross'];
+                    $sumNewGross += $d['newGross'];
+                    $sumExitGross += $d['exitGross'];
+                    $sumVarGross += $d['varGross'];
+
+                    $grossVariance = $d['currGross'] - $d['prevGross'];
+                    $pctChange = $d['prevGross'] > 0 ? ($grossVariance / $d['prevGross']) * 100 : ($d['currGross'] > 0 ? 100.0 : 0.0);
+
+                    $narratives = [];
+                    if ($d['newCount'] > 0) {
+                        $narratives[] = "{$d['newCount']} new hire" . ($d['newCount'] > 1 ? 's' : '') . " (+₦" . number_format($d['newGross'], 2) . ")";
+                    }
+                    if ($d['exitCount'] > 0) {
+                        $narratives[] = "{$d['exitCount']} resigned/exited staff (-₦" . number_format($d['exitGross'], 2) . ")";
+                    }
+                    if ($d['varCount'] > 0) {
+                        $narratives[] = "{$d['varCount']} staff salary variation (" . ($d['varGross'] >= 0 ? '+₦' : '-₦') . number_format(abs($d['varGross']), 2) . ")";
+                    }
+
+                    $explanation = empty($narratives) ? "No change in department gross salary or headcount." : "Gross " . ($grossVariance >= 0 ? 'increased by +₦' : 'decreased by -₦') . number_format(abs($grossVariance), 2) . " due to: " . implode('; ', $narratives) . ".";
+
+                    fputcsv($handle, [
+                        $d['name'],
+                        $d['prevCount'],
+                        $d['currCount'],
+                        $d['currCount'] - $d['prevCount'],
+                        number_format($d['prevGross'], 2),
+                        number_format($d['currGross'], 2),
+                        ($grossVariance >= 0 ? '+' : '-') . number_format(abs($grossVariance), 2),
+                        number_format($pctChange, 2) . '%',
+                        number_format($d['newGross'], 2),
+                        number_format($d['exitGross'], 2),
+                        ($d['varGross'] >= 0 ? '+' : '-') . number_format(abs($d['varGross']), 2),
+                        $explanation
+                    ]);
+                }
+
+                fputcsv($handle, [
+                    'TOTAL / COMPANY CONSOLIDATED',
+                    $sumPrevStaff,
+                    $sumCurrStaff,
+                    $sumCurrStaff - $sumPrevStaff,
+                    number_format($sumPrevGross, 2),
+                    number_format($sumCurrGross, 2),
+                    ($sumCurrGross >= $sumPrevGross ? '+' : '-') . number_format(abs($sumCurrGross - $sumPrevGross), 2),
+                    ($sumPrevGross > 0 ? number_format((($sumCurrGross - $sumPrevGross) / $sumPrevGross) * 100, 2) : '0.00') . '%',
+                    number_format($sumNewGross, 2),
+                    number_format($sumExitGross, 2),
+                    ($sumVarGross >= 0 ? '+' : '-') . number_format(abs($sumVarGross), 2),
+                    "Net Company Payroll Variance: " . ($sumCurrGross >= $sumPrevGross ? '+' : '-') . "₦" . number_format(abs($sumCurrGross - $sumPrevGross), 2)
+                ]);
+                fputcsv($handle, []);
+
+                // ── SECTION 4: NEWLY EMPLOYED STAFF (NEW HIRES) ──
+                fputcsv($handle, ['=== 4. NEWLY EMPLOYED STAFF (NEW HIRES) ===']);
+                fputcsv($handle, ['Staff ID', 'Staff Name', 'Department', 'Designation', 'Gross Salary (₦)', 'Net Pay (₦)', 'Remarks']);
+                if ($newHires->isEmpty()) {
+                    fputcsv($handle, ['No new staff joined the payroll in this period.']);
+                } else {
+                    foreach ($newHires as $nh) {
+                        fputcsv($handle, [$nh['id'], $nh['name'], $nh['department'], $nh['designation'], number_format((float)$nh['curr_gross'], 2), number_format((float)$nh['curr_net'], 2), implode('; ', $nh['reasons'])]);
+                    }
+                }
+                fputcsv($handle, []);
+
+                // ── SECTION 5: RESIGNED / EXITED STAFF ──
+                fputcsv($handle, ['=== 5. RESIGNED / EXITED STAFF ===']);
+                fputcsv($handle, ['Staff ID', 'Staff Name', 'Department', 'Designation', "Last Gross ({$prevStr}) (₦)", "Last Net Pay ({$prevStr}) (₦)", 'Remarks']);
+                if ($exitedStaff->isEmpty()) {
+                    fputcsv($handle, ['No staff resigned or exited the payroll in this period.']);
+                } else {
+                    foreach ($exitedStaff as $ex) {
+                        fputcsv($handle, [$ex['id'], $ex['name'], $ex['department'], $ex['designation'], number_format((float)$ex['prev_gross'], 2), number_format((float)$ex['prev_net'], 2), implode('; ', $ex['reasons'])]);
+                    }
+                }
+                fputcsv($handle, []);
+
+                // ── SECTION 6: CONTINUING STAFF SALARY / ALLOWANCE VARIATIONS ──
+                $allSalaryVarStaff = $salaryIncreased->merge($salaryDecreased)->values();
+                fputcsv($handle, ['=== 6. CONTINUING STAFF SALARY / ALLOWANCE VARIATIONS ===']);
+                fputcsv($handle, ['Staff ID', 'Staff Name', 'Department', 'Designation', "Prev Gross ({$prevStr}) (₦)", "Curr Gross ({$currStr}) (₦)", 'Gross Variance (₦)', 'Net Variance (₦)', 'Variance Reason / Identified Drivers']);
+                if ($allSalaryVarStaff->isEmpty()) {
+                    fputcsv($handle, ['No salary or allowance adjustments recorded for continuing staff in this period.']);
+                } else {
+                    foreach ($allSalaryVarStaff as $sv) {
+                        fputcsv($handle, [
+                            $sv['id'],
+                            $sv['name'],
+                            $sv['department'],
+                            $sv['designation'],
+                            number_format((float)$sv['prev_gross'], 2),
+                            number_format((float)$sv['curr_gross'], 2),
+                            ((float)$sv['gross_diff'] >= 0 ? '+' : '-') . number_format(abs((float)$sv['gross_diff']), 2),
+                            ((float)$sv['net_diff'] >= 0 ? '+' : '-') . number_format(abs((float)$sv['net_diff']), 2),
+                            implode('; ', $sv['reasons'])
+                        ]);
+                    }
+                }
+                fputcsv($handle, []);
+
+                // ── SECTION 7: COMPONENT-BY-COMPONENT VARIANCE BREAKDOWN ──
+                fputcsv($handle, ['=== 7. COMPONENT-BY-COMPONENT VARIANCE BREAKDOWN ===']);
+                fputcsv($handle, ['Payroll Component', 'Category', "Previous Month ({$prevStr}) (₦)", "Current Month ({$currStr}) (₦)", 'Variance (Diff ₦)', '% Change']);
+                foreach ($variance['component_breakdown'] as $c) {
+                    fputcsv($handle, [
+                        $c['label'],
+                        $c['is_deduction'] ? 'Deduction' : 'Earning',
+                        number_format((float)$c['previous'], 2),
+                        number_format((float)$c['current'], 2),
+                        ((float)$c['diff'] >= 0 ? '+' : '-') . number_format(abs((float)$c['diff']), 2),
+                        ((float)$c['percent_change'] >= 0 ? '+' : '') . number_format((float)$c['percent_change'], 2) . '%'
+                    ]);
+                }
+                fputcsv($handle, []);
+
+                // ── SECTION 8: FULL STAFF-LEVEL VARIANCE REGISTER ──
+                fputcsv($handle, ['=== 8. COMPLETE STAFF-LEVEL VARIANCE REGISTER ===']);
+                fputcsv($handle, [
+                    'Staff ID', 'File No', 'Staff Name', 'Department', 'Designation', 'Status',
+                    'Prev Gross (₦)', 'Curr Gross (₦)', 'Gross Diff (₦)',
+                    'Prev Deductions (₦)', 'Curr Deductions (₦)', 'Deduct Diff (₦)',
+                    'Prev Net Pay (₦)', 'Curr Net Pay (₦)', 'Net Variance (₦)', '% Net Change', 'Identified Reasons / Changes'
+                ]);
+
+                foreach ($variance['staff_variances'] as $s) {
+                    fputcsv($handle, [
+                        $s['id'],
+                        $s['file_no'],
+                        $s['name'],
+                        $s['department'],
+                        $s['designation'],
+                        strtoupper(str_replace('_', ' ', $s['status_type'])),
+                        number_format((float)$s['prev_gross'], 2),
+                        number_format((float)$s['curr_gross'], 2),
+                        ((float)$s['gross_diff'] >= 0 ? '+' : '-') . number_format(abs((float)$s['gross_diff']), 2),
+                        number_format((float)$s['prev_deductions'], 2),
+                        number_format((float)$s['curr_deductions'], 2),
+                        ((float)$s['deductions_diff'] >= 0 ? '+' : '-') . number_format(abs((float)$s['deductions_diff']), 2),
+                        number_format((float)$s['prev_net'], 2),
+                        number_format((float)$s['curr_net'], 2),
+                        ((float)$s['net_diff'] >= 0 ? '+' : '-') . number_format(abs((float)$s['net_diff']), 2),
+                        ((float)$s['percent_net_change'] >= 0 ? '+' : '') . number_format((float)$s['percent_net_change'], 2) . '%',
+                        implode('; ', $s['reasons'])
+                    ]);
+                }
+
+                fclose($handle);
+            };
+
+            return response()->stream($callback, 200, $headers);
+        } catch (\Throwable $th) {
+            Log::error('SalaryBreakdownApiController exportVarianceReport: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+
 
     /**
      * GET /api/nextjs/payroll/salary-breakdown/all-staff/export
@@ -1859,4 +2294,1622 @@ class SalaryBreakdownApiController extends Controller
             'is_computed' => false
         ];
     }
+
+    /**
+     * Helper: compute comprehensive payroll variance between current and previous month.
+     */
+    private function computePayrollVariance(int $currentMonth, int $currentYear, ?string $departmentId = null, string $search = ''): array
+    {
+        $prevMonth = ($currentMonth === 1) ? 12 : ($currentMonth - 1);
+        $prevYear = ($currentMonth === 1) ? ($currentYear - 1) : $currentYear;
+
+        $currData = $this->computeOrFetchAllStaffPayroll($currentMonth, $currentYear, $departmentId, $search);
+        $prevData = $this->computeOrFetchAllStaffPayroll($prevMonth, $prevYear, $departmentId, $search);
+
+        $currRecords = collect($currData['records'])->keyBy('id');
+        $prevRecords = collect($prevData['records'])->keyBy('id');
+
+        $currSummary = $currData['summary'];
+        $prevSummary = $prevData['summary'];
+
+        $calcDiff = function($curr, $prev) {
+            $diff = round($curr - $prev, 2);
+            $pct = ($prev > 0) ? round(($diff / $prev) * 100, 2) : ($curr > 0 ? 100.0 : 0.0);
+            return [
+                'previous' => round($prev, 2),
+                'current' => round($curr, 2),
+                'diff' => $diff,
+                'percent_change' => $pct,
+                'is_increase' => $diff > 0,
+                'is_decrease' => $diff < 0,
+            ];
+        };
+
+        // Executive Totals Variance
+        $executiveVariance = [
+            'total_staff' => $calcDiff($currSummary['total_staff'] ?? 0, $prevSummary['total_staff'] ?? 0),
+            'total_gross' => $calcDiff($currSummary['total_gross'] ?? 0, $prevSummary['total_gross'] ?? 0),
+            'total_deductions' => $calcDiff($currSummary['total_deductions'] ?? 0, $prevSummary['total_deductions'] ?? 0),
+            'total_net_pay' => $calcDiff($currSummary['total_net_pay'] ?? 0, $prevSummary['total_net_pay'] ?? 0),
+        ];
+
+        // Component-level Variance Breakdown
+        $components = [
+            'basic_salary' => 'Basic Salary',
+            'housing_allowance' => 'Housing Allowance',
+            'transport_allowance' => 'Transport Allowance',
+            'medical_allowance' => 'Medical Allowance',
+            'utility_allowance' => 'Utility Allowance',
+            'meal_allowance' => 'Meal Allowance',
+            'variable_allowances' => 'Variable Allowance',
+            'custom_allowances' => 'Custom Allowances',
+            'bonuses' => 'Bonuses & Incentives',
+            'gross_pay' => 'Total Gross Income',
+            'paye_tax' => 'PAYE Tax',
+            'pension' => 'Pension Contribution',
+            'retention' => 'Retention Fund',
+            'iou' => 'IOU / Salary Advances',
+            'medical_loan' => 'Medical Loan Repayments',
+            'coop_loan' => 'Cooperative Loan Repayments',
+            'coop_savings' => 'Cooperative Monthly Savings',
+            'coop_asset_finance' => 'Coop Asset Finance',
+            'surcharges' => 'Surcharges',
+            'absence_penalty' => 'Absence Penalties',
+            'leave_of_absence' => 'Leave of Absence (LOA)',
+            'regular_loan' => 'Company Loans',
+            'other_deductions' => 'Other Deductions',
+            'total_deductions' => 'Total Deductions',
+            'net_pay' => 'Net Salary Payout',
+        ];
+
+        $componentBreakdown = [];
+        foreach ($components as $key => $label) {
+            $currSum = (float)collect($currData['records'])->sum($key);
+            $prevSum = (float)collect($prevData['records'])->sum($key);
+            $isDeduction = !in_array($key, ['basic_salary', 'housing_allowance', 'transport_allowance', 'medical_allowance', 'utility_allowance', 'meal_allowance', 'variable_allowances', 'custom_allowances', 'bonuses', 'gross_pay', 'net_pay']);
+
+            $diffObj = $calcDiff($currSum, $prevSum);
+            $diffObj['key'] = $key;
+            $diffObj['label'] = $label;
+            $diffObj['is_deduction'] = $isDeduction;
+            $componentBreakdown[] = $diffObj;
+        }
+
+        // Staff-level Variance Analysis
+        $allStaffIds = $currRecords->keys()->merge($prevRecords->keys())->unique();
+        $staffVariances = [];
+
+        foreach ($allStaffIds as $sId) {
+            $curr = $currRecords->get($sId);
+            $prev = $prevRecords->get($sId);
+
+            $name = $curr['name'] ?? ($prev['name'] ?? "Staff #{$sId}");
+            $dept = $curr['department'] ?? ($prev['department'] ?? 'General');
+            $desig = $curr['designation'] ?? ($prev['designation'] ?? 'Staff');
+            $fileNo = $curr['file_no'] ?? ($prev['file_no'] ?? '');
+
+            $prevGross = $prev ? (float)$prev['gross_pay'] : 0.0;
+            $currGross = $curr ? (float)$curr['gross_pay'] : 0.0;
+            $grossDiff = round($currGross - $prevGross, 2);
+
+            $prevDeduct = $prev ? (float)$prev['total_deductions'] : 0.0;
+            $currDeduct = $curr ? (float)$curr['total_deductions'] : 0.0;
+            $deductDiff = round($currDeduct - $prevDeduct, 2);
+
+            $prevNet = $prev ? (float)$prev['net_pay'] : 0.0;
+            $currNet = $curr ? (float)$curr['net_pay'] : 0.0;
+            $netDiff = round($currNet - $prevNet, 2);
+
+            // Identify specific change drivers / reasons
+            $reasons = [];
+            $statusType = 'unchanged';
+
+            if (!$prev && $curr) {
+                $statusType = 'new_joiner';
+                $reasons[] = 'New Staff (Joined this month)';
+            } elseif ($prev && !$curr) {
+                $statusType = 'exited';
+                $reasons[] = 'Exited / Inactive this month';
+            } else {
+                // Compare earnings
+                if (($curr['basic_salary'] ?? 0) > ($prev['basic_salary'] ?? 0)) {
+                    $d = round($curr['basic_salary'] - $prev['basic_salary'], 2);
+                    $reasons[] = "Basic Salary Increment (+₦" . number_format($d, 2) . ")";
+                } elseif (($curr['basic_salary'] ?? 0) < ($prev['basic_salary'] ?? 0)) {
+                    $d = round($prev['basic_salary'] - $curr['basic_salary'], 2);
+                    $reasons[] = "Basic Salary Reduction (-₦" . number_format($d, 2) . ")";
+                }
+
+                if (($curr['bonuses'] ?? 0) > ($prev['bonuses'] ?? 0)) {
+                    $d = round(($curr['bonuses'] ?? 0) - ($prev['bonuses'] ?? 0), 2);
+                    $reasons[] = "Bonus / Incentive (+₦" . number_format($d, 2) . ")";
+                }
+
+                if (($curr['custom_allowances'] ?? 0) != ($prev['custom_allowances'] ?? 0)) {
+                    $d = round(($curr['custom_allowances'] ?? 0) - ($prev['custom_allowances'] ?? 0), 2);
+                    $sign = $d > 0 ? '+' : '';
+                    $reasons[] = "Allowance Adjustment ({$sign}₦" . number_format($d, 2) . ")";
+                }
+
+                // Compare deductions
+                if (($curr['iou'] ?? 0) > ($prev['iou'] ?? 0)) {
+                    $d = round(($curr['iou'] ?? 0) - ($prev['iou'] ?? 0), 2);
+                    $reasons[] = "New IOU Advance (-₦" . number_format($d, 2) . ")";
+                } elseif (($curr['iou'] ?? 0) < ($prev['iou'] ?? 0)) {
+                    $reasons[] = "IOU Repaid / Cleared";
+                }
+
+                if (($curr['absence_penalty'] ?? 0) > ($prev['absence_penalty'] ?? 0)) {
+                    $d = round(($curr['absence_penalty'] ?? 0) - ($prev['absence_penalty'] ?? 0), 2);
+                    $reasons[] = "Absence Penalty (-₦" . number_format($d, 2) . ")";
+                }
+
+                if (($curr['leave_of_absence'] ?? 0) > ($prev['leave_of_absence'] ?? 0)) {
+                    $d = round(($curr['leave_of_absence'] ?? 0) - ($prev['leave_of_absence'] ?? 0), 2);
+                    $reasons[] = "Leave of Absence Deduction (-₦" . number_format($d, 2) . ")";
+                }
+
+                if (($curr['regular_loan'] ?? 0) != ($prev['regular_loan'] ?? 0)) {
+                    $d = round(($curr['regular_loan'] ?? 0) - ($prev['regular_loan'] ?? 0), 2);
+                    $reasons[] = ($d > 0) ? "Loan Deduction (-₦" . number_format($d, 2) . ")" : "Loan Deduction Reduced/Completed";
+                }
+
+                if (($curr['coop_loan'] ?? 0) != ($prev['coop_loan'] ?? 0)) {
+                    $d = round(($curr['coop_loan'] ?? 0) - ($prev['coop_loan'] ?? 0), 2);
+                    $reasons[] = ($d > 0) ? "Coop Loan Deduction (-₦" . number_format($d, 2) . ")" : "Coop Loan Cleared";
+                }
+
+                if (($curr['medical_loan'] ?? 0) != ($prev['medical_loan'] ?? 0)) {
+                    $d = round(($curr['medical_loan'] ?? 0) - ($prev['medical_loan'] ?? 0), 2);
+                    $reasons[] = ($d > 0) ? "Medical Loan Deduction (-₦" . number_format($d, 2) . ")" : "Medical Loan Cleared";
+                }
+
+                if ($netDiff > 0) {
+                    $statusType = 'increased';
+                } elseif ($netDiff < 0) {
+                    $statusType = 'decreased';
+                } else {
+                    $statusType = 'unchanged';
+                    if (empty($reasons)) {
+                        $reasons = ['No Net Change'];
+                    }
+                }
+            }
+
+            $staffVariances[] = [
+                'id' => $sId,
+                'file_no' => $fileNo,
+                'name' => $name,
+                'department' => $dept,
+                'designation' => $desig,
+                'status_type' => $statusType,
+                'prev_gross' => $prevGross,
+                'curr_gross' => $currGross,
+                'gross_diff' => $grossDiff,
+                'prev_deductions' => $prevDeduct,
+                'curr_deductions' => $currDeduct,
+                'deductions_diff' => $deductDiff,
+                'prev_net' => $prevNet,
+                'curr_net' => $currNet,
+                'net_diff' => $netDiff,
+                'percent_net_change' => ($prevNet > 0) ? round(($netDiff / $prevNet) * 100, 2) : ($currNet > 0 ? 100.0 : 0.0),
+                'reasons' => $reasons,
+            ];
+        }
+
+        $staffVarianceCollection = collect($staffVariances)->sortByDesc(function($item) {
+            return abs($item['net_diff']);
+        })->values();
+
+        return [
+            'current_period' => $currData['period'],
+            'previous_period' => $prevData['period'],
+            'executive_summary' => $executiveVariance,
+            'component_breakdown' => $componentBreakdown,
+            'staff_variances' => $staffVarianceCollection->toArray(),
+            'departments' => $currData['departments'],
+            'counts' => [
+                'total_compared' => $staffVarianceCollection->count(),
+                'increased' => $staffVarianceCollection->where('status_type', 'increased')->count(),
+                'decreased' => $staffVarianceCollection->where('status_type', 'decreased')->count(),
+                'new_joiners' => $staffVarianceCollection->where('status_type', 'new_joiner')->count(),
+                'exited' => $staffVarianceCollection->where('status_type', 'exited')->count(),
+                'unchanged' => $staffVarianceCollection->where('status_type', 'unchanged')->count(),
+            ]
+        ];
+    }
+
+    /**
+     * Compute a single month's complete breakdown for a specific staff member.
+     */
+    public function computeSingleStaffMonthlyData($staffId, $month, $year, $staff = null, $struct = null, $firstStruct = null)
+    {
+        $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+        $monthName = date('F Y', mktime(0, 0, 0, $month, 1, $year));
+        $monthShort = date('M', mktime(0, 0, 0, $month, 1, $year));
+
+        if (!$staff) {
+            $staff = DB::table('tblper as p')
+                ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
+                ->leftJoin('tbldesignation as des', 'des.id', '=', 'p.designation')
+                ->leftJoin('tblbanklist as bl', 'bl.bankID', '=', 'p.bankID')
+                ->select(
+                    'p.ID as id',
+                    'p.fileNo as file_no',
+                    'p.surname',
+                    'p.first_name',
+                    'p.othernames',
+                    'p.email',
+                    'p.phone',
+                    'p.doj',
+                    'p.appointment_date',
+                    'p.AccNo as account_number',
+                    'p.office_shift',
+                    'bl.bank as bank_name',
+                    'd.department',
+                    'des.designation'
+                )
+                ->where('p.ID', $staffId)
+                ->first();
+        }
+
+        $daysInPayrollMonth = (int)date('t', mktime(0, 0, 0, $month, 1, $year));
+        $monthStart = sprintf("%04d-%02d-01", $year, $month);
+        $monthEnd = sprintf("%04d-%02d-%02d", $year, $month, $daysInPayrollMonth);
+        $monthName = date('F', mktime(0, 0, 0, $month, 1, $year));
+        $monthShort = date('M', mktime(0, 0, 0, $month, 1, $year));
+
+        // Date of Joining / Appointment Date calculation
+        $rawDoj = $staff->doj ?? $staff->appointment_date ?? null;
+        $effectiveJoinDate = null;
+        if (!empty($rawDoj) && $rawDoj !== '0000-00-00' && $rawDoj !== '0000-00-00 00:00:00') {
+            try {
+                $effectiveJoinDate = \Carbon\Carbon::parse($rawDoj)->startOfDay();
+            } catch (\Throwable $e) {}
+        }
+
+        $endOfMonthDate = \Carbon\Carbon::create($year, $month, $daysInPayrollMonth)->endOfDay();
+
+        // If staff was NOT yet employed in this month (e.g. Employed May 12, 2026, and calculating Jan - Apr 2026)
+        if ($effectiveJoinDate && $effectiveJoinDate->greaterThan($endOfMonthDate)) {
+            return [
+                'month_num'                 => $month,
+                'month_name'                => $monthName,
+                'month_short'               => $monthShort,
+                'year'                      => $year,
+                'is_computed'               => false,
+                'status'                    => 'Not Employed',
+                'paid_days'                 => 0,
+                'days_in_month'             => $daysInPayrollMonth,
+                'basic'                     => 0.00,
+                'housing'                   => 0.00,
+                'transport'                 => 0.00,
+                'medical'                   => 0.00,
+                'utility'                   => 0.00,
+                'meal'                      => 0.00,
+                'variable_allowances'       => 0.00,
+                'earning_vars'              => 0.00,
+                'custom_allowances'         => 0.00,
+                'bonuses'                   => 0.00,
+                'gross_salary'              => 0.00,
+                'total_additions'           => 0.00,
+                'total_gross'               => 0.00,
+                'declare_salary'            => 0.00,
+                'paye_tax'                  => 0.00,
+                'pension'                   => 0.00,
+                'retention'                 => 0.00,
+                'iou'                       => 0.00,
+                'medical_loan'              => 0.00,
+                'coop_loan'                 => 0.00,
+                'coop_savings'              => 0.00,
+                'coop_asset_finance'        => 0.00,
+                'surcharge'                 => 0.00,
+                'surcharges'                => 0.00,
+                'absence_penalty'           => 0.00,
+                'leave_of_absence'          => 0.00,
+                'regular_loan'              => 0.00,
+                'other_deductions'          => 0.00,
+                'mid_month_adjustment'      => 0.00,
+                'other_deductions_combined' => 0.00,
+                'total_deductions'          => 0.00,
+                'net_pay'                   => 0.00,
+                'full_breakdown'            => [
+                    'period' => "{$monthName} {$year}",
+                    'staff' => [
+                        'id' => $staff->id ?? $staffId,
+                        'file_no' => $staff->file_no ?? '',
+                        'name' => trim(($staff->surname ?? '') . ' ' . ($staff->first_name ?? '') . ' ' . ($staff->othernames ?? '')),
+                        'department' => $staff->department ?? 'General',
+                        'designation' => $staff->designation ?? 'Staff',
+                        'account_number' => $staff->account_number ?? '',
+                        'bank_name' => $staff->bank_name ?? '',
+                        'rsa_pin' => $staff->rsa_pin ?? '',
+                        'pfa_name' => $staff->pfa_name ?? '',
+                    ],
+                    'earnings' => [
+                        'basic_salary' => 0.00, 'housing_allowance' => 0.00, 'transport_allowance' => 0.00,
+                        'medical_allowance' => 0.00, 'utility_allowance' => 0.00, 'meal_allowance' => 0.00,
+                        'total_basic_allowances' => 0.00, 'earning_variables' => [], 'total_earning_variables' => 0.00,
+                        'bonuses' => [], 'total_bonuses' => 0.00, 'custom_allowances' => [],
+                        'total_custom_allowances' => 0.00, 'total_additions' => 0.00,
+                        'gross_pay' => 0.00, 'declare_salary' => 0.00,
+                    ],
+                    'deductions' => [
+                        'paye_tax' => ['amount' => 0.00, 'label' => 'PAYE Tax (Progressive Act 2026)'],
+                        'pension' => ['amount' => 0.00, 'rate' => 0, 'label' => 'Employee Pension (8%)'],
+                        'retention' => ['amount' => 0.00, 'months_completed' => 0, 'label' => 'Staff Retention (5%)'],
+                        'iou' => ['amount' => 0.00, 'label' => 'IOU / Salary Advance'],
+                        'regular_loan' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Employee Loan'],
+                        'medical_loan' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Medical Loan'],
+                        'coop_loan' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Cooperative Loan'],
+                        'coop_savings' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Cooperative Savings'],
+                        'coop_asset_finance' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Coop Asset Finance'],
+                        'surcharges' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Surcharges'],
+                        'absence_penalty' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Absence Penalty'],
+                        'leave_of_absence' => ['amount' => 0.00, 'days_absent' => 0, 'label' => 'Leave of Absence'],
+                        'mid_month_adjustment' => ['amount' => 0.00, 'unworked_days' => 0, 'label' => 'Mid-Month Appointment Adj.'],
+                        'other_deductions' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Other Deductions'],
+                        'total_deductions' => 0.00
+                    ],
+                    'summary' => [
+                        'gross_pay' => 0.00,
+                        'total_deductions' => 0.00,
+                        'net_pay' => 0.00,
+                        'status' => 'Not Employed',
+                        'paid_days' => 0,
+                        'days_in_month' => $daysInPayrollMonth
+                    ]
+                ]
+            ];
+        }
+
+        // Active Month Check
+        $activeMonthRec = DB::table('tblactivemonth')->where('print_active', 1)->first() ?? DB::table('tblactivemonth')->first();
+        $activeYear = $activeMonthRec ? (int)$activeMonthRec->year : (int)date('Y');
+        $activeMonthName = $activeMonthRec ? strtoupper(trim($activeMonthRec->month)) : strtoupper(date('F'));
+        
+        $monthsMap = [
+            'JANUARY' => 1, 'FEBRUARY' => 2, 'MARCH' => 3, 'APRIL' => 4,
+            'MAY' => 5, 'JUNE' => 6, 'JULY' => 7, 'AUGUST' => 8,
+            'SEPTEMBER' => 9, 'OCTOBER' => 10, 'NOVEMBER' => 11, 'DECEMBER' => 12
+        ];
+        $activeMonthNum = $monthsMap[$activeMonthName] ?? (int)date('n');
+
+        // Check if payroll run was officially computed for this staff in this month
+        $computedRecord = null;
+        try {
+            $computedRecord = DB::table('payroll_conpt as pc')
+                ->where('pc.staffID', $staffId)
+                ->where(function($q) use ($month, $year) {
+                    $q->where(function($sub) use ($month, $year) {
+                        $sub->where('pc.month', $month)->where('pc.year', $year);
+                    })->orWhereIn('pc.payroll_run_id', function($subQuery) use ($month, $year) {
+                        $subQuery->select('id')
+                            ->from('payroll_runs')
+                            ->where('month', $month)
+                            ->where('year', $year);
+                    });
+                })
+                ->first();
+        } catch (\Throwable $e) {}
+
+        $isComputed = ($computedRecord !== null);
+        $isFutureMonth = ($year > $activeYear) || ($year === $activeYear && $month > $activeMonthNum);
+        $isPastMonth = ($year < $activeYear) || ($year === $activeYear && $month < $activeMonthNum);
+
+        // Case 1: Future month beyond active payroll month
+        if ($isFutureMonth) {
+            return [
+                'month_num'                 => $month,
+                'month_name'                => $monthName,
+                'month_short'               => $monthShort,
+                'year'                      => $year,
+                'is_computed'               => false,
+                'status'                    => 'Upcoming',
+                'paid_days'                 => 0,
+                'days_in_month'             => $daysInPayrollMonth,
+                'doj_days_deducted'         => 0,
+                'basic'                     => 0.00,
+                'housing'                   => 0.00,
+                'transport'                 => 0.00,
+                'medical'                   => 0.00,
+                'utility'                   => 0.00,
+                'meal'                      => 0.00,
+                'variable_allowances'       => 0.00,
+                'earning_vars'              => 0.00,
+                'custom_allowances'         => 0.00,
+                'bonuses'                   => 0.00,
+                'gross_salary'              => 0.00,
+                'total_additions'           => 0.00,
+                'total_gross'               => 0.00,
+                'declare_salary'            => 0.00,
+                'paye_tax'                  => 0.00,
+                'pension'                   => 0.00,
+                'retention'                 => 0.00,
+                'iou'                       => 0.00,
+                'medical_loan'              => 0.00,
+                'coop_loan'                 => 0.00,
+                'coop_savings'              => 0.00,
+                'coop_asset_finance'        => 0.00,
+                'surcharge'                 => 0.00,
+                'surcharges'                => 0.00,
+                'absence_penalty'           => 0.00,
+                'leave_of_absence'          => 0.00,
+                'regular_loan'              => 0.00,
+                'other_deductions'          => 0.00,
+                'mid_month_adjustment'      => 0.00,
+                'other_deductions_combined' => 0.00,
+                'total_deductions'          => 0.00,
+                'net_pay'                   => 0.00,
+                'full_breakdown'            => [
+                    'period' => "{$monthName} {$year}",
+                    'staff' => [
+                        'id' => $staff->id ?? $staffId,
+                        'file_no' => $staff->file_no ?? '',
+                        'name' => trim(($staff->surname ?? '') . ' ' . ($staff->first_name ?? '') . ' ' . ($staff->othernames ?? '')),
+                        'department' => $staff->department ?? 'General',
+                        'designation' => $staff->designation ?? 'Staff',
+                        'account_number' => $staff->account_number ?? '',
+                        'bank_name' => $staff->bank_name ?? '',
+                    ],
+                    'earnings' => [
+                        'basic_salary' => 0.00, 'housing_allowance' => 0.00, 'transport_allowance' => 0.00,
+                        'medical_allowance' => 0.00, 'utility_allowance' => 0.00, 'meal_allowance' => 0.00,
+                        'total_basic_allowances' => 0.00, 'earning_variables' => [], 'total_earning_variables' => 0.00,
+                        'bonuses' => [], 'total_bonuses' => 0.00, 'custom_allowances' => [],
+                        'total_custom_allowances' => 0.00, 'total_additions' => 0.00,
+                        'gross_pay' => 0.00, 'declare_salary' => 0.00,
+                    ],
+                    'deductions' => [
+                        'paye_tax' => ['amount' => 0.00, 'label' => 'PAYE Tax (Progressive Act 2026)'],
+                        'pension' => ['amount' => 0.00, 'rate' => 0, 'label' => 'Employee Pension (8%)'],
+                        'retention' => ['amount' => 0.00, 'months_completed' => 0, 'label' => 'Staff Retention (5%)'],
+                        'iou' => ['amount' => 0.00, 'label' => 'IOU / Salary Advance'],
+                        'regular_loan' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Employee Loan'],
+                        'medical_loan' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Medical Loan'],
+                        'coop_loan' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Cooperative Loan'],
+                        'coop_savings' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Cooperative Savings'],
+                        'coop_asset_finance' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Coop Asset Finance'],
+                        'surcharges' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Surcharges'],
+                        'absence_penalty' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Absence Penalty'],
+                        'leave_of_absence' => ['amount' => 0.00, 'days_absent' => 0, 'label' => 'Leave of Absence'],
+                        'mid_month_adjustment' => ['amount' => 0.00, 'unworked_days' => 0, 'label' => 'Mid-Month Appointment Adj.'],
+                        'other_deductions' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Other Deductions'],
+                        'total_deductions' => 0.00
+                    ],
+                    'summary' => [
+                        'gross_pay' => 0.00,
+                        'total_deductions' => 0.00,
+                        'net_pay' => 0.00,
+                        'status' => 'Upcoming Month',
+                        'paid_days' => 0,
+                        'days_in_month' => $daysInPayrollMonth
+                    ]
+                ]
+            ];
+        }
+
+        // Case 2: Past elapsed month with NO computed salary in payroll_conpt
+        if ($isPastMonth && !$isComputed) {
+            return [
+                'month_num'                 => $month,
+                'month_name'                => $monthName,
+                'month_short'               => $monthShort,
+                'year'                      => $year,
+                'is_computed'               => false,
+                'status'                    => 'Not Computed',
+                'paid_days'                 => 0,
+                'days_in_month'             => $daysInPayrollMonth,
+                'doj_days_deducted'         => 0,
+                'basic'                     => 0.00,
+                'housing'                   => 0.00,
+                'transport'                 => 0.00,
+                'medical'                   => 0.00,
+                'utility'                   => 0.00,
+                'meal'                      => 0.00,
+                'variable_allowances'       => 0.00,
+                'earning_vars'              => 0.00,
+                'custom_allowances'         => 0.00,
+                'bonuses'                   => 0.00,
+                'gross_salary'              => 0.00,
+                'total_additions'           => 0.00,
+                'total_gross'               => 0.00,
+                'declare_salary'            => 0.00,
+                'paye_tax'                  => 0.00,
+                'pension'                   => 0.00,
+                'retention'                 => 0.00,
+                'iou'                       => 0.00,
+                'medical_loan'              => 0.00,
+                'coop_loan'                 => 0.00,
+                'coop_savings'              => 0.00,
+                'coop_asset_finance'        => 0.00,
+                'surcharge'                 => 0.00,
+                'surcharges'                => 0.00,
+                'absence_penalty'           => 0.00,
+                'leave_of_absence'          => 0.00,
+                'regular_loan'              => 0.00,
+                'other_deductions'          => 0.00,
+                'mid_month_adjustment'      => 0.00,
+                'other_deductions_combined' => 0.00,
+                'total_deductions'          => 0.00,
+                'net_pay'                   => 0.00,
+                'full_breakdown'            => [
+                    'period' => "{$monthName} {$year}",
+                    'staff' => [
+                        'id' => $staff->id ?? $staffId,
+                        'file_no' => $staff->file_no ?? '',
+                        'name' => trim(($staff->surname ?? '') . ' ' . ($staff->first_name ?? '') . ' ' . ($staff->othernames ?? '')),
+                        'department' => $staff->department ?? 'General',
+                        'designation' => $staff->designation ?? 'Staff',
+                        'account_number' => $staff->account_number ?? '',
+                        'bank_name' => $staff->bank_name ?? '',
+                    ],
+                    'earnings' => [
+                        'basic_salary' => 0.00, 'housing_allowance' => 0.00, 'transport_allowance' => 0.00,
+                        'medical_allowance' => 0.00, 'utility_allowance' => 0.00, 'meal_allowance' => 0.00,
+                        'total_basic_allowances' => 0.00, 'earning_variables' => [], 'total_earning_variables' => 0.00,
+                        'bonuses' => [], 'total_bonuses' => 0.00, 'custom_allowances' => [],
+                        'total_custom_allowances' => 0.00, 'total_additions' => 0.00,
+                        'gross_pay' => 0.00, 'declare_salary' => 0.00,
+                    ],
+                    'deductions' => [
+                        'paye_tax' => ['amount' => 0.00, 'label' => 'PAYE Tax (Progressive Act 2026)'],
+                        'pension' => ['amount' => 0.00, 'rate' => 0, 'label' => 'Employee Pension (8%)'],
+                        'retention' => ['amount' => 0.00, 'months_completed' => 0, 'label' => 'Staff Retention (5%)'],
+                        'iou' => ['amount' => 0.00, 'label' => 'IOU / Salary Advance'],
+                        'regular_loan' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Employee Loan'],
+                        'medical_loan' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Medical Loan'],
+                        'coop_loan' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Cooperative Loan'],
+                        'coop_savings' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Cooperative Savings'],
+                        'coop_asset_finance' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Coop Asset Finance'],
+                        'surcharges' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Surcharges'],
+                        'absence_penalty' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Absence Penalty'],
+                        'leave_of_absence' => ['amount' => 0.00, 'days_absent' => 0, 'label' => 'Leave of Absence'],
+                        'mid_month_adjustment' => ['amount' => 0.00, 'unworked_days' => 0, 'label' => 'Mid-Month Appointment Adj.'],
+                        'other_deductions' => ['amount' => 0.00, 'balance_remaining' => 0.00, 'label' => 'Other Deductions'],
+                        'total_deductions' => 0.00
+                    ],
+                    'summary' => [
+                        'gross_pay' => 0.00,
+                        'total_deductions' => 0.00,
+                        'net_pay' => 0.00,
+                        'status' => 'Not Computed',
+                        'paid_days' => 0,
+                        'days_in_month' => $daysInPayrollMonth
+                    ]
+                ]
+            ];
+        }
+
+        // Case 3: Officially computed record exists in payroll_conpt
+        if ($isComputed && $computedRecord) {
+            $cBasic = (float)($computedRecord->basic ?? 0);
+            $cHousing = (float)($computedRecord->housing ?? 0);
+            $cTransport = (float)($computedRecord->transport ?? 0);
+            $cMedical = (float)($computedRecord->medical ?? 0);
+            $cUtility = (float)($computedRecord->utility ?? 0);
+            $cMeal = (float)($computedRecord->meal ?? 0);
+            $cTotalBasic = $cBasic + $cHousing + $cTransport + $cMedical + $cUtility + $cMeal;
+            $cGrossPay = (float)($computedRecord->gross_pay ?? $cTotalBasic);
+            $cVarAllowances = max(0.00, $cGrossPay - $cTotalBasic);
+            $cDeclareSalary = (float)($computedRecord->declare_income ?? 0);
+            $cPayeTax = (float)($computedRecord->paye_tax ?? 0);
+            $cPension = (float)($computedRecord->pension ?? 0);
+            $cRetention = (float)($computedRecord->retention ?? 0);
+            $cIou = (float)($computedRecord->iou ?? 0);
+            $cMedLoan = (float)($computedRecord->medical_loan ?? 0);
+            $cCoopLoan = (float)($computedRecord->coop_loan_rpyt ?? 0);
+            $cCoopSavings = (float)($computedRecord->coop_savings ?? 0);
+            $cCoopAsset = (float)($computedRecord->coop_asset_finance ?? 0);
+            $cSurcharges = (float)($computedRecord->surcharges ?? 0);
+            $cAbsencePenalty = (float)($computedRecord->absence_penalty ?? 0);
+            $cLoa = (float)($computedRecord->leave_of_absence_deduction ?? 0);
+            $cLoan = (float)($computedRecord->loan_deduction ?? 0);
+            $cOtherDeduct = (float)($computedRecord->other_deductions ?? 0);
+            $cTotalDeductions = (float)($computedRecord->total_deductions ?? ($cPayeTax + $cPension + $cRetention + $cIou + $cMedLoan + $cCoopLoan + $cCoopSavings + $cCoopAsset + $cSurcharges + $cAbsencePenalty + $cLoa + $cLoan + $cOtherDeduct));
+            $cNetPay = (float)($computedRecord->net_pay ?? max(0.00, $cGrossPay - $cTotalDeductions));
+            $cPaidDays = (int)($computedRecord->paid_days ?? $daysInPayrollMonth);
+
+            $cOtherDeductionsCombined = $cLoan + $cMedLoan + $cCoopLoan + $cCoopSavings + $cCoopAsset + $cSurcharges + $cAbsencePenalty + $cLoa + $cOtherDeduct;
+
+            return [
+                'month_num'                 => $month,
+                'month_name'                => $monthName,
+                'month_short'               => $monthShort,
+                'year'                      => $year,
+                'is_computed'               => true,
+                'status'                    => 'Computed',
+                'paid_days'                 => $cPaidDays,
+                'days_in_month'             => $daysInPayrollMonth,
+                'doj_days_deducted'         => max(0, $daysInPayrollMonth - $cPaidDays),
+                'basic'                     => $cBasic,
+                'housing'                   => $cHousing,
+                'transport'                 => $cTransport,
+                'medical'                   => $cMedical,
+                'utility'                   => $cUtility,
+                'meal'                      => $cMeal,
+                'variable_allowances'       => round($cVarAllowances, 2),
+                'earning_vars'              => round($cVarAllowances, 2),
+                'custom_allowances'         => 0.00,
+                'bonuses'                   => 0.00,
+                'gross_salary'              => round($cTotalBasic, 2),
+                'total_additions'           => round($cVarAllowances, 2),
+                'total_gross'               => round($cGrossPay, 2),
+                'declare_salary'            => round($cDeclareSalary, 2),
+                'paye_tax'                  => $cPayeTax,
+                'pension'                   => $cPension,
+                'retention'                 => $cRetention,
+                'iou'                       => $cIou,
+                'medical_loan'              => $cMedLoan,
+                'coop_loan'                 => $cCoopLoan,
+                'coop_savings'              => $cCoopSavings,
+                'coop_asset_finance'        => $cCoopAsset,
+                'surcharge'                 => $cSurcharges,
+                'surcharges'                => $cSurcharges,
+                'absence_penalty'           => $cAbsencePenalty,
+                'leave_of_absence'          => $cLoa,
+                'regular_loan'              => $cLoan,
+                'other_deductions'          => $cOtherDeduct,
+                'mid_month_adjustment'      => 0.00,
+                'other_deductions_combined' => round($cOtherDeductionsCombined, 2),
+                'total_deductions'          => round($cTotalDeductions, 2),
+                'net_pay'                   => round($cNetPay, 2),
+                'full_breakdown'            => [
+                    'period' => "{$monthName} {$year}",
+                    'staff' => [
+                        'id' => $staff->id ?? $staffId,
+                        'file_no' => $staff->file_no ?? '',
+                        'name' => trim(($staff->surname ?? '') . ' ' . ($staff->first_name ?? '') . ' ' . ($staff->othernames ?? '')),
+                        'department' => $staff->department ?? 'General',
+                        'designation' => $staff->designation ?? 'Staff',
+                        'account_number' => $staff->account_number ?? '',
+                        'bank_name' => $staff->bank_name ?? '',
+                    ],
+                    'earnings' => [
+                        'basic_salary' => $cBasic, 'housing_allowance' => $cHousing, 'transport_allowance' => $cTransport,
+                        'medical_allowance' => $cMedical, 'utility_allowance' => $cUtility, 'meal_allowance' => $cMeal,
+                        'total_basic_allowances' => $cTotalBasic, 'earning_variables' => [], 'total_earning_variables' => $cVarAllowances,
+                        'bonuses' => [], 'total_bonuses' => 0.00, 'custom_allowances' => [],
+                        'total_custom_allowances' => 0.00, 'total_additions' => $cVarAllowances,
+                        'gross_pay' => $cGrossPay, 'declare_salary' => $cDeclareSalary,
+                    ],
+                    'deductions' => [
+                        'paye_tax' => ['amount' => $cPayeTax, 'label' => 'PAYE Tax (Progressive Act 2026)'],
+                        'pension' => ['amount' => $cPension, 'rate' => 8, 'label' => 'Employee Pension (8%)'],
+                        'retention' => ['amount' => $cRetention, 'months_completed' => 0, 'label' => 'Staff Retention (5%)'],
+                        'iou' => ['amount' => $cIou, 'label' => 'IOU / Salary Advance'],
+                        'regular_loan' => ['amount' => $cLoan, 'balance_remaining' => 0.00, 'label' => 'Employee Loan'],
+                        'medical_loan' => ['amount' => $cMedLoan, 'balance_remaining' => 0.00, 'label' => 'Medical Loan'],
+                        'coop_loan' => ['amount' => $cCoopLoan, 'balance_remaining' => 0.00, 'label' => 'Cooperative Loan'],
+                        'coop_savings' => ['amount' => $cCoopSavings, 'balance_remaining' => 0.00, 'label' => 'Cooperative Savings'],
+                        'coop_asset_finance' => ['amount' => $cCoopAsset, 'balance_remaining' => 0.00, 'label' => 'Coop Asset Finance'],
+                        'surcharges' => ['amount' => $cSurcharges, 'balance_remaining' => 0.00, 'label' => 'Surcharges'],
+                        'absence_penalty' => ['amount' => $cAbsencePenalty, 'balance_remaining' => 0.00, 'label' => 'Absence Penalty'],
+                        'leave_of_absence' => ['amount' => $cLoa, 'days_absent' => 0, 'label' => 'Leave of Absence'],
+                        'mid_month_adjustment' => ['amount' => 0.00, 'unworked_days' => 0, 'label' => 'Mid-Month Appointment Adj.'],
+                        'other_deductions' => ['amount' => $cOtherDeduct, 'balance_remaining' => 0.00, 'label' => 'Other Deductions'],
+                        'total_deductions' => round($cTotalDeductions, 2)
+                    ],
+                    'summary' => [
+                        'gross_pay' => round($cGrossPay, 2),
+                        'total_deductions' => round($cTotalDeductions, 2),
+                        'net_pay' => round($cNetPay, 2),
+                        'status' => 'Computed Payroll',
+                        'paid_days' => $cPaidDays,
+                        'days_in_month' => $daysInPayrollMonth
+                    ]
+                ]
+            ];
+        }
+
+        if (!$struct) {
+            $struct = DB::table('salary_structures')->where('staffId', $staffId)->first();
+        }
+
+        if (!$firstStruct) {
+            $firstStruct = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+        }
+
+        $basic = $struct ? (float)$struct->basic_salary : 0.00;
+        $housing = $struct ? (float)$struct->housing_allowance : 0.00;
+        $transport = $struct ? (float)$struct->transport_allowance : 0.00;
+        $medical = $struct ? (float)$struct->medical_allowance : 0.00;
+        $utility = $struct ? (float)$struct->utility_allowance : 0.00;
+        $meal = $struct ? (float)$struct->meal_allowance : 0.00;
+        $taxRate = $struct ? (float)$struct->tax_rate : 0.00;
+        $pensionRate = $struct ? (float)$struct->pension_rate : 0.00;
+        $declareSalary = $struct ? (float)$struct->declare_salary : 0.00;
+
+        $totalBasicAllowances = $basic + $housing + $transport + $medical + $utility + $meal;
+
+        // Active earning variables
+        $totalEarningVars = 0.00;
+        $earningVarsList = [];
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('staffEarningAndDeduction')) {
+                $activeVars = DB::table('staffEarningAndDeduction as sed')
+                    ->leftJoin('tblearningParticular as lp', 'lp.ID', '=', 'sed.particularID')
+                    ->where('sed.staffID', $staffId)
+                    ->where('sed.status', 1)
+                    ->select('lp.Particular as name', 'sed.amount', 'sed.startDate as effective_date')
+                    ->get();
+
+                foreach ($activeVars as $v) {
+                    $amt = (float)$v->amount;
+                    $totalEarningVars += $amt;
+                    $earningVarsList[] = [
+                        'name' => $v->name ?? 'Variable Earning',
+                        'amount' => $amt,
+                        'effective_date' => $v->effective_date
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // Bonuses and custom allowances
+        $totalBonuses = 0.00;
+        $bonusesList = [];
+        $totalCustomAllowances = 0.00;
+        $customAllowancesList = [];
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('staff_bonuses_and_allowances')) {
+                $staffBA = DB::table('staff_bonuses_and_allowances')
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->where(function($q) use ($currentMonthStr) {
+                        $q->where(function($sq) use ($currentMonthStr) {
+                            $sq->where('frequency', 'one_time')
+                               ->where('start_month', $currentMonthStr);
+                        })->orWhere(function($sq) use ($currentMonthStr) {
+                            $sq->where('frequency', 'recurring')
+                               ->where('start_month', '<=', $currentMonthStr)
+                               ->where(function($sub) use ($currentMonthStr) {
+                                   $sub->whereNull('end_month')
+                                       ->orWhere('end_month', '')
+                                       ->orWhere('end_month', '>=', $currentMonthStr);
+                               });
+                        });
+                    })
+                    ->get();
+
+                foreach ($staffBA as $item) {
+                    $amt = (float)$item->amount;
+                    if ($item->type === 'bonus') {
+                        $totalBonuses += $amt;
+                        $bonusesList[] = [
+                            'id' => $item->id,
+                            'title' => $item->title,
+                            'category' => $item->category,
+                            'amount' => $amt,
+                            'frequency' => $item->frequency,
+                            'start_month' => $item->start_month,
+                            'end_month' => $item->end_month,
+                            'notes' => $item->notes,
+                        ];
+                    } else {
+                        $totalCustomAllowances += $amt;
+                        $customAllowancesList[] = [
+                            'id' => $item->id,
+                            'title' => $item->title,
+                            'category' => $item->category,
+                            'amount' => $amt,
+                            'frequency' => $item->frequency,
+                            'start_month' => $item->start_month,
+                            'end_month' => $item->end_month,
+                            'notes' => $item->notes,
+                        ];
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        $grossPay = $totalBasicAllowances + $totalEarningVars;
+        $totalAdditions = $totalBonuses + $totalCustomAllowances;
+
+        // 1. Leave of Absence (LOA)
+        $leaveOfAbsenceDeduct = 0.00;
+        $loaDays = 0;
+        try {
+            $approvedLoas = DB::table('tblleaves')
+                ->where('staffID', $staffId)
+                ->where('leaveTypeID', 6) // LOA
+                ->where('status', 2) // HR Approved
+                ->where(function($q) use ($monthStart, $monthEnd) {
+                    $q->whereBetween('startDate', [$monthStart, $monthEnd])
+                      ->orWhereBetween('endDate', [$monthStart, $monthEnd])
+                      ->orWhere(function($sub) use ($monthStart, $monthEnd) {
+                          $sub->where('startDate', '<=', $monthStart)
+                              ->where('endDate', '>=', $monthEnd);
+                      });
+                })
+                ->get();
+
+            $isShiftWorker = ($staff && isset($staff->office_shift) && (int)$staff->office_shift === 1);
+            $dailySalaryRate = ($daysInPayrollMonth > 0) ? ($totalBasicAllowances / (float)$daysInPayrollMonth) : 0.00;
+
+            foreach ($approvedLoas as $loa) {
+                $lStart = max($monthStart, $loa->startDate);
+                $lEnd = min($monthEnd, $loa->endDate);
+
+                if ($isShiftWorker) {
+                    $curD = \Carbon\Carbon::parse($lStart);
+                    $endD = \Carbon\Carbon::parse($lEnd);
+                    while ($curD->lte($endD)) {
+                        if (!$curD->isWeekend()) {
+                            $loaDays++;
+                        }
+                        $curD->addDay();
+                    }
+                } else {
+                    $loaDays += \Carbon\Carbon::parse($lStart)->diffInDays(\Carbon\Carbon::parse($lEnd)) + 1;
+                }
+            }
+
+            if ($loaDays > 0) {
+                $leaveOfAbsenceDeduct = round($dailySalaryRate * $loaDays, 2);
+            }
+        } catch (\Throwable $e) {}
+
+        // 2. Mid-month appointment adjustment (e.g. Employed on May 12 -> 11 unworked days)
+        $midMonthAdjustment = 0.00;
+        $dojDaysDeducted = 0;
+        if ($effectiveJoinDate && $effectiveJoinDate->year === $year && $effectiveJoinDate->month === $month && $effectiveJoinDate->day > 1) {
+            $dailyRate = ($daysInPayrollMonth > 0) ? ($totalBasicAllowances / (float)$daysInPayrollMonth) : 0.00;
+            $dojDaysDeducted = max(0, min($daysInPayrollMonth, $effectiveJoinDate->day - 1));
+            $midMonthAdjustment = round($dailyRate * $dojDaysDeducted, 2);
+        }
+
+        $paidDays = max(0, $daysInPayrollMonth - $loaDays - $dojDaysDeducted);
+
+        // 3. PAYE Tax (Nigeria 2025/2026 progressive bands, prorated for paid days)
+        $annualGross = $declareSalary * 12.0;
+        $annualPension = 0.00;
+        if ($struct && $struct->pen_act == 1) {
+            $rate = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
+            $annualPension = ($annualGross * 0.5) * $rate;
+        }
+        $annualTaxable = max(0.00, $annualGross - $annualPension);
+        $annualTax = 0.00;
+        if ($annualTaxable > 800000.00) {
+            $taxableRemaining = $annualTaxable - 800000.00;
+            $band1 = min(2200000.00, $taxableRemaining);
+            $annualTax += $band1 * 0.15;
+            $taxableRemaining -= $band1;
+            if ($taxableRemaining > 0) {
+                $band2 = min(9000000.00, $taxableRemaining);
+                $annualTax += $band2 * 0.18;
+                $taxableRemaining -= $band2;
+            }
+            if ($taxableRemaining > 0) {
+                $band3 = min(13000000.00, $taxableRemaining);
+                $annualTax += $band3 * 0.21;
+                $taxableRemaining -= $band3;
+            }
+            if ($taxableRemaining > 0) {
+                $band4 = min(25000000.00, $taxableRemaining);
+                $annualTax += $band4 * 0.23;
+                $taxableRemaining -= $band4;
+            }
+            if ($taxableRemaining > 0) {
+                $annualTax += $taxableRemaining * 0.25;
+            }
+        }
+        $fullMonthlyTax = round($annualTax / 12.0, 2);
+        $payeTax = ($paidDays > 0) ? round($fullMonthlyTax * ($paidDays / (float)$daysInPayrollMonth), 2) : 0.00;
+
+        // 4. Pension (applied only if staff worked in this month)
+        $isPensionActive = ($struct && $struct->pen_act == 1);
+        $pensionRatePercent = ($pensionRate > 0) ? ($pensionRate / 100.0) : 0.08;
+        $pension = ($isPensionActive && $paidDays > 0) ? round(($totalBasicAllowances * 0.5) * $pensionRatePercent * ($paidDays / (float)$daysInPayrollMonth), 2) : 0.00;
+
+        // 5. Retention
+        $retention = 0.00;
+        $retentionMonths = 0;
+        $retentionRemainingMonths = 0;
+        $isRetentionActive = false;
+        if ($firstStruct && $paidDays > 0) {
+            $isRetentionActive = (int)($firstStruct->reten_act ?? 0) === 1;
+            $numRetentionMonths = (int)($firstStruct->num_rente_months ?? 0);
+            $monthlyRetentionRate = (float)($firstStruct->reten_monthly_rate ?? 0.00);
+
+            if ($isRetentionActive) {
+                $retentionMonths = $numRetentionMonths;
+                $retentionRemainingMonths = max(0, 20 - $numRetentionMonths);
+                if ($numRetentionMonths < 20) {
+                    if ($monthlyRetentionRate > 0) {
+                        $retention = $monthlyRetentionRate;
+                    } else {
+                        $retention = round($totalBasicAllowances * 0.05, 2);
+                    }
+                }
+            }
+        }
+
+        // 6. IOU / Salary Advance
+        $iouDeduct = 0.00;
+        $iouBalance = 0.00;
+        try {
+            $ious = DB::table('iou_records')
+                ->where('staff_id', $staffId)
+                ->where('status', '!=', 2) // not rejected
+                ->whereYear('iou_date', $year)
+                ->whereMonth('iou_date', $month)
+                ->get();
+
+            foreach ($ious as $iou) {
+                $iouDeduct += (float)$iou->amount;
+            }
+            $iouBalance = $iouDeduct;
+        } catch (\Throwable $e) {}
+
+        // 7. Loans and other deductions
+        $medicalLoanDeduct = 0.00;
+        $medLoanSetup = null;
+        try {
+            $medLoanSetup = DB::table('medical_loan_deductions')
+                ->where('staff_id', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->first();
+            if ($medLoanSetup) {
+                $medicalLoanDeduct = min((float)$medLoanSetup->monthly_deduction, (float)$medLoanSetup->balance_remaining);
+            }
+        } catch (\Throwable $e) {}
+
+        $coopLoanDeduct = 0.00;
+        $coopLoanSetup = null;
+        try {
+            $coopLoanSetup = DB::table('coop_loan_deductions')
+                ->where('staff_id', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->first();
+            if ($coopLoanSetup) {
+                $coopLoanDeduct = min((float)$coopLoanSetup->monthly_deduction, (float)$coopLoanSetup->balance_remaining);
+            }
+        } catch (\Throwable $e) {}
+
+        $coopSavingsDeduct = 0.00;
+        $coopSavingsBalance = 0.00;
+        $coopSavingsRecord = null;
+        try {
+            $coopSavingsRecord = DB::table('coop_savings_setups')->where('staff_id', $staffId)->first();
+            if ($coopSavingsRecord && $coopSavingsRecord->is_active == 1) {
+                $coopSavingsDeduct = (float)$coopSavingsRecord->monthly_amount;
+                $coopSavingsBalance = (float)$coopSavingsRecord->total_savings;
+            }
+        } catch (\Throwable $e) {}
+
+        $coopAssetDeduct = 0.00;
+        $coopAssetSetup = null;
+        try {
+            $coopAssetSetup = DB::table('coop_asset_finance_deductions')
+                ->where('staff_id', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->first();
+            if ($coopAssetSetup) {
+                $coopAssetDeduct = min((float)$coopAssetSetup->monthly_deduction, (float)$coopAssetSetup->balance_remaining);
+            }
+        } catch (\Throwable $e) {}
+
+        $surchargeDeduct = 0.00;
+        $surchargeSetup = null;
+        try {
+            $surchargeSetup = DB::table('surcharge_deductions')
+                ->where('staff_id', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->first();
+            if ($surchargeSetup) {
+                $surchargeDeduct = min((float)$surchargeSetup->monthly_deduction, (float)$surchargeSetup->balance_remaining);
+            }
+        } catch (\Throwable $e) {}
+
+        $absencePenaltyDeduct = 0.00;
+        $absencePenaltySetup = null;
+        try {
+            $absencePenaltySetup = DB::table('absence_penalty_deductions')
+                ->where('staff_id', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->first();
+            if ($absencePenaltySetup) {
+                $absencePenaltyDeduct = min((float)$absencePenaltySetup->monthly_deduction, (float)$absencePenaltySetup->balance_remaining);
+            }
+        } catch (\Throwable $e) {}
+
+        $otherDeduct = 0.00;
+        $otherDeductSetup = null;
+        try {
+            $otherDeductSetup = DB::table('other_deductions_setup')
+                ->where('staff_id', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->first();
+            if ($otherDeductSetup) {
+                $otherDeduct = min((float)$otherDeductSetup->monthly_deduction, (float)$otherDeductSetup->balance_remaining);
+            }
+        } catch (\Throwable $e) {}
+
+        $loanDeduct = 0.00;
+        $loanBalance = 0.00;
+        try {
+            $loanSetups = DB::table('employee_loans')
+                ->where('staff_id', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->get();
+            foreach ($loanSetups as $ls) {
+                $loanDeduct += min((float)$ls->monthly_deduction, (float)$ls->balance_remaining);
+                $loanBalance += (float)$ls->balance_remaining;
+            }
+        } catch (\Throwable $e) {}
+
+        $totalDeductions = $payeTax + $pension + $retention + $iouDeduct + $loanDeduct +
+                           $medicalLoanDeduct + $coopLoanDeduct + $coopSavingsDeduct +
+                           $coopAssetDeduct + $surchargeDeduct + $absencePenaltyDeduct +
+                           $otherDeduct + $leaveOfAbsenceDeduct + $midMonthAdjustment;
+
+        $netPay = ($paidDays === 0) ? 0.00 : max(0.00, $grossPay - $totalDeductions);
+
+        // Combined Loans & other deductions for compact summary table display
+        $otherDeductionsCombined = $loanDeduct + $medicalLoanDeduct + $coopLoanDeduct +
+                                   $coopSavingsDeduct + $coopAssetDeduct + $surchargeDeduct +
+                                   $absencePenaltyDeduct + $otherDeduct + $leaveOfAbsenceDeduct + $midMonthAdjustment;
+
+        // Check if payroll run was officially computed
+        $isComputed = false;
+        try {
+            $computedRecord = DB::table('payroll_conpt as pc')
+                ->join('payroll_runs as pr', 'pr.id', '=', 'pc.payroll_run_id')
+                ->where('pc.staffID', $staffId)
+                ->where('pr.month', $month)
+                ->where('pr.year', $year)
+                ->first();
+            $isComputed = ($computedRecord !== null);
+        } catch (\Throwable $e) {}
+
+        // Construct full breakdown modal payload
+        $fullBreakdown = [
+            'period' => $monthName,
+            'staff' => [
+                'id' => $staff->id ?? $staffId,
+                'file_no' => $staff->file_no ?? '',
+                'name' => trim(($staff->surname ?? '') . ' ' . ($staff->first_name ?? '') . ' ' . ($staff->othernames ?? '')),
+                'department' => $staff->department ?? 'General',
+                'designation' => $staff->designation ?? 'Staff',
+                'account_number' => $staff->account_number ?? '',
+                'bank_name' => $staff->bank_name ?? '',
+                'rsa_pin' => $staff->rsa_pin ?? '',
+                'pfa_name' => $staff->pfa_name ?? '',
+            ],
+            'earnings' => [
+                'basic_salary' => $basic,
+                'housing_allowance' => $housing,
+                'transport_allowance' => $transport,
+                'medical_allowance' => $medical,
+                'utility_allowance' => $utility,
+                'meal_allowance' => $meal,
+                'total_basic_allowances' => $totalBasicAllowances,
+                'earning_variables' => $earningVarsList,
+                'total_earning_variables' => $totalEarningVars,
+                'bonuses' => $bonusesList,
+                'total_bonuses' => $totalBonuses,
+                'custom_allowances' => $customAllowancesList,
+                'total_custom_allowances' => $totalCustomAllowances,
+                'total_additions' => $totalAdditions,
+                'gross_salary' => round($grossPay, 2),
+                'gross_pay' => round($grossPay, 2),
+                'declare_salary' => $declareSalary,
+            ],
+            'deductions' => [
+                'paye_tax' => ['amount' => $payeTax, 'label' => 'PAYE Tax (Progressive Act 2026)'],
+                'pension' => ['amount' => $pension, 'rate' => $pensionRatePercent * 100, 'label' => 'Employee Pension (8%)'],
+                'retention' => ['amount' => $retention, 'months_completed' => $retentionMonths, 'label' => 'Staff Retention (5%)'],
+                'iou' => ['amount' => $iouDeduct, 'label' => 'IOU / Salary Advance'],
+                'regular_loan' => ['amount' => $loanDeduct, 'balance_remaining' => $loanBalance, 'label' => 'Employee Loan'],
+                'medical_loan' => ['amount' => $medicalLoanDeduct, 'balance_remaining' => $medLoanSetup ? (float)$medLoanSetup->balance_remaining : 0.00, 'label' => 'Medical Loan'],
+                'coop_loan' => ['amount' => $coopLoanDeduct, 'balance_remaining' => $coopLoanSetup ? (float)$coopLoanSetup->balance_remaining : 0.00, 'label' => 'Cooperative Loan'],
+                'coop_savings' => ['amount' => $coopSavingsDeduct, 'balance_remaining' => $coopSavingsBalance, 'label' => 'Cooperative Savings'],
+                'coop_asset_finance' => ['amount' => $coopAssetDeduct, 'balance_remaining' => $coopAssetSetup ? (float)$coopAssetSetup->balance_remaining : 0.00, 'label' => 'Coop Asset Finance'],
+                'surcharges' => ['amount' => $surchargeDeduct, 'balance_remaining' => $surchargeSetup ? (float)$surchargeSetup->balance_remaining : 0.00, 'label' => 'Surcharges'],
+                'absence_penalty' => ['amount' => $absencePenaltyDeduct, 'balance_remaining' => $absencePenaltySetup ? (float)$absencePenaltySetup->balance_remaining : 0.00, 'label' => 'Absence Penalty'],
+                'leave_of_absence' => ['amount' => $leaveOfAbsenceDeduct, 'days_absent' => $loaDays, 'label' => 'Leave of Absence'],
+                'mid_month_adjustment' => ['amount' => $midMonthAdjustment, 'unworked_days' => $dojDaysDeducted, 'label' => 'Mid-Month Appointment Adj.'],
+                'other_deductions' => ['amount' => $otherDeduct, 'balance_remaining' => $otherDeductSetup ? (float)$otherDeductSetup->balance_remaining : 0.00, 'label' => 'Other Deductions'],
+                'total_deductions' => round($totalDeductions, 2)
+            ],
+            'summary' => [
+                'gross_pay' => round($grossPay, 2),
+                'gross_salary' => round($grossPay, 2),
+                'total_additions' => round($totalAdditions, 2),
+                'total_deductions' => round($totalDeductions, 2),
+                'net_pay' => round($netPay, 2),
+                'status' => $isComputed ? 'Computed Payroll' : 'Pre-Compute Estimate',
+                'paid_days' => $paidDays,
+                'days_in_month' => $daysInPayrollMonth,
+                'doj_days_deducted' => $dojDaysDeducted,
+            ],
+            'balances' => [
+                'coop_savings_balance' => (float)$coopSavingsBalance,
+                'coop_loan_balance' => $coopLoanSetup ? (float)$coopLoanSetup->balance_remaining : 0.00,
+                'coop_asset_finance_balance' => $coopAssetSetup ? (float)$coopAssetSetup->balance_remaining : 0.00,
+                'medical_loan_balance' => $medLoanSetup ? (float)$medLoanSetup->balance_remaining : 0.00,
+            ]
+        ];
+
+        return [
+            'month_num'                 => $month,
+            'month_name'                => $monthName,
+            'month_short'               => $monthShort,
+            'year'                      => $year,
+            'is_computed'               => $isComputed,
+            'status'                    => $isComputed ? 'Computed' : 'Estimate',
+            'paid_days'                 => $paidDays,
+            'days_in_month'             => $daysInPayrollMonth,
+            'doj_days_deducted'         => $dojDaysDeducted,
+            'basic'                     => $basic,
+            'housing'                   => $housing,
+            'transport'                 => $transport,
+            'medical'                   => $medical,
+            'utility'                   => $utility,
+            'meal'                      => $meal,
+            'variable_allowances'       => round($totalEarningVars, 2),
+            'earning_vars'              => round($totalEarningVars, 2),
+            'custom_allowances'         => round($totalCustomAllowances, 2),
+            'bonuses'                   => round($totalBonuses, 2),
+            'gross_salary'              => round($grossPay, 2),
+            'total_additions'           => round($totalAdditions, 2),
+            'total_gross'               => round($grossPay, 2),
+            'declare_salary'            => round($declareSalary, 2),
+            'paye_tax'                  => $payeTax,
+            'pension'                   => $pension,
+            'retention'                 => $retention,
+            'iou'                       => $iouDeduct,
+            'medical_loan'              => $medicalLoanDeduct,
+            'coop_loan'                 => $coopLoanDeduct,
+            'coop_savings'              => $coopSavingsDeduct,
+            'coop_asset_finance'        => $coopAssetDeduct,
+            'surcharge'                 => $surchargeDeduct,
+            'surcharges'                => $surchargeDeduct,
+            'absence_penalty'           => $absencePenaltyDeduct,
+            'leave_of_absence'          => $leaveOfAbsenceDeduct,
+            'regular_loan'              => $loanDeduct,
+            'other_deductions'          => $otherDeduct,
+            'mid_month_adjustment'      => $midMonthAdjustment,
+            'other_deductions_combined' => round($otherDeductionsCombined, 2),
+            'total_deductions'          => round($totalDeductions, 2),
+            'net_pay'                   => round($netPay, 2),
+            'full_breakdown'            => $fullBreakdown,
+        ];
+    }
+
+    /**
+     * GET /api/nextjs/payroll/staff-spreadsheet
+     * Retrieve monthly payroll spreadsheet for an individual staff member across years.
+     * Permission: Super Admin, HR Head, Audit Head, Finance Head can see any staff.
+     * HOD can see staff in department. Regular staff can only see themselves.
+     */
+    public function getStaffMonthlySpreadsheet(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            $currentUser = $ctx['employee'];
+            $requestedStaffId = $request->query('staff_id');
+            $canGenerateAll = ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff'] || $ctx['isFinanceStaff']);
+
+            // Permission resolution
+            $staffId = null;
+            if ($canGenerateAll) {
+                $staffId = $requestedStaffId ? (int)$requestedStaffId : ($currentUser ? $currentUser->ID : null);
+            } elseif ($currentUser && $currentUser->is_hod == 1) {
+                if ($requestedStaffId) {
+                    $targetStaff = DB::table('tblper')->where('ID', (int)$requestedStaffId)->first();
+                    if ($targetStaff && $targetStaff->departmentID == $currentUser->departmentID) {
+                        $staffId = (int)$requestedStaffId;
+                    } else {
+                        $staffId = $currentUser->ID;
+                    }
+                } else {
+                    $staffId = $currentUser->ID;
+                }
+            } else {
+                $staffId = $currentUser ? $currentUser->ID : null;
+            }
+
+            if (!$staffId) {
+                return response()->json(['status' => 'error', 'message' => 'Please select a valid staff member.'], 400);
+            }
+
+            $currentYear = (int)date('Y');
+            $fromYear = (int)$request->query('from_year', $currentYear);
+            $toYear = (int)$request->query('to_year', $currentYear);
+
+            if ($fromYear > $toYear) {
+                $temp = $fromYear;
+                $fromYear = $toYear;
+                $toYear = $temp;
+            }
+
+            // Cap year range between 2020 and 2035 to protect performance
+            $fromYear = max(2020, $fromYear);
+            $toYear = min(2035, $toYear);
+
+            $staff = DB::table('tblper as p')
+                ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
+                ->leftJoin('tbldesignation as des', 'des.id', '=', 'p.designation')
+                ->leftJoin('tblbanklist as bl', 'bl.bankID', '=', 'p.bankID')
+                ->select(
+                    'p.ID as id',
+                    'p.fileNo as file_no',
+                    'p.surname',
+                    'p.first_name',
+                    'p.othernames',
+                    'p.email',
+                    'p.phone',
+                    'p.doj',
+                    'p.appointment_date',
+                    'p.AccNo as account_number',
+                    'p.office_shift',
+                    'bl.bank as bank_name',
+                    'd.department',
+                    'des.designation'
+                )
+                ->where('p.ID', $staffId)
+                ->first();
+
+            if (!$staff) {
+                return response()->json(['status' => 'error', 'message' => 'Staff member not found.'], 404);
+            }
+
+            $struct = DB::table('salary_structures')->where('staffId', $staffId)->first();
+            $firstStruct = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+
+            $yearsData = [];
+            $grandTotals = [
+                'basic'                     => 0.00,
+                'housing'                   => 0.00,
+                'transport'                 => 0.00,
+                'medical'                   => 0.00,
+                'utility'                   => 0.00,
+                'meal'                      => 0.00,
+                'variable_allowances'       => 0.00,
+                'custom_allowances'         => 0.00,
+                'bonuses'                   => 0.00,
+                'gross_salary'              => 0.00,
+                'total_additions'           => 0.00,
+                'total_gross'               => 0.00,
+                'declare_salary'            => 0.00,
+                'paye_tax'                  => 0.00,
+                'pension'                   => 0.00,
+                'retention'                 => 0.00,
+                'iou'                       => 0.00,
+                'medical_loan'              => 0.00,
+                'coop_loan'                 => 0.00,
+                'coop_savings'              => 0.00,
+                'coop_asset_finance'        => 0.00,
+                'surcharges'                => 0.00,
+                'absence_penalty'           => 0.00,
+                'leave_of_absence'          => 0.00,
+                'regular_loan'              => 0.00,
+                'other_deductions'          => 0.00,
+                'other_deductions_combined' => 0.00,
+                'total_deductions'          => 0.00,
+                'net_pay'                   => 0.00,
+            ];
+
+            for ($yr = $fromYear; $yr <= $toYear; $yr++) {
+                $monthsData = [];
+                $yearTotals = [
+                    'basic'                     => 0.00,
+                    'housing'                   => 0.00,
+                    'transport'                 => 0.00,
+                    'medical'                   => 0.00,
+                    'utility'                   => 0.00,
+                    'meal'                      => 0.00,
+                    'variable_allowances'       => 0.00,
+                    'custom_allowances'         => 0.00,
+                    'bonuses'                   => 0.00,
+                    'gross_salary'              => 0.00,
+                    'total_additions'           => 0.00,
+                    'total_gross'               => 0.00,
+                    'declare_salary'            => 0.00,
+                    'paye_tax'                  => 0.00,
+                    'pension'                   => 0.00,
+                    'retention'                 => 0.00,
+                    'iou'                       => 0.00,
+                    'medical_loan'              => 0.00,
+                    'coop_loan'                 => 0.00,
+                    'coop_savings'              => 0.00,
+                    'coop_asset_finance'        => 0.00,
+                    'surcharges'                => 0.00,
+                    'absence_penalty'           => 0.00,
+                    'leave_of_absence'          => 0.00,
+                    'regular_loan'              => 0.00,
+                    'other_deductions'          => 0.00,
+                    'other_deductions_combined' => 0.00,
+                    'total_deductions'          => 0.00,
+                    'net_pay'                   => 0.00,
+                ];
+
+                for ($m = 1; $m <= 12; $m++) {
+                    $monthRow = $this->computeSingleStaffMonthlyData($staffId, $m, $yr, $staff, $struct, $firstStruct);
+                    $monthsData[] = $monthRow;
+
+                    // Accumulate year totals
+                    foreach ($yearTotals as $key => $val) {
+                        if (isset($monthRow[$key])) {
+                            $yearTotals[$key] += (float)$monthRow[$key];
+                            $grandTotals[$key] += (float)$monthRow[$key];
+                        }
+                    }
+                }
+
+                // Round year totals
+                foreach ($yearTotals as $key => $val) {
+                    $yearTotals[$key] = round($val, 2);
+                }
+
+                $yearsData[] = [
+                    'year'        => $yr,
+                    'months'      => $monthsData,
+                    'year_totals' => $yearTotals,
+                ];
+            }
+
+            // Round grand totals
+            foreach ($grandTotals as $key => $val) {
+                $grandTotals[$key] = round($val, 2);
+            }
+
+            return response()->json([
+                'status'                 => 'success',
+                'staff'                  => [
+                    'id'             => $staff->id,
+                    'file_no'        => $staff->file_no,
+                    'name'           => trim("{$staff->surname} {$staff->first_name} {$staff->othernames}"),
+                    'department'     => $staff->department ?? 'General',
+                    'designation'    => $staff->designation ?? 'Staff',
+                    'account_number' => $staff->account_number ?? '',
+                    'bank_name'      => $staff->bank_name ?? '',
+                    'rsa_pin'        => $staff->rsa_pin ?? '',
+                    'pfa_name'       => $staff->pfa_name ?? '',
+                ],
+                'from_year'              => $fromYear,
+                'to_year'                => $toYear,
+                'years'                  => $yearsData,
+                'grand_totals'           => $grandTotals,
+                'can_generate_all_staff' => $canGenerateAll,
+                'is_admin'               => ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']),
+                'is_super_admin'         => $ctx['isSuperAdmin'],
+                'is_hr_head'             => $ctx['isAdminStaff'],
+                'is_finance_head'        => $ctx['isFinanceStaff'],
+                'is_audit_head'          => $ctx['isAuditStaff'],
+                'is_hod'                 => ($currentUser && $currentUser->is_hod == 1),
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('SalaryBreakdownApiController getStaffMonthlySpreadsheet: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/nextjs/payroll/staff-spreadsheet/export
+     * Export individual staff monthly spreadsheet to CSV.
+     */
+    public function exportStaffMonthlySpreadsheet(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized.'], 401);
+            }
+
+            $currentUser = $ctx['employee'];
+            $requestedStaffId = $request->query('staff_id');
+            $canGenerateAll = ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff'] || $ctx['isFinanceStaff']);
+
+            $staffId = null;
+            if ($canGenerateAll) {
+                $staffId = $requestedStaffId ? (int)$requestedStaffId : ($currentUser ? $currentUser->ID : null);
+            } elseif ($currentUser && $currentUser->is_hod == 1) {
+                if ($requestedStaffId) {
+                    $targetStaff = DB::table('tblper')->where('ID', (int)$requestedStaffId)->first();
+                    if ($targetStaff && $targetStaff->departmentID == $currentUser->departmentID) {
+                        $staffId = (int)$requestedStaffId;
+                    } else {
+                        $staffId = $currentUser->ID;
+                    }
+                } else {
+                    $staffId = $currentUser->ID;
+                }
+            } else {
+                $staffId = $currentUser ? $currentUser->ID : null;
+            }
+
+            if (!$staffId) {
+                return response()->json(['status' => 'error', 'message' => 'Please select a valid staff member.'], 400);
+            }
+
+            $currentYear = (int)date('Y');
+            $fromYear = max(2020, (int)$request->query('from_year', $currentYear));
+            $toYear = min(2035, (int)$request->query('to_year', $currentYear));
+            if ($fromYear > $toYear) {
+                $temp = $fromYear;
+                $fromYear = $toYear;
+                $toYear = $temp;
+            }
+
+            $staff = DB::table('tblper as p')
+                ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
+                ->leftJoin('tbldesignation as des', 'des.id', '=', 'p.designation')
+                ->leftJoin('tblbanklist as bl', 'bl.bankID', '=', 'p.bankID')
+                ->select(
+                    'p.ID as id',
+                    'p.fileNo as file_no',
+                    'p.surname',
+                    'p.first_name',
+                    'p.othernames',
+                    'p.AccNo as account_number',
+                    'bl.bank as bank_name',
+                    'd.department',
+                    'des.designation'
+                )
+                ->where('p.ID', $staffId)
+                ->first();
+
+            if (!$staff) {
+                return response()->json(['status' => 'error', 'message' => 'Staff not found.'], 404);
+            }
+
+            $staffName = trim("{$staff->surname} {$staff->first_name} {$staff->othernames}");
+            $struct = DB::table('salary_structures')->where('staffId', $staffId)->first();
+            $firstStruct = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+
+            $headers = [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => "attachment; filename=\"Staff_Spreadsheet_{$staff->file_no}_{$fromYear}_{$toYear}.csv\"",
+                'Pragma' => 'no-cache',
+                'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires' => '0'
+            ];
+
+            $callback = function () use ($staff, $staffName, $struct, $firstStruct, $fromYear, $toYear, $staffId) {
+                $handle = fopen('php://output', 'w');
+                // UTF-8 BOM for Excel compatibility
+                fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+
+                // Title & Staff Profile Header
+                fputcsv($handle, ['ISALU HOSPITALS LIMITED - INDIVIDUAL STAFF PAYROLL SPREADSHEET']);
+                fputcsv($handle, ['Staff ID / File No:', $staff->file_no, 'Staff Name:', $staffName]);
+                fputcsv($handle, ['Department:', $staff->department ?? 'General', 'Designation:', $staff->designation ?? 'Staff']);
+                fputcsv($handle, ['Bank:', $staff->bank_name ?? '', 'Account No:', $staff->account_number ?? '', 'Period:', "{$fromYear} – {$toYear}"]);
+                fputcsv($handle, []);
+
+                for ($yr = $fromYear; $yr <= $toYear; $yr++) {
+                    fputcsv($handle, ["=== {$yr} PAYROLL SPREADSHEET (JANUARY - DECEMBER) ==="]);
+                    fputcsv($handle, [
+                        'Month',
+                        'Basic (₦)',
+                        'Housing (₦)',
+                        'Transport (₦)',
+                        'Medical (₦)',
+                        'Utility (₦)',
+                        'Meal (₦)',
+                        'Variable (₦)',
+                        'Gross Pay (₦)',
+                        'Declared Sal. (₦)',
+                        'PAYE Tax (₦)',
+                        'Pension (₦)',
+                        'Retention (₦)',
+                        'IOU (₦)',
+                        'Med. Loan (₦)',
+                        'Coop. Loan (₦)',
+                        'Coop. Sav. (₦)',
+                        'Asset Fin. (₦)',
+                        'Surcharges (₦)',
+                        'Absence Pen. (₦)',
+                        'LOA Ded. (₦)',
+                        'Loan (₦)',
+                        'Other Ded. (₦)',
+                        'Total Ded. (₦)',
+                        'Net Pay (₦)',
+                        'Status'
+                    ]);
+
+                    $yTotals = [
+                        'basic' => 0.0, 'housing' => 0.0, 'transport' => 0.0, 'medical' => 0.0,
+                        'utility' => 0.0, 'meal' => 0.0, 'variable_allowances' => 0.0,
+                        'total_gross' => 0.0, 'declare_salary' => 0.0, 'paye_tax' => 0.0,
+                        'pension' => 0.0, 'retention' => 0.0, 'iou' => 0.0, 'medical_loan' => 0.0,
+                        'coop_loan' => 0.0, 'coop_savings' => 0.0, 'coop_asset_finance' => 0.0,
+                        'surcharges' => 0.0, 'absence_penalty' => 0.0, 'leave_of_absence' => 0.0,
+                        'regular_loan' => 0.0, 'other_deductions' => 0.0, 'total_deductions' => 0.0, 'net_pay' => 0.0
+                    ];
+
+                    for ($m = 1; $m <= 12; $m++) {
+                        $mRow = $this->computeSingleStaffMonthlyData($staffId, $m, $yr, $staff, $struct, $firstStruct);
+
+                        fputcsv($handle, [
+                            $mRow['month_name'],
+                            number_format($mRow['basic'], 2),
+                            number_format($mRow['housing'], 2),
+                            number_format($mRow['transport'], 2),
+                            number_format($mRow['medical'], 2),
+                            number_format($mRow['utility'], 2),
+                            number_format($mRow['meal'], 2),
+                            number_format($mRow['variable_allowances'], 2),
+                            number_format($mRow['total_gross'], 2),
+                            number_format($mRow['declare_salary'], 2),
+                            number_format($mRow['paye_tax'], 2),
+                            number_format($mRow['pension'], 2),
+                            number_format($mRow['retention'], 2),
+                            number_format($mRow['iou'], 2),
+                            number_format($mRow['medical_loan'], 2),
+                            number_format($mRow['coop_loan'], 2),
+                            number_format($mRow['coop_savings'], 2),
+                            number_format($mRow['coop_asset_finance'], 2),
+                            number_format($mRow['surcharges'], 2),
+                            number_format($mRow['absence_penalty'], 2),
+                            number_format($mRow['leave_of_absence'], 2),
+                            number_format($mRow['regular_loan'], 2),
+                            number_format($mRow['other_deductions'], 2),
+                            number_format($mRow['total_deductions'], 2),
+                            number_format($mRow['net_pay'], 2),
+                            $mRow['status']
+                        ]);
+
+                        foreach ($yTotals as $k => $v) {
+                            $yTotals[$k] += (float)($mRow[$k] ?? 0.0);
+                        }
+                    }
+
+                    // Year Total Row
+                    fputcsv($handle, [
+                        "TOTAL FOR {$yr}",
+                        number_format($yTotals['basic'], 2),
+                        number_format($yTotals['housing'], 2),
+                        number_format($yTotals['transport'], 2),
+                        number_format($yTotals['medical'], 2),
+                        number_format($yTotals['utility'], 2),
+                        number_format($yTotals['meal'], 2),
+                        number_format($yTotals['variable_allowances'], 2),
+                        number_format($yTotals['total_gross'], 2),
+                        number_format($yTotals['declare_salary'], 2),
+                        number_format($yTotals['paye_tax'], 2),
+                        number_format($yTotals['pension'], 2),
+                        number_format($yTotals['retention'], 2),
+                        number_format($yTotals['iou'], 2),
+                        number_format($yTotals['medical_loan'], 2),
+                        number_format($yTotals['coop_loan'], 2),
+                        number_format($yTotals['coop_savings'], 2),
+                        number_format($yTotals['coop_asset_finance'], 2),
+                        number_format($yTotals['surcharges'], 2),
+                        number_format($yTotals['absence_penalty'], 2),
+                        number_format($yTotals['leave_of_absence'], 2),
+                        number_format($yTotals['regular_loan'], 2),
+                        number_format($yTotals['other_deductions'], 2),
+                        number_format($yTotals['total_deductions'], 2),
+                        number_format($yTotals['net_pay'], 2),
+                        ''
+                    ]);
+                    fputcsv($handle, []);
+                }
+
+                fclose($handle);
+            };
+
+            return response()->stream($callback, 200, $headers);
+        } catch (\Throwable $th) {
+            Log::error('SalaryBreakdownApiController exportStaffMonthlySpreadsheet: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
 }
+

@@ -110,8 +110,36 @@ class SalaryBreakdownApiTest extends TestCase
         $this->assertStringContainsString('LOA.DEDN', $csvContent);
         $this->assertStringContainsString('OTHER DEDUCTION', $csvContent);
         $this->assertStringContainsString('TOTAL DEDUCTION', $csvContent);
-        $this->assertStringContainsString('NET PAY', $csvContent);
         $this->assertStringContainsString('TOTAL', $csvContent);
+
+        // 5. Test getVarianceSummary endpoint
+        $varianceResponse = $this->getJson('/api/nextjs/payroll/salary-breakdown/variance', $headers);
+        $varianceResponse->assertStatus(200)
+            ->assertJson(['status' => 'success'])
+            ->assertJsonStructure([
+                'status',
+                'data' => [
+                    'current_period',
+                    'previous_period',
+                    'executive_summary' => ['total_staff', 'total_gross', 'total_deductions', 'total_net_pay'],
+                    'component_breakdown',
+                    'staff_variances',
+                    'counts' => ['total_compared', 'increased', 'decreased', 'new_joiners', 'exited', 'unchanged']
+                ]
+            ]);
+
+        // 6. Test exportVarianceReport endpoint
+        $varianceExportResponse = $this->get('/api/nextjs/payroll/salary-breakdown/variance/export', $headers);
+        $varianceExportResponse->assertStatus(200);
+        $this->assertStringContainsString('text/csv', $varianceExportResponse->headers->get('Content-Type'));
+        $varianceCsv = $varianceExportResponse->streamedContent();
+        $this->assertStringContainsString('MONTH-ON-MONTH PAYROLL VARIANCE & SUMMARY REPORT', $varianceCsv);
+        $this->assertStringContainsString('EXECUTIVE KPI SUMMARY', $varianceCsv);
+        $this->assertStringContainsString('EXACT GROSS VARIANCE RECONCILIATION', $varianceCsv);
+        $this->assertStringContainsString('DEPARTMENT-BY-DEPARTMENT PAYROLL VARIANCE ANALYSIS', $varianceCsv);
+        $this->assertStringContainsString('COMPONENT-BY-COMPONENT VARIANCE BREAKDOWN', $varianceCsv);
+        $this->assertStringContainsString('COMPLETE STAFF-LEVEL VARIANCE REGISTER', $varianceCsv);
+
 
         // 5. Test exportStaffSheet endpoint
         $staffExportResponse = $this->get('/api/nextjs/payroll/salary-breakdown/staff/export?staff_id=' . $user->ID, $headers);

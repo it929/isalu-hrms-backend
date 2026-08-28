@@ -216,6 +216,17 @@ class IouApiController extends Controller
             $netPayInfo = $this->calculateStaffNetPayBeforeIou($staffId, $year, $month, $excludeId);
             $availableNetPay = $netPayInfo['available_net_pay'];
 
+            $day = (int) date('d', $time);
+            $monthName = date('F Y', $time);
+            $currentDate = \Carbon\Carbon::now();
+            $targetMonthStart = \Carbon\Carbon::createFromDate((int)$year, (int)$month, 1)->startOfMonth();
+            $currentMonthStart = $currentDate->copy()->startOfMonth();
+
+            $isPastDeadline = ($day > 25) || $targetMonthStart->lt($currentMonthStart) || ($targetMonthStart->eq($currentMonthStart) && $currentDate->day > 25);
+            $deadlineMessage = $isPastDeadline
+                ? "The deadline to apply for IOU for {$monthName} is the 25th of the month. Applications for this month are now closed."
+                : null;
+
             return response()->json([
                 'status' => 'success',
                 'data' => [
@@ -229,9 +240,11 @@ class IouApiController extends Controller
                     'used_amount'                => $usedAmount,
                     'remaining_limit'            => $remainingLimit,
                     'available_net_pay'          => $availableNetPay,
-                    'month_name'                 => date('F Y', $time),
+                    'month_name'                 => $monthName,
                     'can_take_iou'               => $canTakeIou,
                     'max_iou_amount'             => $maxIouAmount,
+                    'is_past_deadline'           => $isPastDeadline,
+                    'deadline_message'           => $deadlineMessage,
                 ]
             ]);
         } catch (\Throwable $th) {
@@ -437,8 +450,24 @@ class IouApiController extends Controller
 
             // Extract month and year from the application date
             $time = strtotime($validated['iou_date']);
+            $day = (int) date('d', $time);
             $month = date('m', $time);
             $year = date('Y', $time);
+            $monthName = date('F Y', $time);
+
+            // Deadline check: The deadline to apply for IOU is 25th of the month
+            $currentDate = \Carbon\Carbon::now();
+            $targetMonthStart = \Carbon\Carbon::createFromDate((int)$year, (int)$month, 1)->startOfMonth();
+            $currentMonthStart = $currentDate->copy()->startOfMonth();
+
+            $isPastDeadline = ($day > 25) || $targetMonthStart->lt($currentMonthStart) || ($targetMonthStart->eq($currentMonthStart) && $currentDate->day > 25);
+
+            if ($isPastDeadline) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => "The deadline to apply for IOU for {$monthName} is the 25th of the month. You can no longer apply for an IOU for this month."
+                ], 422);
+            }
 
             // Calculate active requests for this month (excluding rejected status = 2)
             $query = DB::table('iou_records')

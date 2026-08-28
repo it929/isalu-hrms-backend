@@ -142,6 +142,7 @@ Route::prefix('nextjs')->group(function () {
     Route::prefix('hr/apply-loa')->group(function () {
         Route::get('/',                     [\App\Http\Controllers\Api\HrLeaveApiController::class, 'getApplyLoaData']);
         Route::get('/records',              [\App\Http\Controllers\Api\HrLeaveApiController::class, 'getLoaRecords']);
+        Route::get('/export',               [\App\Http\Controllers\Api\HrLeaveApiController::class, 'exportLoaSpreadsheet']);
         Route::post('/',                    [\App\Http\Controllers\Api\HrLeaveApiController::class, 'saveApplyLoa']);
         Route::put('/{id}',                 [\App\Http\Controllers\Api\HrLeaveApiController::class, 'updateApplyLoa']);
         Route::get('/hod-approve/{id}',     [\App\Http\Controllers\Api\HrLeaveApiController::class, 'hodApproveLoa']);
@@ -202,6 +203,12 @@ Route::prefix('nextjs')->group(function () {
         Route::get('/salary-breakdown/staff/export', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'exportStaffSheet']);
         Route::get('/salary-breakdown/all-staff', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'getAllStaffSheet']);
         Route::get('/salary-breakdown/all-staff/export', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'exportAllStaffSheet']);
+        Route::get('/salary-breakdown/variance', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'getVarianceSummary']);
+        Route::get('/salary-breakdown/variance/export', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'exportVarianceReport']);
+
+        // Individual Staff Monthly / Annual Spreadsheet
+        Route::get('/staff-spreadsheet', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'getStaffMonthlySpreadsheet']);
+        Route::get('/staff-spreadsheet/export', [\App\Http\Controllers\Api\SalaryBreakdownApiController::class, 'exportStaffMonthlySpreadsheet']);
 
         // Active Month Setup
         Route::get('/active-month', [\App\Http\Controllers\Api\ActiveMonthApiController::class, 'index']);
@@ -503,4 +510,34 @@ Route::prefix('nextjs')->group(function () {
         Route::get('/payroll-audits', [\App\Http\Controllers\Api\ReportApiController::class, 'getPayrollAudits']);
         Route::get('/employee-changes', [\App\Http\Controllers\Api\ReportApiController::class, 'getEmployeeChanges']);
     });
+
+    // Performance & Appraisal Management
+    Route::prefix('appraisals')->group(function () {
+        // Periods & Cycles
+        Route::get('/periods', [\App\Http\Controllers\Api\AppraisalApiController::class, 'getPeriods']);
+        Route::post('/periods', [\App\Http\Controllers\Api\AppraisalApiController::class, 'storePeriod']);
+        Route::post('/periods/{id}/dispatch', [\App\Http\Controllers\Api\AppraisalApiController::class, 'dispatchPeriod']);
+
+        // Templates & Criteria
+        Route::get('/templates', [\App\Http\Controllers\Api\AppraisalApiController::class, 'getTemplates']);
+        Route::post('/templates', [\App\Http\Controllers\Api\AppraisalApiController::class, 'storeTemplate']);
+
+        // Employee Self-Review
+        Route::get('/my-active', [\App\Http\Controllers\Api\AppraisalApiController::class, 'getMyActiveAppraisals']);
+        Route::get('/form/{id}', [\App\Http\Controllers\Api\AppraisalApiController::class, 'getAppraisalForm']);
+        Route::post('/form/{id}/save-self', [\App\Http\Controllers\Api\AppraisalApiController::class, 'saveSelfReview']);
+        Route::post('/form/{id}/acknowledge', [\App\Http\Controllers\Api\AppraisalApiController::class, 'acknowledgeAppraisal']);
+
+        // Appraiser / HOD Review
+        Route::get('/team-queue', [\App\Http\Controllers\Api\AppraisalApiController::class, 'getTeamQueue']);
+        Route::post('/form/{id}/save-appraiser', [\App\Http\Controllers\Api\AppraisalApiController::class, 'saveAppraiserReview']);
+        Route::post('/form/{id}/return-to-staff', [\App\Http\Controllers\Api\AppraisalApiController::class, 'returnToStaff']);
+
+        // HR Moderation & Approvals
+        Route::get('/moderation-list', [\App\Http\Controllers\Api\AppraisalApiController::class, 'getModerationList']);
+        Route::post('/form/{id}/calibrate', [\App\Http\Controllers\Api\AppraisalApiController::class, 'moderateSubmission']);
+        Route::post('/form/{id}/push-action', [\App\Http\Controllers\Api\AppraisalApiController::class, 'pushToAction']);
+    });
 });
+
+
