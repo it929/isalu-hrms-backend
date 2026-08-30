@@ -347,6 +347,8 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/',                     [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'index']);
             Route::get('/staff-balance/{staffId}', [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'getStaffBalance']);
             Route::post('/',                    [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'store']);
+            Route::post('/bulk',                [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'bulkStore']);
+            Route::put('/{id}',                 [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'update']);
             Route::delete('/{id}',              [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'destroy']);
         });
 
@@ -471,6 +473,8 @@ Route::prefix('nextjs')->group(function () {
         // Staff Resignations
         Route::prefix('resignations')->group(function () {
             Route::get('/staff', [\App\Http\Controllers\Api\ResignationApiController::class, 'getStaffList']);
+            Route::get('/approved', [\App\Http\Controllers\Api\ResignationApiController::class, 'getApprovedResignations']);
+            Route::get('/settlement/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'getSettlementBreakdown']);
             Route::get('/', [\App\Http\Controllers\Api\ResignationApiController::class, 'index']);
             Route::post('/', [\App\Http\Controllers\Api\ResignationApiController::class, 'store']);
             Route::delete('/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'destroy']);
@@ -478,6 +482,9 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/hod-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hodReject']);
             Route::get('/hr-approve/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hrApprove']);
             Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hrReject']);
+            Route::match(['get', 'post'], '/audit-approve/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'auditApprove']);
+            Route::match(['get', 'post'], '/audit-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'auditReject']);
+            Route::match(['get', 'post'], '/finance-pay/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'financePay']);
         });
 
         // Pension Activation
