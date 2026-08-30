@@ -63,7 +63,11 @@ class MedicalLoanEntryApiController extends Controller
             $query = DB::table('medical_loan_entries as mle')
                 ->join('tblper as p', 'p.ID', '=', 'mle.staffId')
                 ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
-                ->leftJoin('tblper as creator', 'creator.ID', '=', 'mle.created_by')
+                ->leftJoin('tblper as creator_staff', function ($join) {
+                    $join->on('creator_staff.ID', '=', 'mle.created_by')
+                         ->orOn('creator_staff.UserID', '=', 'mle.created_by');
+                })
+                ->leftJoin('users as creator_user', 'creator_user.id', '=', 'mle.created_by')
                 ->select(
                     'mle.*',
                     'p.fileNo',
@@ -71,8 +75,11 @@ class MedicalLoanEntryApiController extends Controller
                     'p.first_name',
                     'p.othernames',
                     'd.department',
-                    'creator.surname as creator_surname',
-                    'creator.first_name as creator_first_name'
+                    'creator_staff.surname as creator_surname',
+                    'creator_staff.first_name as creator_first_name',
+                    'creator_staff.othernames as creator_othernames',
+                    'creator_user.name as creator_user_name',
+                    'creator_user.username as creator_username'
                 );
 
             if ($search !== '') {
@@ -114,7 +121,16 @@ class MedicalLoanEntryApiController extends Controller
                         ? (float) $row->monthly_deduction
                         : (float) $calc['monthly_deduction'];
                     $row->duration_months = (int) $calc['duration_months'];
-                    $row->creator_name = $row->creator_surname ? trim("{$row->creator_surname} {$row->creator_first_name}") : 'System / Admin';
+
+                    $creatorName = null;
+                    if (!empty($row->creator_surname) || !empty($row->creator_first_name)) {
+                        $creatorName = trim("{$row->creator_surname} {$row->creator_first_name} {$row->creator_othernames}");
+                    } elseif (!empty($row->creator_user_name)) {
+                        $creatorName = trim($row->creator_user_name);
+                    } elseif (!empty($row->creator_username)) {
+                        $creatorName = trim($row->creator_username);
+                    }
+                    $row->creator_name = $creatorName ?: 'System / Admin';
                     return $row;
                 });
 
@@ -297,7 +313,7 @@ class MedicalLoanEntryApiController extends Controller
             $loanDate = $validated['loan_date'];
             $amount = (float) $validated['amount'];
             $reason = trim($validated['reason']);
-            $currentUserId = $ctx['employee'] ? $ctx['employee']->ID : ($ctx['user']->id ?? null);
+            $currentUserId = $ctx['employee'] ? $ctx['employee']->ID : (is_numeric($ctx['userId']) ? (int)$ctx['userId'] : null);
 
             DB::beginTransaction();
 
@@ -482,6 +498,333 @@ class MedicalLoanEntryApiController extends Controller
                 'status' => 'error',
                 'message' => $th->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * PUT /api/nextjs/payroll/medical-loan-entries/{id}
+     * Update a medical loan entry. If the amount changes, the deduction setup balance is adjusted accordingly.
+     */
+    public function update(Request $request, $id)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            $entry = DB::table('medical_loan_entries')->where('id', $id)->first();
+            if (!$entry) {
+                return response()->json(['status' => 'error', 'message' => 'Medical loan entry not found.'], 404);
+            }
+
+            $validated = $request->validate([
+                'loan_date' => 'required|date',
+                'amount'    => 'required|numeric|min:1',
+                'reason'    => 'required|string|max:1000',
+            ]);
+
+            $newAmount  = (float) $validated['amount'];
+            $oldAmount  = (float) $entry->amount;
+            $staffId    = (int) $entry->staffId;
+            $amountDiff = $newAmount - $oldAmount;
+
+            DB::beginTransaction();
+
+            // Adjust deduction setup balance by the difference
+            $setup = DB::table('medical_loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($setup) {
+                $newBalance     = max(0.00, (float)$setup->balance_remaining + $amountDiff);
+                $newLoanAmount  = max(0.00, (float)$setup->loan_amount + $amountDiff);
+
+                if ($newBalance <= 0) {
+                    DB::table('medical_loan_deduction_setups')->where('id', $setup->id)->update([
+                        'loan_amount'       => $newLoanAmount,
+                        'balance_remaining' => 0.00,
+                        'monthly_deduction' => 0.00,
+                        'duration_months'   => 0,
+                        'is_active'         => 0,
+                        'updated_at'        => now(),
+                    ]);
+                } else {
+                    $calc = $this->calculateDeductionAndDuration($newBalance);
+                    DB::table('medical_loan_deduction_setups')->where('id', $setup->id)->update([
+                        'loan_amount'       => $newLoanAmount,
+                        'balance_remaining' => $newBalance,
+                        'monthly_deduction' => $calc['monthly_deduction'],
+                        'duration_months'   => $calc['duration_months'],
+                        'is_active'         => 1,
+                        'updated_at'        => now(),
+                    ]);
+                }
+            }
+
+            // Update the entry itself
+            $newBalanceAfter = $setup
+                ? max(0.00, (float)$setup->balance_remaining + $amountDiff)
+                : $newAmount;
+            $calc = $this->calculateDeductionAndDuration($newBalanceAfter);
+
+            DB::table('medical_loan_entries')->where('id', $id)->update([
+                'loan_date'         => $validated['loan_date'],
+                'amount'            => $newAmount,
+                'reason'            => trim($validated['reason']),
+                'balance_after'     => $newBalanceAfter,
+                'monthly_deduction' => $calc['monthly_deduction'],
+                'updated_at'        => now(),
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Medical loan entry updated successfully. Deduction balance has been recalculated.',
+            ]);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            Log::error('MedicalLoanEntryApiController update: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/nextjs/payroll/medical-loan-entries/bulk
+     * Bulk import medical loan entries from a CSV/Excel file.
+     * Expected columns: staffId (or fileNo), loan_date, amount, reason
+     */
+    public function bulkStore(Request $request)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            if (!$ctx) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            $request->validate(['file' => 'required|file|mimes:csv,txt,xlsx,xls|max:5120']);
+
+            $file    = $request->file('file');
+            $ext     = strtolower($file->getClientOriginalExtension());
+            $rows    = [];
+
+            if (in_array($ext, ['xlsx', 'xls'])) {
+                // Parse Excel using PhpSpreadsheet if available, else fail gracefully
+                if (!class_exists(\PhpOffice\PhpSpreadsheet\IOFactory::class)) {
+                    return response()->json(['status' => 'error', 'message' => 'Excel import requires PhpSpreadsheet. Please use CSV format.'], 422);
+                }
+                $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file->getPathname());
+                $sheet       = $spreadsheet->getActiveSheet();
+                $data        = $sheet->toArray(null, true, true, false);
+                $headers     = array_map(fn($h) => strtolower(trim((string)$h)), array_shift($data) ?? []);
+                foreach ($data as $row) {
+                    $mapped = [];
+                    foreach ($headers as $i => $h) {
+                        $mapped[$h] = $row[$i] ?? null;
+                    }
+                    $rows[] = $mapped;
+                }
+            } else {
+                // CSV
+                $handle = fopen($file->getPathname(), 'r');
+                $headers = null;
+                while (($line = fgetcsv($handle)) !== false) {
+                    if ($headers === null) {
+                        $headers = array_map(fn($h) => strtolower(trim($h)), $line);
+                        continue;
+                    }
+                    $mapped = [];
+                    foreach ($headers as $i => $h) {
+                        $mapped[$h] = $line[$i] ?? null;
+                    }
+                    $rows[] = $mapped;
+                }
+                fclose($handle);
+            }
+
+            $currentUserId = $ctx['employee'] ? $ctx['employee']->ID : (is_numeric($ctx['userId']) ? (int)$ctx['userId'] : null);
+
+            $imported = 0;
+            $skipped  = 0;
+            $warnings = [];
+
+            foreach ($rows as $rowIndex => $row) {
+                $lineNum = $rowIndex + 2; // 1-indexed + header row
+
+                // Resolve staff by staffId only
+                $rawStaffId = trim((string)($row['staffid'] ?? $row['staff_id'] ?? $row['id'] ?? ''));
+
+                if ($rawStaffId === '') {
+                    $warnings[] = "Row {$lineNum}: Missing staffId – skipped.";
+                    $skipped++;
+                    continue;
+                }
+
+                // Resolve and normalise loan_date
+                $rawDate  = trim((string)($row['loan_date'] ?? $row['loandate'] ?? $row['date'] ?? ''));
+                $loanDate = '';
+
+                if ($rawDate !== '') {
+                    // 1. Excel numeric date serial (e.g. 46288)
+                    if (is_numeric($rawDate) && (float)$rawDate > 1000) {
+                        // Excel epoch: Dec 30, 1899; PHP mktime epoch: Jan 1, 1970
+                        // Excel serial → Unix timestamp: subtract Excel epoch offset
+                        $excelSerial = (float)$rawDate;
+                        // Correct for Excel's erroneous 1900 leap year bug (serial > 59)
+                        if ($excelSerial > 59) {
+                            $excelSerial -= 1;
+                        }
+                        $unixTimestamp = ($excelSerial - 25569) * 86400;
+                        $loanDate = date('Y-m-d', (int)$unixTimestamp);
+                    } else {
+                        // 2. Try common text formats
+                        $formats = ['Y-m-d', 'd/m/Y', 'm/d/Y', 'd-m-Y', 'm-d-Y', 'd.m.Y', 'Y/m/d'];
+                        foreach ($formats as $fmt) {
+                            $parsed = \DateTime::createFromFormat($fmt, $rawDate);
+                            if ($parsed && $parsed->format($fmt) === $rawDate) {
+                                $loanDate = $parsed->format('Y-m-d');
+                                break;
+                            }
+                        }
+                        // 3. strtotime fallback
+                        if ($loanDate === '' && strtotime($rawDate)) {
+                            $loanDate = date('Y-m-d', strtotime($rawDate));
+                        }
+                    }
+                }
+
+                if ($loanDate === '') {
+                    $warnings[] = "Row {$lineNum}: Invalid or missing loan_date (got: \"{$rawDate}\") – skipped.";
+                    $skipped++;
+                    continue;
+                }
+
+                $amount = trim((string)($row['amount'] ?? ''));
+                $reason = trim((string)($row['reason'] ?? $row['purpose'] ?? $row['medical_purpose'] ?? ''));
+
+                $amtVal = (float)str_replace([',', '₦', ' '], '', $amount);
+                if ($amtVal <= 0) {
+                    $warnings[] = "Row {$lineNum}: Invalid or missing amount – skipped.";
+                    $skipped++;
+                    continue;
+                }
+
+                if ($reason === '') {
+                    $warnings[] = "Row {$lineNum}: Missing reason/purpose – skipped.";
+                    $skipped++;
+                    continue;
+                }
+
+                // Resolve staff record by staffId
+                $staffRecord = null;
+                if (is_numeric($rawStaffId)) {
+                    $staffRecord = DB::table('tblper')->where('ID', (int)$rawStaffId)->first(['ID', 'surname', 'first_name']);
+                }
+                if (!$staffRecord) {
+                    $warnings[] = "Row {$lineNum}: Staff not found (staffId={$rawStaffId}) – skipped.";
+                    $skipped++;
+                    continue;
+                }
+
+                $staffId  = (int)$staffRecord->ID;
+                $loanDateFormatted = date('Y-m-d', strtotime($loanDate));
+
+                try {
+                    DB::beginTransaction();
+
+                    $existingSetup = DB::table('medical_loan_deduction_setups')
+                        ->where('staffId', $staffId)
+                        ->lockForUpdate()
+                        ->first();
+
+                    $balanceBefore      = $existingSetup ? (float)$existingSetup->balance_remaining : 0.00;
+                    $balanceAfter       = $balanceBefore + $amtVal;
+                    $newTotalLoanAmount = $existingSetup ? ((float)$existingSetup->loan_amount + $amtVal) : $amtVal;
+
+                    $calc            = $this->calculateDeductionAndDuration($balanceAfter);
+                    $monthlyDeduction = $calc['monthly_deduction'];
+                    $durationMonths   = $calc['duration_months'];
+
+                    $loanMonth  = date('Y-m', strtotime($loanDateFormatted));
+                    $startMonth = $loanMonth;
+                    if ($existingSetup && $existingSetup->is_active == 1 && $balanceBefore > 0) {
+                        if (!empty($existingSetup->start_month) && $existingSetup->start_month <= $loanMonth) {
+                            $startMonth = $existingSetup->start_month;
+                        }
+                    }
+
+                    $endMonth = $loanMonth;
+                    if ($durationMonths > 0) {
+                        $parts = explode('-', $loanMonth);
+                        if (count($parts) === 2) {
+                            $startDate = new \DateTime("{$parts[0]}-{$parts[1]}-01");
+                            $startDate->modify('+' . ($durationMonths - 1) . ' month');
+                            $endMonth = $startDate->format('Y-m');
+                        }
+                    }
+
+                    DB::table('medical_loan_entries')->insert([
+                        'staffId'          => $staffId,
+                        'loan_date'        => $loanDateFormatted,
+                        'amount'           => $amtVal,
+                        'reason'           => $reason,
+                        'balance_before'   => $balanceBefore,
+                        'balance_after'    => $balanceAfter,
+                        'monthly_deduction'=> $monthlyDeduction,
+                        'created_by'       => $currentUserId,
+                        'created_at'       => now(),
+                        'updated_at'       => now(),
+                    ]);
+
+                    if ($existingSetup) {
+                        DB::table('medical_loan_deduction_setups')->where('id', $existingSetup->id)->update([
+                            'loan_amount'       => $newTotalLoanAmount,
+                            'balance_remaining' => $balanceAfter,
+                            'monthly_deduction' => $monthlyDeduction,
+                            'duration_months'   => $durationMonths,
+                            'start_month'       => $startMonth,
+                            'end_month'         => $endMonth,
+                            'is_active'         => 1,
+                            'updated_at'        => now(),
+                        ]);
+                    } else {
+                        DB::table('medical_loan_deduction_setups')->insert([
+                            'staffId'           => $staffId,
+                            'loan_amount'       => $amtVal,
+                            'balance_remaining' => $balanceAfter,
+                            'monthly_deduction' => $monthlyDeduction,
+                            'duration_months'   => $durationMonths,
+                            'start_month'       => $startMonth,
+                            'end_month'         => $endMonth,
+                            'is_active'         => 1,
+                            'created_at'        => now(),
+                            'updated_at'        => now(),
+                        ]);
+                    }
+
+                    DB::commit();
+                    $imported++;
+                } catch (\Throwable $rowErr) {
+                    DB::rollBack();
+                    $staffName = trim("{$staffRecord->surname} {$staffRecord->first_name}");
+                    $warnings[] = "Row {$lineNum} ({$staffName}): " . $rowErr->getMessage();
+                    $skipped++;
+                }
+            }
+
+            $total = $imported + $skipped;
+            return response()->json([
+                'status'   => 'success',
+                'message'  => "Bulk import complete: {$imported} of {$total} entries recorded successfully.",
+                'imported' => $imported,
+                'skipped'  => $skipped,
+                'warnings' => $warnings,
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('MedicalLoanEntryApiController bulkStore: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
         }
     }
 

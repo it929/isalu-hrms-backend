@@ -18,6 +18,8 @@ trait ResolveUserContextTrait
             return null;
         }
 
+        $userRec = DB::table('users')->where('id', $userId)->first();
+
         $userRoles = DB::table('assign_user_role')
             ->leftJoin('user_role', 'assign_user_role.roleID', '=', 'user_role.roleID')
             ->where('assign_user_role.userID', $userId)
@@ -29,7 +31,8 @@ trait ResolveUserContextTrait
             return strtolower($role);
         })->toArray();
 
-        $isSuperAdmin = in_array(1, $roleIds) 
+        $isSuperAdmin = ($userRec && (int)$userRec->is_global === 1)
+            || in_array(1, $roleIds) 
             || in_array('super administrator', $roleNames) 
             || in_array('superadmin', $roleNames)
             || in_array('super admin', $roleNames)
@@ -47,7 +50,6 @@ trait ResolveUserContextTrait
             $employee = DB::table('tblper')->where('ID', (int)$userId)->first();
         }
         if (!$employee) {
-            $userRec = DB::table('users')->where('id', $userId)->first();
             if ($userRec) {
                 $employee = DB::table('tblper')->where('fileNo', $userRec->username)->first();
                 if (!$employee && !empty($userRec->email)) {
