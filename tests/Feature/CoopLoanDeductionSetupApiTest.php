@@ -116,20 +116,33 @@ class CoopLoanDeductionSetupApiTest extends TestCase
             'roleID' => 1 // Super Admin
         ]);
 
-        // 2. Non-super admin tries to toggle from active (1) to inactive (0) -> should be 403 Forbidden
+        // 2. Finance Head user setup
+        $financeUserId = DB::table('users')->insertGetId([
+            'name' => 'Finance Head User',
+            'email' => 'finhead_' . uniqid() . '@isalu.gov.ng',
+            'password' => bcrypt('password'),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('assign_user_role')->insert([
+            'userID' => $financeUserId,
+            'roleID' => 36 // Finance Head
+        ]);
+
+        // 3. Non-authorized user (e.g. regular staff) tries to toggle -> should be 403 Forbidden
         $responseNonAdmin = $this->postJson("/api/nextjs/payroll/coop-loan-deduction-setups/toggle/{$setupId}", [], [
             'X-User-Id' => $nonAdminUserId
         ]);
         $responseNonAdmin->assertStatus(403);
         $responseNonAdmin->assertJsonFragment([
             'status' => 'error',
-            'message' => 'Permission denied: Only Super Administrators are authorized to manually deactivate Cooperative Loan Deduction Setup.'
+            'message' => 'Permission denied: Only Super Administrators and Finance Head are authorized to activate and deactivate Cooperative Loan Deduction Setup.'
         ]);
 
         // Assert database record is still active (1)
         $this->assertEquals(1, DB::table('coop_loan_deduction_setups')->where('id', $setupId)->value('is_active'));
 
-        // 3. Non-super admin tries to update is_active to 0 via store endpoint -> should also be 403 Forbidden
+        // 4. Non-authorized user tries to update is_active to 0 via store endpoint -> should also be 403 Forbidden
         $responseStoreNonAdmin = $this->postJson("/api/nextjs/payroll/coop-loan-deduction-setups", [
             'id' => $setupId,
             'staffId' => $employee->ID,
@@ -146,18 +159,25 @@ class CoopLoanDeductionSetupApiTest extends TestCase
         ]);
         $responseStoreNonAdmin->assertStatus(403);
 
-        // 4. Super admin toggles to inactive (0) -> should succeed
+        // 5. Super admin toggles to inactive (0) -> should succeed
         $responseSuperAdmin = $this->postJson("/api/nextjs/payroll/coop-loan-deduction-setups/toggle/{$setupId}", [], [
             'X-User-Id' => $superAdminUserId
         ]);
         $responseSuperAdmin->assertStatus(200);
         $this->assertEquals(0, DB::table('coop_loan_deduction_setups')->where('id', $setupId)->value('is_active'));
 
-        // 5. Activating an inactive setup by non-admin or admin is allowed
-        $responseActivate = $this->postJson("/api/nextjs/payroll/coop-loan-deduction-setups/toggle/{$setupId}", [], [
-            'X-User-Id' => $nonAdminUserId
+        // 6. Finance Head activates inactive setup (1) -> should succeed
+        $responseFinanceActivate = $this->postJson("/api/nextjs/payroll/coop-loan-deduction-setups/toggle/{$setupId}", [], [
+            'X-User-Id' => $financeUserId
         ]);
-        $responseActivate->assertStatus(200);
+        $responseFinanceActivate->assertStatus(200);
         $this->assertEquals(1, DB::table('coop_loan_deduction_setups')->where('id', $setupId)->value('is_active'));
+
+        // 7. Finance Head deactivates setup (0) -> should succeed
+        $responseFinanceDeactivate = $this->postJson("/api/nextjs/payroll/coop-loan-deduction-setups/toggle/{$setupId}", [], [
+            'X-User-Id' => $financeUserId
+        ]);
+        $responseFinanceDeactivate->assertStatus(200);
+        $this->assertEquals(0, DB::table('coop_loan_deduction_setups')->where('id', $setupId)->value('is_active'));
     }
 }

@@ -95,7 +95,8 @@ class RetentionActivationApiTest extends TestCase
                         'basic_salary',
                         'num_rente_months',
                         'remaining_months',
-                        'total_retention_deducted'
+                        'total_retention_deducted',
+                        'activation_month',
                     ]
                 ]
             ]);
@@ -150,7 +151,25 @@ class RetentionActivationApiTest extends TestCase
             'reten_act' => 1
         ], $headers);
 
-        // Non-superadmin user trying to deactivate -> Must fail (403)
+        // HR Head user can activate/deactivate
+        $hrHeadUserId = DB::table('users')->insertGetId([
+            'username' => 'hr_head_' . time(),
+            'email' => 'hrhead_' . time() . '@example.com',
+            'password' => bcrypt('password'),
+        ]);
+        DB::table('assign_user_role')->insert([
+            'userID' => $hrHeadUserId,
+            'roleID' => 48, // HR Head / Admin Staff
+        ]);
+
+        $hrHeaders = ['X-User-Id' => $hrHeadUserId];
+        $hrDeactivateResponse = $this->postJson('/api/nextjs/payroll/retention-activation/toggle', [
+            'staff_id' => $this->testEmployeeId,
+            'reten_act' => 0
+        ], $hrHeaders);
+        $hrDeactivateResponse->assertStatus(200);
+
+        // Non-authorized user trying to activate/deactivate -> Must fail (403)
         $nonSuperUserId = DB::table('users')->insertGetId([
             'username' => 'regular_staff_' . time(),
             'email' => 'regular_' . time() . '@example.com',
@@ -164,14 +183,14 @@ class RetentionActivationApiTest extends TestCase
         $nonSuperHeaders = ['X-User-Id' => $nonSuperUserId];
         $failResponse = $this->postJson('/api/nextjs/payroll/retention-activation/toggle', [
             'staff_id' => $this->testEmployeeId,
-            'reten_act' => 0
+            'reten_act' => 1
         ], $nonSuperHeaders);
 
         $failResponse->assertStatus(403)
             ->assertJson([
                 'status' => 'error'
             ]);
-        $this->assertStringContainsString('Super Administrators', $failResponse->json('message'));
+        $this->assertStringContainsString('Super Administrators and HR Head', $failResponse->json('message'));
     }
 
     /**
@@ -517,5 +536,46 @@ class RetentionActivationApiTest extends TestCase
             'staffID' => $this->testEmployeeId,
             'retention' => 8000.00
         ]);
+    }
+
+    /**
+     * Test POST /api/nextjs/payroll/retention-activation/update-months
+     */
+    public function test_update_retention_months()
+    {
+        $superAdminRole = DB::table('assign_user_role')->where('roleID', 1)->first();
+        if (!$superAdminRole) {
+            $this->markTestSkipped('No superadmin user found in database to run tests.');
+            return;
+        }
+
+        $headers = ['X-User-Id' => $superAdminRole->userID];
+
+        // 1. Update deducted months to 15
+        $response = $this->postJson('/api/nextjs/payroll/retention-activation/update-months', [
+            'staff_id' => $this->testEmployeeId,
+            'num_rente_months' => 15,
+            'start_month' => '2025-01'
+        ], $headers);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'data' => [
+                    'staff_id' => $this->testEmployeeId,
+                    'num_rente_months' => 15,
+                    'remaining_months' => 5
+                ]
+            ]);
+
+        $this->assertEquals(15, DB::table('first_salary_structure')->where('staffId', $this->testEmployeeId)->value('num_rente_months'));
+
+        // 2. Validation: out of range (> 20)
+        $invalidResponse = $this->postJson('/api/nextjs/payroll/retention-activation/update-months', [
+            'staff_id' => $this->testEmployeeId,
+            'num_rente_months' => 25
+        ], $headers);
+
+        $invalidResponse->assertStatus(422);
     }
 }

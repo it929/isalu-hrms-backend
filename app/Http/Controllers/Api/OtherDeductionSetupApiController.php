@@ -188,7 +188,7 @@ class OtherDeductionSetupApiController extends Controller
                 'balance_remaining' => 'nullable|numeric|min:0',
                 'start_month' => 'required|string|regex:/^\d{4}-\d{2}$/',
                 'end_month' => 'nullable|string|regex:/^\d{4}-\d{2}$/',
-                'remarks' => 'nullable|string|max:1000',
+                'remarks' => 'required|string|min:2|max:1000',
                 'is_active' => 'nullable|integer|in:0,1',
             ]);
 

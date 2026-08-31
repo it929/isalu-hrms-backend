@@ -18,8 +18,13 @@ class LeaveOneYearEligibilityTest extends TestCase
             return;
         }
 
-        $leaveType = DB::table('tblleave_type')->where('id', 1)->first() ?? DB::table('tblleave_type')->first();
-        $leaveTypeId = $leaveType ? $leaveType->id : 1;
+        $annualLeaveType = DB::table('tblleave_type')->where('leaveType', 'Annual')->first() 
+            ?? DB::table('tblleave_type')->where('id', 5)->first();
+        $annualLeaveTypeId = $annualLeaveType ? $annualLeaveType->id : 5;
+
+        $casualLeaveType = DB::table('tblleave_type')->where('leaveType', 'Casual')->first() 
+            ?? DB::table('tblleave_type')->where('id', 1)->first();
+        $casualLeaveTypeId = $casualLeaveType ? $casualLeaveType->id : 1;
 
         // 1. Create a staff member who joined 4 months ago (< 1 year)
         $newStaffId = DB::table('tblper')->insertGetId([
@@ -35,18 +40,19 @@ class LeaveOneYearEligibilityTest extends TestCase
 
         $headers = ['X-User-Id' => $admin->id];
 
-        // 2. Attempt calculateEndDate -> Must be rejected (422)
-        $calcRes = $this->getJson("/api/nextjs/hr/apply-leave/calculate-end-date?employee_id={$newStaffId}&leave_type={$leaveTypeId}&start_date=" . now()->toDateString(), $headers);
+        // 2. Attempt Annual Leave calculateEndDate -> Must be rejected (422)
+        $calcRes = $this->getJson("/api/nextjs/hr/apply-leave/calculate-end-date?employee_id={$newStaffId}&leave_type={$annualLeaveTypeId}&start_date=" . now()->toDateString(), $headers);
         $calcRes->assertStatus(422)
             ->assertJson([
                 'status' => 'error',
             ]);
+        $this->assertStringContainsString('Annual Leave', $calcRes->json('message'));
         $this->assertStringContainsString('at least one (1) full year', $calcRes->json('message'));
 
-        // 3. Attempt saveApplyLeave -> Must be rejected (422)
+        // 3. Attempt Annual Leave saveApplyLeave -> Must be rejected (422)
         $applyRes = $this->postJson('/api/nextjs/hr/apply-leave', [
             'employee_id'  => $newStaffId,
-            'leave_type'   => $leaveTypeId,
+            'leave_type'   => $annualLeaveTypeId,
             'start_date'   => now()->toDateString(),
             'end_date'     => now()->addDays(5)->toDateString(),
             'leave_reason' => 'Annual Vacation test',
@@ -56,9 +62,23 @@ class LeaveOneYearEligibilityTest extends TestCase
             ->assertJson([
                 'status' => 'error',
             ]);
-        $this->assertStringContainsString('at least one (1) full year', $applyRes->json('message'));
+        $this->assertStringContainsString('Annual Leave', $applyRes->json('message'));
 
-        // 4. Create an eligible staff member who joined 2 years ago (>= 1 year)
+        // 4. Attempt Casual Leave saveApplyLeave for same new staff -> Must SUCCEED (200) because 1-year rule only applies to Annual Leave
+        $casualApplyRes = $this->postJson('/api/nextjs/hr/apply-leave', [
+            'employee_id'  => $newStaffId,
+            'leave_type'   => $casualLeaveTypeId,
+            'start_date'   => now()->toDateString(),
+            'end_date'     => now()->addDays(2)->toDateString(),
+            'leave_reason' => 'Urgent casual leave request',
+        ], $headers);
+
+        $casualApplyRes->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+            ]);
+
+        // 5. Create an eligible staff member who joined 2 years ago (>= 1 year)
         $eligibleStaffId = DB::table('tblper')->insertGetId([
             'fileNo'       => 'TEST-OLD-' . time(),
             'surname'      => 'VETERAN',
@@ -70,13 +90,13 @@ class LeaveOneYearEligibilityTest extends TestCase
             'gender'       => 'Female',
         ]);
 
-        // 5. Eligible staff applying for leave -> Must succeed (200)
+        // 6. Eligible staff applying for Annual Leave -> Must succeed (200)
         $eligibleApplyRes = $this->postJson('/api/nextjs/hr/apply-leave', [
             'employee_id'  => $eligibleStaffId,
-            'leave_type'   => $leaveTypeId,
+            'leave_type'   => $annualLeaveTypeId,
             'start_date'   => now()->toDateString(),
             'end_date'     => now()->addDays(5)->toDateString(),
-            'leave_reason' => 'Eligible staff leave application',
+            'leave_reason' => 'Eligible staff annual leave application',
         ], $headers);
 
         $eligibleApplyRes->assertStatus(200)
@@ -86,7 +106,7 @@ class LeaveOneYearEligibilityTest extends TestCase
 
         $this->assertDatabaseHas('leave_record', [
             'staffId' => $eligibleStaffId,
-            'leave_type_id' => $leaveTypeId,
+            'leave_type_id' => $annualLeaveTypeId,
         ]);
     }
 }
