@@ -52,12 +52,30 @@ class HrLeaveApiController extends Controller
     }
 
     /**
-     * Check if an employee is eligible to apply for leave (minimum 1 year of service in the company).
+     * Check if an employee is eligible to apply for leave (minimum 1 year of service in the company ONLY for Annual Leave).
      */
-    private function checkLeaveEligibility($employee, $startDate): array
+    private function checkLeaveEligibility($employee, $startDate, $leaveType = null): array
     {
         if (!$employee) {
             return ['eligible' => false, 'message' => 'Employee record not found.'];
+        }
+
+        // The 1-year service rule applies ONLY to Annual Leave
+        $isAnnualLeave = false;
+        if ($leaveType) {
+            if (is_object($leaveType)) {
+                $isAnnualLeave = ((int)$leaveType->id === 5 || stripos($leaveType->leaveType, 'annual') !== false);
+            } elseif (is_numeric($leaveType)) {
+                $lt = DB::table('tblleave_type')->where('id', (int)$leaveType)->first();
+                $isAnnualLeave = ($lt && ((int)$lt->id === 5 || stripos($lt->leaveType, 'annual') !== false));
+            } elseif (is_string($leaveType)) {
+                $isAnnualLeave = (stripos($leaveType, 'annual') !== false);
+            }
+        }
+
+        // If it is NOT annual leave, staff can apply regardless of 1-year tenure
+        if (!$isAnnualLeave) {
+            return ['eligible' => true];
         }
 
         $employmentDate = $employee->doj 
@@ -75,7 +93,7 @@ class HrLeaveApiController extends Controller
                 if ($start->lt($eligibleFrom)) {
                     return [
                         'eligible' => false,
-                        'message'  => "Cannot apply for leave: Employee must have worked for at least one (1) full year in the company before becoming eligible for leave. (Date of Employment: {$joined->format('d M, Y')}, Eligible From: {$eligibleFrom->format('d M, Y')})",
+                        'message'  => "Cannot apply for Annual Leave: Staff must have worked for at least one (1) full year in the company before becoming eligible for Annual Leave. (Date of Employment: {$joined->format('d M, Y')}, Eligible From: {$eligibleFrom->format('d M, Y')})",
                         'employment_date' => $joined->format('d M, Y'),
                         'eligible_from'   => $eligibleFrom->format('d M, Y'),
                     ];
@@ -298,8 +316,8 @@ class HrLeaveApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Employee not found.'], 404);
         }
 
-        // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for leave
-        $eligibility = $this->checkLeaveEligibility($employee, $request->start_date);
+        // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for Annual Leave
+        $eligibility = $this->checkLeaveEligibility($employee, $request->start_date, $leaveType);
         if (!$eligibility['eligible']) {
             return response()->json([
                 'status'  => 'error',
@@ -390,8 +408,8 @@ class HrLeaveApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Leave type not found'], 404);
         }
 
-        // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for leave
-        $eligibility = $this->checkLeaveEligibility($employee, $request->start_date);
+        // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for Annual Leave
+        $eligibility = $this->checkLeaveEligibility($employee, $request->start_date, $leaveType);
         if (!$eligibility['eligible']) {
             return response()->json([
                 'status'  => 'error',
@@ -779,8 +797,8 @@ class HrLeaveApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Employee not found.'], 404);
         }
 
-        // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for leave
-        $eligibility = $this->checkLeaveEligibility($employee, $request->start_date);
+        // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for Annual Leave
+        $eligibility = $this->checkLeaveEligibility($employee, $request->start_date, $leaveType);
         if (!$eligibility['eligible']) {
             return response()->json([
                 'status'  => 'error',

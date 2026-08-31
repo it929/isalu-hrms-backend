@@ -65,6 +65,7 @@ class CoopLoanDeductionSetupApiController extends Controller
                 'isHod' => $ctx['isHod'],
                 'isAdminStaff' => $ctx['isAdminStaff'],
                 'isAuditStaff' => $ctx['isAuditStaff'],
+                'isFinanceStaff' => $ctx['isFinanceStaff'],
                 'employee' => $employee,
             ]);
         } catch (\Throwable $th) {
@@ -128,10 +129,11 @@ class CoopLoanDeductionSetupApiController extends Controller
                     return response()->json(['status' => 'error', 'message' => 'Deduction setup not found.'], 404);
                 }
                 $newIsActive = isset($validated['is_active']) ? (int)$validated['is_active'] : 1;
-                if ((int)$existing->is_active === 1 && $newIsActive === 0 && empty($ctx['isSuperAdmin'])) {
+                $canToggle = !empty($ctx['isSuperAdmin']) || !empty($ctx['isFinanceStaff']);
+                if ((int)$existing->is_active !== $newIsActive && !$canToggle) {
                     return response()->json([
                         'status'  => 'error',
-                        'message' => 'Permission denied: Only Super Administrators are authorized to manually deactivate Cooperative Loan Deduction Setup.'
+                        'message' => 'Permission denied: Only Super Administrators and Finance Head are authorized to activate and deactivate Cooperative Loan Deduction Setup.'
                     ], 403);
                 }
                 DB::table('coop_loan_deduction_setups')->where('id', $id)->update($data);
@@ -172,15 +174,15 @@ class CoopLoanDeductionSetupApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Setup not found.'], 404);
             }
 
-            $newStatus = $setup->is_active == 1 ? 0 : 1;
-
-            // Only Super Administrators are authorized to manually deactivate
-            if ($newStatus === 0 && empty($ctx['isSuperAdmin'])) {
+            $canToggle = !empty($ctx['isSuperAdmin']) || !empty($ctx['isFinanceStaff']);
+            if (!$canToggle) {
                 return response()->json([
                     'status'  => 'error',
-                    'message' => 'Permission denied: Only Super Administrators are authorized to manually deactivate Cooperative Loan Deduction Setup.'
+                    'message' => 'Permission denied: Only Super Administrators and Finance Head are authorized to activate and deactivate Cooperative Loan Deduction Setup.'
                 ], 403);
             }
+
+            $newStatus = $setup->is_active == 1 ? 0 : 1;
 
             DB::table('coop_loan_deduction_setups')->where('id', $id)->update([
                 'is_active' => $newStatus,

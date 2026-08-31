@@ -45,6 +45,8 @@ class RetentionActivationApiController extends Controller
                     'p.surname',
                     'p.first_name',
                     'p.othernames',
+                    'fss.reten_start_date',
+                    'fss.created_at as fss_created_at',
                     DB::raw('COALESCE(fss.reten_act, 0) as reten_act'),
                     DB::raw('COALESCE(fss.num_rente_months, 0) as num_rente_months'),
                     DB::raw('(
@@ -75,7 +77,13 @@ class RetentionActivationApiController extends Controller
                 ->groupBy('staffID')
                 ->pluck('total_retention_deducted', 'staffID');
 
-            $records = $staffRecords->map(function ($row) use ($payrollDeductions) {
+            $firstDeductions = DB::table('payroll_conpt')
+                ->where('retention', '>', 0)
+                ->select('staffID', DB::raw("MIN(CONCAT(year, '-', LPAD(month, 2, '0'))) as first_month"))
+                ->groupBy('staffID')
+                ->pluck('first_month', 'staffID');
+
+            $records = $staffRecords->map(function ($row) use ($payrollDeductions, $firstDeductions) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $row->reten_act = (int)$row->reten_act;
                 $row->num_rente_months = (int)$row->num_rente_months;
@@ -92,6 +100,21 @@ class RetentionActivationApiController extends Controller
                 $row->total_retention_deducted = isset($payrollDeductions[$row->id]) ? (float)$payrollDeductions[$row->id] : 0.00;
                 $row->total_retention_target = round($row->monthly_retention * 20, 2);
 
+                // Determine activation month
+                $startMonthFormatted = null;
+                if (!empty($row->reten_start_date)) {
+                    $startMonthFormatted = \Carbon\Carbon::parse($row->reten_start_date)->format('M Y');
+                } elseif (isset($firstDeductions[$row->id])) {
+                    $startMonthFormatted = \Carbon\Carbon::parse($firstDeductions[$row->id] . '-01')->format('M Y');
+                } elseif ($row->reten_act == 1 && !empty($row->fss_created_at)) {
+                    $startMonthFormatted = \Carbon\Carbon::parse($row->fss_created_at)->format('M Y');
+                }
+
+                $row->activation_month = $row->reten_act == 1 
+                    ? ($startMonthFormatted ?: '—')
+                    : ($startMonthFormatted ? "{$startMonthFormatted} (Inactive)" : '—');
+                $row->start_month = $startMonthFormatted;
+
                 return $row;
             });
 
@@ -99,6 +122,7 @@ class RetentionActivationApiController extends Controller
                 'status' => 'success',
                 'data' => $records,
                 'isSuperAdmin' => $isSuperAdmin,
+                'isAdminStaff' => $ctx ? (bool)$ctx['isAdminStaff'] : false,
             ]);
         } catch (\Throwable $th) {
             Log::error('RetentionActivationAPI index: ' . $th->getMessage());
@@ -125,27 +149,35 @@ class RetentionActivationApiController extends Controller
 
         try {
             $request->validate([
-                'staff_id'  => 'required|integer|exists:tblper,ID',
+                'staff_id' => 'required|integer|exists:tblper,ID',
                 'reten_act' => 'required|integer|in:0,1'
             ]);
 
             $staffId = $request->input('staff_id');
             $retenAct = (int)$request->input('reten_act');
 
-            // Only Super Administrators are authorized to manually deactivate retention
-            if ($retenAct === 0 && empty($ctx['isSuperAdmin'])) {
+            // Only Super Administrators and HR Head are authorized to activate and deactivate retention
+            $canManage = !empty($ctx['isSuperAdmin']) || !empty($ctx['isAdminStaff']);
+            if (!$canManage) {
                 return response()->json([
                     'status'  => 'error',
-                    'message' => 'Permission denied: Only Super Administrators are authorized to manually deactivate staff retention.'
+                    'message' => 'Permission denied: Only Super Administrators and HR Head are authorized to activate and deactivate staff retention.'
                 ], 403);
             }
 
             $existing = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
 
             if ($existing) {
-                DB::table('first_salary_structure')->where('staffId', $staffId)->update([
+                $updateData = [
                     'reten_act' => $retenAct,
-                ]);
+                    'updated_at' => now(),
+                ];
+                if ($retenAct === 1 && empty($existing->reten_start_date)) {
+                    $updateData['reten_start_date'] = now()->toDateString();
+                } elseif ($retenAct === 0) {
+                    $updateData['reten_end_date'] = now()->toDateString();
+                }
+                DB::table('first_salary_structure')->where('staffId', $staffId)->update($updateData);
             } else {
                 DB::table('first_salary_structure')->insert([
                     'staffId' => $staffId,
@@ -157,6 +189,7 @@ class RetentionActivationApiController extends Controller
                     'utility_allowance' => 0.00,
                     'meal_allowance' => 0.00,
                     'reten_act' => $retenAct,
+                    'reten_start_date' => $retenAct === 1 ? now()->toDateString() : null,
                     'num_rente_months' => 0,
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -199,11 +232,12 @@ class RetentionActivationApiController extends Controller
             $staffIds = $request->input('staff_ids');
             $retenAct = (int)$request->input('reten_act');
 
-            // Only Super Administrators are authorized to manually deactivate retention
-            if ($retenAct === 0 && empty($ctx['isSuperAdmin'])) {
+            // Only Super Administrators and HR Head are authorized to bulk activate/deactivate retention
+            $canManage = !empty($ctx['isSuperAdmin']) || !empty($ctx['isAdminStaff']);
+            if (!$canManage) {
                 return response()->json([
                     'status'  => 'error',
-                    'message' => 'Permission denied: Only Super Administrators are authorized to manually deactivate staff retention.'
+                    'message' => 'Permission denied: Only Super Administrators and HR Head are authorized to activate and deactivate staff retention.'
                 ], 403);
             }
 
@@ -215,10 +249,16 @@ class RetentionActivationApiController extends Controller
                 $existing = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
 
                 if ($existing) {
-                    DB::table('first_salary_structure')->where('staffId', $staffId)->update([
+                    $updateData = [
                         'reten_act' => $retenAct,
                         'updated_at' => now(),
-                    ]);
+                    ];
+                    if ($retenAct === 1 && empty($existing->reten_start_date)) {
+                        $updateData['reten_start_date'] = now()->toDateString();
+                    } elseif ($retenAct === 0) {
+                        $updateData['reten_end_date'] = now()->toDateString();
+                    }
+                    DB::table('first_salary_structure')->where('staffId', $staffId)->update($updateData);
                 } else {
                     DB::table('first_salary_structure')->insert([
                         'staffId' => $staffId,
@@ -230,6 +270,7 @@ class RetentionActivationApiController extends Controller
                         'utility_allowance' => 0.00,
                         'meal_allowance' => 0.00,
                         'reten_act' => $retenAct,
+                        'reten_start_date' => $retenAct === 1 ? now()->toDateString() : null,
                         'num_rente_months' => 0,
                         'created_at' => now(),
                         'updated_at' => now(),
@@ -257,6 +298,93 @@ class RetentionActivationApiController extends Controller
     }
 
     /**
+     * POST /api/nextjs/payroll/retention-activation/update-months
+     * Update the number of deducted retention months for a staff member.
+     */
+    public function updateRetentionMonths(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Unauthorized'
+            ], 401);
+        }
+
+        try {
+            $validated = $request->validate([
+                'staff_id' => 'required|integer|exists:tblper,ID',
+                'num_rente_months' => 'required|integer|min:0|max:20',
+                'start_month' => 'nullable|string|regex:/^\d{4}-\d{2}$/',
+            ]);
+
+            // Only Super Administrators and HR Head are authorized to update retention deducted months
+            $canManage = !empty($ctx['isSuperAdmin']) || !empty($ctx['isAdminStaff']);
+            if (!$canManage) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Permission denied: Only Super Administrators and HR Head are authorized to update retention deducted months.'
+                ], 403);
+            }
+
+            $staffId = (int)$validated['staff_id'];
+            $months = (int)$validated['num_rente_months'];
+            $startMonth = $validated['start_month'] ?? null;
+
+            $existing = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+
+            if ($existing) {
+                $updateData = [
+                    'num_rente_months' => $months,
+                    'updated_at' => now(),
+                ];
+                if ($startMonth) {
+                    $updateData['reten_start_date'] = "{$startMonth}-01";
+                }
+                DB::table('first_salary_structure')->where('staffId', $staffId)->update($updateData);
+            } else {
+                DB::table('first_salary_structure')->insert([
+                    'staffId' => $staffId,
+                    'basic_salary' => 0.00,
+                    'declare_salary' => 0.00,
+                    'housing_allowance' => 0.00,
+                    'transport_allowance' => 0.00,
+                    'medical_allowance' => 0.00,
+                    'utility_allowance' => 0.00,
+                    'meal_allowance' => 0.00,
+                    'reten_act' => 1,
+                    'reten_start_date' => $startMonth ? "{$startMonth}-01" : now()->toDateString(),
+                    'num_rente_months' => $months,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Successfully updated retention deducted months to {$months} month(s).",
+                'data' => [
+                    'staff_id' => $staffId,
+                    'num_rente_months' => $months,
+                    'remaining_months' => max(0, 20 - $months),
+                ]
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation error.',
+                'errors' => $ve->errors()
+            ], 422);
+        } catch (\Throwable $th) {
+            Log::error('RetentionActivationAPI updateRetentionMonths: ' . $th->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * POST /api/nextjs/payroll/retention-activation/import
      * Bulk activate retention for multiple staff via Excel/CSV spreadsheet.
      */
@@ -269,9 +397,14 @@ class RetentionActivationApiController extends Controller
             ], 401);
         }
 
-        $request->validate([
-            'excel_file' => 'required|file'
-        ]);
+        $ctx = $this->getUserContext($request);
+        $canManage = $ctx && (!empty($ctx['isSuperAdmin']) || !empty($ctx['isAdminStaff']));
+        if (!$canManage) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Permission denied: Only Super Administrators and HR Head are authorized to import staff retention.'
+            ], 403);
+        }
 
         $file = $request->file('excel_file');
         $extension = strtolower($file->getClientOriginalExtension());
