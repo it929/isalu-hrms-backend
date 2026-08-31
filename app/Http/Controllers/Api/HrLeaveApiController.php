@@ -127,9 +127,23 @@ class HrLeaveApiController extends Controller
 
         if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
             $employees = DB::table('tblper')
-                ->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'gender', 'doj', 'appointment_date', 'created_at')
+                ->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'gender', 'doj', 'appointment_date', 'created_at', 'departmentID')
                 ->get()
                 ->map($enrichEmp);
+        } elseif ($ctx['isHod'] && $ctx['employee']) {
+            $hodDeptId = ($ctx['isDelegatedHod'] ?? false) && !empty($ctx['delegated_department_id'])
+                ? $ctx['delegated_department_id']
+                : $ctx['employee']->departmentID;
+
+            if ($hodDeptId) {
+                $employees = DB::table('tblper')
+                    ->where('departmentID', $hodDeptId)
+                    ->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'gender', 'doj', 'appointment_date', 'created_at', 'departmentID')
+                    ->get()
+                    ->map($enrichEmp);
+            } else {
+                $employees = collect();
+            }
         } else {
             $employees = collect();
         }
@@ -184,6 +198,21 @@ class HrLeaveApiController extends Controller
 
         if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
             // Super Admin, HR Head, and Audit Head see ALL leave records
+            $records = $baseQuery->get();
+        } elseif ($ctx['isHod'] && $ctx['employee']) {
+            // HOD sees all leave records of staff in their department as well as their own
+            $hodDeptId = ($ctx['isDelegatedHod'] ?? false) && !empty($ctx['delegated_department_id'])
+                ? $ctx['delegated_department_id']
+                : $ctx['employee']->departmentID;
+
+            $baseQuery->where(function ($query) use ($employee, $hodDeptId) {
+                if ($employee) {
+                    $query->where('leave_record.staffId', $employee->ID);
+                }
+                if ($hodDeptId) {
+                    $query->orWhere('tblper.departmentID', $hodDeptId);
+                }
+            });
             $records = $baseQuery->get();
         } else {
             // Regular staff and non-HR staff strictly see only their own leave applications
