@@ -222,5 +222,117 @@ class ResignationApiTest extends TestCase
             DB::table('resignation_requests')->where('id', $resignationId)->delete();
         }
     }
+
+    /**
+     * Test updating retention months for a resigned staff member on the exit settlement page.
+     */
+    public function test_update_retention_months_for_resigned_staff()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found.');
+            return;
+        }
+
+        $staff = DB::table('tblper')->first();
+        if (!$staff) {
+            $this->markTestSkipped('No staff found.');
+            return;
+        }
+
+        // Set entry salary structure (Entry gross = 100,000, initial months = 6)
+        DB::table('first_salary_structure')->updateOrInsert(
+            ['staffId' => $staff->ID],
+            [
+                'basic_salary'        => 50000.00,
+                'housing_allowance'   => 20000.00,
+                'transport_allowance' => 10000.00,
+                'medical_allowance'   => 10000.00,
+                'utility_allowance'   => 5000.00,
+                'meal_allowance'      => 5000.00,
+                'declare_salary'      => 100000.00,
+                'num_rente_months'    => 6,
+                'reten_act'           => 1,
+            ]
+        );
+
+        $resignationId = DB::table('resignation_requests')->insertGetId([
+            'staff_id'         => $staff->ID,
+            'reason'           => 'Retention Month Edit Test',
+            'resignation_date' => '2026-08-01',
+            'status'           => 1,
+            'hod_status'       => 1,
+            'admin_status'     => 1,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        $headers = $this->getHeaders($user->id);
+
+        try {
+            // Update retention months to 14
+            $updateRes = $this->postJson('/api/nextjs/payroll/resignation-settlement/update-retention-months', [
+                'staff_id'         => $staff->ID,
+                'num_rente_months' => 14,
+                'resignation_id'   => $resignationId,
+            ], $headers);
+
+            $updateRes->assertStatus(200)
+                ->assertJson([
+                    'status' => 'success',
+                ]);
+
+            // 1. Verified Super Admin can update retention months to 14
+            $settlement = $updateRes->json('data.settlement');
+            $this->assertNotNull($settlement);
+            $this->assertEquals(14, $settlement['retention_refund']['months_deducted']);
+            // 5% of 100,000 = 5,000 * 14 = 70,000
+            $this->assertEquals(70000.00, (float)$settlement['retention_refund']['total_refund_amount']);
+
+            // 2. Verified HR Head (roleID = 48) can update retention months
+            $hrHeadUser = DB::table('users')->insertGetId([
+                'username' => 'hrhead_settle_' . time(),
+                'email'    => 'hrhead_settle_' . time() . '@example.com',
+                'password' => bcrypt('password'),
+            ]);
+            DB::table('assign_user_role')->insert([
+                'userID' => $hrHeadUser,
+                'roleID' => 48, // HR Head / Admin Staff
+            ]);
+
+            $hrHeaders = $this->getHeaders($hrHeadUser);
+            $hrUpdateRes = $this->postJson('/api/nextjs/payroll/resignation-settlement/update-retention-months', [
+                'staff_id'         => $staff->ID,
+                'num_rente_months' => 18,
+                'resignation_id'   => $resignationId,
+            ], $hrHeaders);
+            $hrUpdateRes->assertStatus(200);
+            $this->assertDatabaseHas('first_salary_structure', [
+                'staffId'          => $staff->ID,
+                'num_rente_months' => 18,
+            ]);
+
+            // 3. Verified regular unauthorized user gets 403 Forbidden
+            $regularUser = DB::table('users')->insertGetId([
+                'username' => 'unauth_settle_' . time(),
+                'email'    => 'unauth_settle_' . time() . '@example.com',
+                'password' => bcrypt('password'),
+            ]);
+            DB::table('assign_user_role')->insert([
+                'userID' => $regularUser,
+                'roleID' => 9999,
+            ]);
+
+            $regularHeaders = $this->getHeaders($regularUser);
+            $forbiddenRes = $this->postJson('/api/nextjs/payroll/resignation-settlement/update-retention-months', [
+                'staff_id'         => $staff->ID,
+                'num_rente_months' => 20,
+                'resignation_id'   => $resignationId,
+            ], $regularHeaders);
+            $forbiddenRes->assertStatus(403);
+        } finally {
+            DB::table('resignation_requests')->where('id', $resignationId)->delete();
+        }
+    }
 }
 

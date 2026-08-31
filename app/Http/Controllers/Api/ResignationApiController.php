@@ -533,6 +533,9 @@ class ResignationApiController extends Controller
                 $row->declared_salary = $calc['declared_salary'];
                 $row->notice_salary_total = $calc['notice_salary_total'];
                 $row->retention_refund = $calc['retention_refund'];
+                $row->retention_months = $calc['retention_months'];
+                $row->retention_monthly_rate = $calc['retention_monthly_rate'];
+                $row->retention_base_salary = $calc['retention_base_salary'];
                 $row->coop_savings_refund = $calc['coop_savings_refund'];
                 $row->bonuses_total = $calc['bonuses_total'];
                 $row->total_earnings = $calc['total_earnings'];
@@ -786,7 +789,7 @@ class ResignationApiController extends Controller
         $retentionBaseSalary = $entryGross > 0 ? $entryGross : $monthlyGross;
 
         $monthlyRetentionRate = round(0.05 * $retentionBaseSalary, 2);
-        $retentionMonthsRecorded = (int)($resignation->num_rente_months ?? 0);
+        $retentionMonthsRecorded = $resignation->num_rente_months !== null ? (int)$resignation->num_rente_months : null;
 
         $retentionFromPayroll = 0.00;
         if (\Illuminate\Support\Facades\Schema::hasTable('payroll_conpt')) {
@@ -795,8 +798,13 @@ class ResignationApiController extends Controller
                 ->sum('retention');
         }
 
-        $retentionFromStructure = round($retentionMonthsRecorded * $monthlyRetentionRate, 2);
-        $totalRetentionDeducted = max($retentionFromPayroll, $retentionFromStructure);
+        if ($retentionMonthsRecorded !== null) {
+            $totalRetentionDeducted = round($retentionMonthsRecorded * $monthlyRetentionRate, 2);
+            $effectiveMonths = $retentionMonthsRecorded;
+        } else {
+            $totalRetentionDeducted = $retentionFromPayroll;
+            $effectiveMonths = $monthlyRetentionRate > 0 ? (int)round($retentionFromPayroll / $monthlyRetentionRate) : 0;
+        }
         $retentionRefundAmount = $totalRetentionDeducted;
 
         // ── 3b. Cooperative Savings Accumulated Balance Refund ──
@@ -1025,7 +1033,8 @@ class ResignationApiController extends Controller
             'retention_refund'   => [
                 'is_eligible'         => true,
                 'monthly_rate'        => $monthlyRetentionRate,
-                'months_deducted'     => $retentionMonthsRecorded,
+                'months_deducted'     => $effectiveMonths,
+                'base_salary'         => $retentionBaseSalary,
                 'total_refund_amount' => $retentionRefundAmount,
                 'policy_note'         => '100% refund approved: Staff successfully satisfied compulsory 1-month notice period.',
             ],
@@ -2060,8 +2069,17 @@ class ResignationApiController extends Controller
         $retentionBaseSalary = $entryGross > 0 ? $entryGross : $monthlyGross;
 
         $monthlyRetentionRate = round(0.05 * $retentionBaseSalary, 2);
-        $retentionMonthsRecorded = (int)($row->num_rente_months ?? 0);
-        $retentionRefund = round($retentionMonthsRecorded * $monthlyRetentionRate, 2);
+        $retentionMonthsRecorded = $row->num_rente_months !== null ? (int)$row->num_rente_months : null;
+
+        if ($retentionMonthsRecorded !== null) {
+            $retentionRefund = round($retentionMonthsRecorded * $monthlyRetentionRate, 2);
+        } else {
+            $retentionFromPayroll = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('payroll_conpt')) {
+                $retentionFromPayroll = (float)DB::table('payroll_conpt')->where('staffID', (int)$row->staff_id)->sum('retention');
+            }
+            $retentionRefund = $retentionFromPayroll;
+        }
 
         $staffId = (int)$row->staff_id;
 
@@ -2180,18 +2198,21 @@ class ResignationApiController extends Controller
         }
 
         return [
-            'exit_date'           => $exitDate,
-            'notice_days'         => 30,
-            'monthly_gross'       => $monthlyGross,
-            'declared_salary'     => $taxBaseSalary,
-            'notice_salary_total' => $totalNoticeSalary,
-            'retention_refund'    => $retentionRefund,
-            'coop_savings_refund' => $coopSavingsRefund,
-            'bonuses_total'       => $activeBonusesTotal + $earningVarsTotal,
-            'total_earnings'      => $totalFinalEarnings,
-            'total_deductions'    => $totalDeductions,
-            'net_settlement'      => $netSettlement,
-            'settlement_type'     => $settlementType,
+            'exit_date'              => $exitDate,
+            'notice_days'            => 30,
+            'monthly_gross'          => $monthlyGross,
+            'declared_salary'        => $taxBaseSalary,
+            'notice_salary_total'    => $totalNoticeSalary,
+            'retention_refund'       => $retentionRefund,
+            'retention_months'       => $retentionMonthsRecorded !== null ? $retentionMonthsRecorded : ($monthlyRetentionRate > 0 ? (int)round($retentionRefund / $monthlyRetentionRate) : 0),
+            'retention_monthly_rate' => $monthlyRetentionRate,
+            'retention_base_salary'  => $retentionBaseSalary,
+            'coop_savings_refund'    => $coopSavingsRefund,
+            'bonuses_total'          => $activeBonusesTotal + $earningVarsTotal,
+            'total_earnings'         => $totalFinalEarnings,
+            'total_deductions'       => $totalDeductions,
+            'net_settlement'         => $netSettlement,
+            'settlement_type'        => $settlementType,
         ];
     }
 
@@ -2440,6 +2461,94 @@ class ResignationApiController extends Controller
         } catch (\Throwable $th) {
             Log::error('ResignationApiController financePay: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/nextjs/payroll/resignation-settlement/update-retention-months
+     * Update the number of deducted retention months for a resigned staff member.
+     */
+    public function updateRetentionMonths(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized'
+            ], 401);
+        }
+
+        // Only Super Administrators and HR Head can adjust retention months
+        $canManage = !empty($ctx['isSuperAdmin']) || !empty($ctx['isAdminStaff']);
+        if (!$canManage) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Permission denied: Only Super Administrators and HR Head are authorized to edit retention months.'
+            ], 403);
+        }
+
+        try {
+            $validated = $request->validate([
+                'staff_id'         => 'required|integer|exists:tblper,ID',
+                'num_rente_months' => 'required|integer|min:0|max:20',
+                'resignation_id'   => 'nullable|integer',
+            ]);
+
+            $staffId = (int)$validated['staff_id'];
+            $months = (int)$validated['num_rente_months'];
+            $resignationId = $validated['resignation_id'] ?? null;
+
+            $existing = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+
+            if ($existing) {
+                DB::table('first_salary_structure')->where('staffId', $staffId)->update([
+                    'num_rente_months' => $months,
+                    'updated_at'       => now(),
+                ]);
+            } else {
+                DB::table('first_salary_structure')->insert([
+                    'staffId'             => $staffId,
+                    'basic_salary'        => 0.00,
+                    'declare_salary'      => 0.00,
+                    'housing_allowance'   => 0.00,
+                    'transport_allowance' => 0.00,
+                    'medical_allowance'   => 0.00,
+                    'utility_allowance'   => 0.00,
+                    'meal_allowance'      => 0.00,
+                    'reten_act'           => 1,
+                    'reten_start_date'    => now()->toDateString(),
+                    'num_rente_months'    => $months,
+                    'created_at'          => now(),
+                    'updated_at'          => now(),
+                ]);
+            }
+
+            $updatedSettlement = null;
+            if ($resignationId) {
+                $updatedSettlement = $this->computeDetailedSettlement((int)$resignationId);
+            }
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => "Successfully updated retention deducted months to {$months} month(s).",
+                'data'    => [
+                    'staff_id'         => $staffId,
+                    'num_rente_months' => $months,
+                    'settlement'       => $updatedSettlement,
+                ]
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Validation error.',
+                'errors'  => $ve->errors()
+            ], 422);
+        } catch (\Throwable $th) {
+            Log::error('ResignationAPI updateRetentionMonths: ' . $th->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => $th->getMessage()
+            ], 500);
         }
     }
 }
