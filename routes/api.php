@@ -485,6 +485,8 @@ Route::prefix('nextjs')->group(function () {
             Route::match(['get', 'post'], '/audit-approve/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'auditApprove']);
             Route::match(['get', 'post'], '/audit-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'auditReject']);
             Route::match(['get', 'post'], '/finance-pay/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'financePay']);
+            Route::match(['get', 'post'], '/settlement/{id}/send-email', [\App\Http\Controllers\Api\ResignationApiController::class, 'sendSettlementEmail']);
+            Route::get('/settlement/{id}/download-pdf', [\App\Http\Controllers\Api\ResignationApiController::class, 'downloadSettlementPdf']);
         });
 
         // Pension Activation
