@@ -109,4 +109,62 @@ class LeaveOneYearEligibilityTest extends TestCase
             'leave_type_id' => $annualLeaveTypeId,
         ]);
     }
+
+    public function test_maternity_leave_application_with_office_shift()
+    {
+        $admin = DB::table('users')->first();
+        if (!$admin) {
+            $this->markTestSkipped('No user found.');
+            return;
+        }
+
+        $maternityLeaveType = DB::table('tblleave_type')->where('id', 3)->first()
+            ?? DB::table('tblleave_type')->where('leaveType', 'Maternity')->first();
+        if (!$maternityLeaveType) {
+            $this->markTestSkipped('No maternity leave type found.');
+            return;
+        }
+
+        // Create a female staff with office_shift = 1 (working days, weekends excluded)
+        $staffId = DB::table('tblper')->insertGetId([
+            'fileNo'       => 'TEST-MAT-' . time(),
+            'surname'      => 'MOTHER',
+            'first_name'   => 'MARY',
+            'doj'          => now()->subYears(3)->toDateString(),
+            'staff_status' => 1,
+            'rank'         => 0,
+            'departmentID' => 1,
+            'gender'       => 'Female',
+            'office_shift' => 1,
+        ]);
+
+        $headers = ['X-User-Id' => $admin->id];
+
+        // 1. Calculate end date for 84 days of maternity leave
+        $calcRes = $this->getJson("/api/nextjs/hr/apply-leave/calculate-end-date?employee_id={$staffId}&leave_type={$maternityLeaveType->id}&start_date=2026-09-01", $headers);
+        $calcRes->assertStatus(200);
+        $endDate = $calcRes->json('end_date');
+        $this->assertNotNull($endDate);
+
+        // 2. Submit application with calculated end date -> Must succeed (200) without false "remaining days" error
+        $applyRes = $this->postJson('/api/nextjs/hr/apply-leave', [
+            'employee_id'  => $staffId,
+            'leave_type'   => $maternityLeaveType->id,
+            'start_date'   => '2026-09-01',
+            'end_date'     => $endDate,
+            'leave_reason' => 'Maternity leave test application',
+        ], $headers);
+
+        $applyRes->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+            ]);
+
+        $this->assertDatabaseHas('leave_record', [
+            'staffId'       => $staffId,
+            'leave_type_id' => $maternityLeaveType->id,
+            'start_date'    => '2026-09-01',
+            'end_date'      => $endDate,
+        ]);
+    }
 }

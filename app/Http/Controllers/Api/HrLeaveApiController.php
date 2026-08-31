@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use DB;
 use Carbon\Carbon;
 
@@ -15,6 +16,59 @@ class HrLeaveApiController extends Controller
      * Resolve the current user context from the X-User-Id header.
      */
     
+
+    /**
+     * Calculate duration days between two dates taking employee's office shift into account.
+     */
+    private function calculateShiftDurationDays($startDate, $endDate, $officeShift = 0): int
+    {
+        $s = Carbon::parse($startDate);
+        $e = Carbon::parse($endDate);
+        if ($s->gt($e)) {
+            return 0;
+        }
+
+        if ((int)$officeShift === 1) {
+            $days = 0;
+            $current = $s->copy();
+            while ($current->lte($e)) {
+                if (!$current->isWeekend()) {
+                    $days++;
+                }
+                $current->addDay();
+            }
+            return $days;
+        }
+
+        return (int)$s->diffInDays($e) + 1;
+    }
+
+    /**
+     * Get used leave days for a specific employee and leave type taking office shift into account.
+     */
+    private function getUsedLeaveDaysForType($employeeId, $leaveTypeId, $officeShift = 0, $excludeRecordId = null): int
+    {
+        $query = DB::table('leave_record')
+            ->where('staffId', $employeeId)
+            ->where('leave_type_id', $leaveTypeId)
+            ->where('status', 2);
+
+        if ($excludeRecordId) {
+            $query->where('id', '!=', $excludeRecordId);
+        }
+
+        $records = $query->get();
+        $totalUsed = 0;
+        foreach ($records as $rec) {
+            if (!empty($rec->is_recalled) && $rec->days_used !== null) {
+                $totalUsed += (int)$rec->days_used;
+            } else {
+                $totalUsed += $this->calculateShiftDurationDays($rec->start_date, $rec->end_date, $officeShift);
+            }
+        }
+
+        return $totalUsed;
+    }
 
     /**
      * Get the number of annual leave days an employee has used in a given calendar year.
@@ -30,17 +84,24 @@ class HrLeaveApiController extends Controller
         $annualDaysNext = 0;
         $annualType = DB::table('tblleave_type')->where('leaveType', 'Annual')->first();
         if ($annualType) {
-            $annualDaysNext = DB::table('leave_record')
+            $annualRecords = DB::table('leave_record')
                 ->where('staffId', $employeeId)
                 ->where('leave_type_id', $annualType->id)
                 ->where('status', 2)
                 ->whereYear('start_date', $year)
-                ->sum(DB::raw("DATEDIFF(end_date, start_date) + 1"));
+                ->get();
+            foreach ($annualRecords as $rec) {
+                if (!empty($rec->is_recalled) && $rec->days_used !== null) {
+                    $annualDaysNext += (int)$rec->days_used;
+                } else {
+                    $annualDaysNext += $this->calculateShiftDurationDays($rec->start_date, $rec->end_date, $employee->office_shift ?? 0);
+                }
+            }
         }
 
-        // Sum from legacy annual_leave (where finalapprstatus is 2)
+        // Sum from legacy annual_leave (where finalapprstatus is 2) if table exists
         $annualDaysLegacy = 0;
-        if ($employee->UserID) {
+        if ($employee->UserID && Schema::hasTable('annual_leave')) {
             $annualDaysLegacy = DB::table('annual_leave')
                 ->where('staffid', $employee->UserID)
                 ->where('year', $year)
@@ -355,18 +416,14 @@ class HrLeaveApiController extends Controller
         }
 
         // Days already used (fully approved – status 2)
-        $usedDays = DB::table('leave_record')
-            ->where('staffId', $request->employee_id)
-            ->where('leave_type_id', $leaveType->id)
-            ->where('status', 2)
-            ->sum(DB::raw("DATEDIFF(end_date, start_date) + 1"));
+        $usedDays = $this->getUsedLeaveDaysForType($request->employee_id, $leaveType->id, $employee->office_shift ?? 0);
 
         $start         = Carbon::parse($request->start_date);
         $end           = Carbon::parse($request->end_date);
-        $requestedDays = $start->diffInDays($end) + 1;
+        $requestedDays = $this->calculateShiftDurationDays($start, $end, $employee->office_shift ?? 0);
 
         if (($usedDays + $requestedDays) > $totalAllowed) {
-            $remaining = $totalAllowed - $usedDays;
+            $remaining = max(0, $totalAllowed - $usedDays);
             return response()->json([
                 'status'  => 'error',
                 'message' => "You have only {$remaining} remaining day(s). You cannot request {$requestedDays} days.",
@@ -437,12 +494,7 @@ class HrLeaveApiController extends Controller
             $totalAllowed = max(0, $totalAllowed - $annualDaysUsed);
         }
 
-        $usedDays = DB::table('leave_record')
-            ->where('staffId', $request->employee_id)
-            ->where('leave_type_id', $leaveType->id)
-            ->where('status', 2)
-            ->sum(DB::raw("DATEDIFF(end_date, start_date) + 1"));
-
+        $usedDays = $this->getUsedLeaveDaysForType($request->employee_id, $leaveType->id, $employee->office_shift ?? 0);
         $remainingDays = $totalAllowed - $usedDays;
 
         if ($remainingDays <= 0) {
@@ -837,19 +889,14 @@ class HrLeaveApiController extends Controller
         }
 
         // Days already used (excluding this one)
-        $usedDays = DB::table('leave_record')
-            ->where('staffId', $request->employee_id)
-            ->where('leave_type_id', $leaveType->id)
-            ->where('status', 2)
-            ->where('id', '!=', $id)
-            ->sum(DB::raw("DATEDIFF(end_date, start_date) + 1"));
+        $usedDays = $this->getUsedLeaveDaysForType($request->employee_id, $leaveType->id, $employee->office_shift ?? 0, $id);
 
         $start         = Carbon::parse($request->start_date);
         $end           = Carbon::parse($request->end_date);
-        $requestedDays = $start->diffInDays($end) + 1;
+        $requestedDays = $this->calculateShiftDurationDays($start, $end, $employee->office_shift ?? 0);
 
         if (($usedDays + $requestedDays) > $totalAllowed) {
-            $remaining = $totalAllowed - $usedDays;
+            $remaining = max(0, $totalAllowed - $usedDays);
             return response()->json([
                 'status'  => 'error',
                 'message' => "You have only {$remaining} remaining day(s). You cannot request {$requestedDays} days.",
