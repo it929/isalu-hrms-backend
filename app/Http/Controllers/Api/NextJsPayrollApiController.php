@@ -1213,11 +1213,16 @@ class NextJsPayrollApiController extends Controller
                 ->get();
 
              foreach ($oldDetails as $od) {
+                $staffId = $od->staffID ?? $od->staffid ?? null;
+                if (!$staffId) {
+                    continue;
+                }
+
                 // Revert coop_loan_deduction_setups balance_remaining
-                if ($od->coop_loan_rpyt > 0) {
+                if ((float)($od->coop_loan_rpyt ?? 0) > 0) {
                     $currentMonthStr = sprintf("%04d-%02d", $year, $month);
                     $setup = DB::table('coop_loan_deduction_setups')
-                        ->where('staffId', $od->staffID)
+                        ->where('staffId', $staffId)
                         ->where('start_month', '<=', $currentMonthStr)
                         ->where('end_month', '>=', $currentMonthStr)
                         ->orderBy('is_active', 'desc')
@@ -1234,10 +1239,10 @@ class NextJsPayrollApiController extends Controller
                 }
 
                 // Revert coop_savings_setups saving_balance
-                if ($od->coop_savings > 0) {
+                if ((float)($od->coop_savings ?? 0) > 0) {
                     $currentMonthStr = sprintf("%04d-%02d", $year, $month);
                     $setup = DB::table('coop_savings_setups')
-                        ->where('staffId', $od->staffID)
+                        ->where('staffId', $staffId)
                         ->where('start_month', '<=', $currentMonthStr)
                         ->orderBy('is_active', 'desc')
                         ->orderBy('id', 'desc')
@@ -1245,15 +1250,15 @@ class NextJsPayrollApiController extends Controller
                     if ($setup) {
                         DB::table('coop_savings_setups')
                             ->where('id', $setup->id)
-                            ->decrement('saving_balance', $od->coop_savings);
+                            ->decrement('saving_balance', (float)$od->coop_savings);
                     }
                 }
 
                 // Revert surcharge_deduction_setups balance_remaining
-                if ($od->surcharges > 0) {
+                if ((float)($od->surcharges ?? 0) > 0) {
                     $currentMonthStr = sprintf("%04d-%02d", $year, $month);
                     $setup = DB::table('surcharge_deduction_setups')
-                        ->where('staffId', $od->staffID)
+                        ->where('staffId', $staffId)
                         ->where('start_month', '<=', $currentMonthStr)
                         ->where(function($q) use ($currentMonthStr) {
                             $q->whereNull('end_month')
@@ -1274,10 +1279,10 @@ class NextJsPayrollApiController extends Controller
                 }
 
                 // Revert medical_loan_deduction_setups balance_remaining
-                if ($od->medical_loan > 0) {
+                if ((float)($od->medical_loan ?? 0) > 0) {
                     $currentMonthStr = sprintf("%04d-%02d", $year, $month);
                     $setup = DB::table('medical_loan_deduction_setups')
-                        ->where('staffId', $od->staffID)
+                        ->where('staffId', $staffId)
                         ->where('start_month', '<=', $currentMonthStr)
                         ->where('end_month', '>=', $currentMonthStr)
                         ->orderBy('is_active', 'desc')
@@ -1294,10 +1299,10 @@ class NextJsPayrollApiController extends Controller
                 }
 
                 // Revert absence_penalty_deduction_setups balance_remaining
-                if ($od->absence_penalty > 0) {
+                if ((float)($od->absence_penalty ?? 0) > 0) {
                     $currentMonthStr = sprintf("%04d-%02d", $year, $month);
                     $setup = DB::table('absence_penalty_deduction_setups')
-                        ->where('staffId', $od->staffID)
+                        ->where('staffId', $staffId)
                         ->where('start_month', '<=', $currentMonthStr)
                         ->where(function($q) use ($currentMonthStr) {
                             $q->whereNull('end_month')
@@ -1318,10 +1323,10 @@ class NextJsPayrollApiController extends Controller
                 }
 
                 // Revert other_deduction_setups balance_remaining
-                if ($od->other_deductions > 0) {
+                if ((float)($od->other_deductions ?? 0) > 0) {
                     $currentMonthStr = sprintf("%04d-%02d", $year, $month);
                     $setup = DB::table('other_deduction_setups')
-                        ->where('staffId', $od->staffID)
+                        ->where('staffId', $staffId)
                         ->where('start_month', '<=', $currentMonthStr)
                         ->where(function($q) use ($currentMonthStr) {
                             $q->whereNull('end_month')
@@ -1346,7 +1351,7 @@ class NextJsPayrollApiController extends Controller
                 if ($coopAssetFinanceCol > 0) {
                     $currentMonthStr = sprintf("%04d-%02d", $year, $month);
                     $setup = DB::table('coop_asset_finance_deduction_setups')
-                        ->where('staffId', $od->staffID)
+                        ->where('staffId', $staffId)
                         ->where('start_month', '<=', $currentMonthStr)
                         ->where(function($q) use ($currentMonthStr) {
                             $q->whereNull('end_month')
@@ -1367,10 +1372,10 @@ class NextJsPayrollApiController extends Controller
                 }
 
                 // Revert loan_deduction_setups balance_remaining OR fallback to employee_loans balance
-                if ($od->loan_deduction > 0) {
+                if ((float)($od->loan_deduction ?? 0) > 0) {
                     $currentMonthStr = sprintf("%04d-%02d", $year, $month);
                     $setup = DB::table('loan_deduction_setups')
-                        ->where('staffId', $od->staffID)
+                        ->where('staffId', $staffId)
                         ->where('start_month', '<=', $currentMonthStr)
                         ->where('end_month', '>=', $currentMonthStr)
                         ->orderBy('is_active', 'desc')
@@ -1385,22 +1390,22 @@ class NextJsPayrollApiController extends Controller
                             ]);
                     } else {
                         $empLoan = DB::table('employee_loans')
-                            ->where('staffId', $od->staffID)
+                            ->where('staffId', $staffId)
                             ->whereRaw("LOWER(status) = 'approved'")
                             ->orderBy('id', 'desc')
                             ->first();
                         if ($empLoan) {
                             DB::table('employee_loans')
                                 ->where('id', $empLoan->id)
-                                ->increment('balance', $od->loan_deduction);
+                                ->increment('balance', (float)$od->loan_deduction);
                         }
                     }
                 }
 
                 // Revert retention count in first_salary_structure if old conpt record had a retention deduction
-                if (isset($od->retention) && $od->retention > 0) {
+                if (isset($od->retention) && (float)$od->retention > 0) {
                     DB::table('first_salary_structure')
-                        ->where('staffId', $od->staffID)
+                        ->where('staffId', $staffId)
                         ->where('num_rente_months', '>', 0)
                         ->decrement('num_rente_months');
                 }
