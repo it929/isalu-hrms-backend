@@ -1162,8 +1162,8 @@ class NextJsPayrollApiController extends Controller
     public function computeSalary(Request $request)
     {
         $ctx = $this->getUserContext($request);
-        if (!$ctx || !$ctx['isSuperAdmin']) {
-            return response()->json(['status' => 'error', 'message' => 'Super Admin privileges required.'], 403);
+        if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isFinanceStaff'] && !$ctx['isAdminStaff'])) {
+            return response()->json(['status' => 'error', 'message' => 'Super Admin or Finance Head privileges required.'], 403);
         }
 
         try {
@@ -1192,6 +1192,17 @@ class NextJsPayrollApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Invalid month specified.'], 422);
             }
 
+            // Check if payroll has already been disbursed/paid
+            $hasPaidStage = DB::table('payroll_conpt')
+                ->where('year', $year)
+                ->where('month', $month)
+                ->where('vstage', '>=', 4)
+                ->exists();
+
+            if ($hasPaidStage) {
+                return response()->json(['status' => 'error', 'message' => 'Cannot compute: payroll for this month has already been paid and disbursed.'], 400);
+            }
+
             // Check if active month is locked
             $isLocked = DB::table('payroll_conpt')
                 ->where('year', $year)
@@ -1199,8 +1210,14 @@ class NextJsPayrollApiController extends Controller
                 ->where('salary_lock', 1)
                 ->exists();
 
-            if ($isLocked) {
-                return response()->json(['status' => 'error', 'message' => 'Cannot compute: this active month is locked.'], 400);
+            $forceUnlock = (bool)$request->input('force_unlock', false);
+
+            if ($isLocked && !$forceUnlock) {
+                return response()->json([
+                    'status'    => 'error',
+                    'is_locked' => true,
+                    'message'   => 'Cannot compute: this active month is currently locked. Unlock the period to recompute.'
+                ], 400);
             }
 
             // Start transaction

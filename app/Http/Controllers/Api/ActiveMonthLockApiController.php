@@ -110,11 +110,18 @@ class ActiveMonthLockApiController extends Controller
             }
 
             return response()->json([
-                'status'       => 'success',
-                'activePeriod' => $payrollActivePeriod,
+                'status'         => 'success',
+                'activePeriod'   => $payrollActivePeriod,
                 'total_computed' => $total,
                 'max_vstage'     => $maxVstage,
-                'lock_status'    => $status
+                'lock_status'    => $status,
+                'userCtx'        => [
+                    'isSuperAdmin'   => (bool)($ctx['isSuperAdmin'] ?? false),
+                    'isFinanceStaff' => (bool)($ctx['isFinanceStaff'] ?? false),
+                    'isAdminStaff'   => (bool)($ctx['isAdminStaff'] ?? false),
+                    'isAuditStaff'   => (bool)($ctx['isAuditStaff'] ?? false),
+                    'canManage'      => (bool)(($ctx['isSuperAdmin'] ?? false) || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAdminStaff'] ?? false)),
+                ]
             ]);
         } catch (\Throwable $th) {
             Log::error('ActiveMonthLockApiController index: ' . $th->getMessage());
@@ -132,6 +139,10 @@ class ActiveMonthLockApiController extends Controller
             $ctx = $this->getUserContext($request);
             if (!$ctx) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            if (!$ctx['isSuperAdmin'] && !$ctx['isFinanceStaff'] && !$ctx['isAdminStaff']) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied: Super Admin or Finance Head privileges required.'], 403);
             }
 
             $request->validate([
@@ -177,6 +188,10 @@ class ActiveMonthLockApiController extends Controller
             $ctx = $this->getUserContext($request);
             if (!$ctx) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            if (!$ctx['isSuperAdmin'] && !$ctx['isFinanceStaff'] && !$ctx['isAdminStaff']) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied: Super Admin or Finance Head privileges required.'], 403);
             }
 
             $request->validate([
@@ -235,6 +250,10 @@ class ActiveMonthLockApiController extends Controller
             $ctx = $this->getUserContext($request);
             if (!$ctx) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
+            }
+
+            if (!$ctx['isSuperAdmin'] && !$ctx['isFinanceStaff'] && !$ctx['isAdminStaff']) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied: Super Admin or Finance Head privileges required.'], 403);
             }
 
             $request->validate([
