@@ -36,10 +36,25 @@ class ResignationApiController extends Controller
                 )
                 ->orderBy('p.surname', 'asc');
 
-            // Non-admins can only select themselves (unless they are HODs, who can select staff in their department)
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                if ($ctx['isHod']) {
-                    $hodDeptId = ($ctx['isDelegatedHod'] ?? false) ? $ctx['delegated_department_id'] : ($ctx['employee'] ? $ctx['employee']->departmentID : null);
+            $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+            $isStaffRole = ($activeRole === 'staff');
+
+            // Privileged roles: Super Admin, HR Head, Finance Head, Audit Head
+            $isPrivileged = !$isStaffRole && (
+                !empty($ctx['isSuperAdmin']) 
+                || !empty($ctx['isAdminStaff']) 
+                || !empty($ctx['isFinanceStaff']) 
+                || !empty($ctx['isAuditStaff'])
+                || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance', 'audit head', 'head of audit'])
+            );
+
+            $isActualHod = !$isStaffRole && $ctx['employee'] && (
+                !empty($ctx['isHod']) || $activeRole === 'hod' || (isset($ctx['employee']->is_hod) && (int)$ctx['employee']->is_hod === 1)
+            );
+
+            if (!$isPrivileged) {
+                if ($isActualHod) {
+                    $hodDeptId = (!empty($ctx['isDelegatedHod'])) ? $ctx['delegated_department_id'] : $ctx['employee']->departmentID;
                     $query->where('p.departmentID', $hodDeptId);
                 } elseif ($ctx['employee']) {
                     $query->where('p.ID', $ctx['employee']->ID);
@@ -111,48 +126,40 @@ class ResignationApiController extends Controller
                 });
             }
 
+            $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+            $isStaffRole = ($activeRole === 'staff');
+
             $employee = $ctx['employee'];
 
-            if ($ctx['isSuperAdmin'] || $ctx['isFinanceStaff'] || $ctx['isAuditStaff']) {
-                // Admins, Finance and Audit see all requests
-            } else {
-                $query->where(function ($q) use ($ctx, $employee) {
-                    $hasCondition = false;
+            // Privileged management roles: Super Admin, HR Head, Finance Head, Audit Head
+            $isPrivileged = !$isStaffRole && (
+                !empty($ctx['isSuperAdmin']) 
+                || !empty($ctx['isAdminStaff']) 
+                || !empty($ctx['isFinanceStaff']) 
+                || !empty($ctx['isAuditStaff'])
+                || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance', 'audit head', 'head of audit'])
+            );
 
-                    // 1. Own records
-                    if ($employee) {
-                        $q->where('rr.staff_id', $employee->ID);
-                        $hasCondition = true;
-                    }
+            $isActualHod = !$isStaffRole && $employee && (
+                !empty($ctx['isHod']) || $activeRole === 'hod' || (isset($employee->is_hod) && (int)$employee->is_hod === 1)
+            );
 
-                    // 2. HR HEAD sees HOD approved (hod_status = 1) or processed (admin_status != 0) records
-                    if ($ctx['isAdminStaff']) {
-                        if ($hasCondition) {
-                            $q->orWhere('rr.hod_status', 1)->orWhere('rr.admin_status', '!=', 0);
-                        } else {
-                            $q->where(function($sub) {
-                                $sub->where('rr.hod_status', 1)->orWhere('rr.admin_status', '!=', 0);
-                            });
-                        }
-                        $hasCondition = true;
-                    }
-
-                    // 3. HOD sees department staff requests
-                    if ($employee && $ctx['isHod']) {
-                        $hodDeptId = ($ctx['isDelegatedHod'] ?? false) ? $ctx['delegated_department_id'] : $employee->departmentID;
-                        if ($hasCondition) {
-                            $q->orWhere('p.departmentID', $hodDeptId);
-                        } else {
-                            $q->where('p.departmentID', $hodDeptId);
-                        }
-                        $hasCondition = true;
-                    }
-
-                    // Fallback if no roles matched
-                    if (!$hasCondition) {
-                        $q->where('rr.id', 0);
-                    }
+            if ($isPrivileged) {
+                // HR Head, Finance Head, Audit Head, and Super Admin see all staff records
+            } elseif ($isActualHod) {
+                // HOD sees staff in their department (for approval) and their own record
+                $hodDeptId = (!empty($ctx['isDelegatedHod'])) ? $ctx['delegated_department_id'] : $employee->departmentID;
+                $query->where(function ($q) use ($employee, $hodDeptId) {
+                    $q->where('rr.staff_id', $employee->ID)
+                      ->orWhere('p.departmentID', $hodDeptId);
                 });
+            } else {
+                // Regular staff strictly see their own record alone
+                if ($employee) {
+                    $query->where('rr.staff_id', $employee->ID);
+                } else {
+                    $query->where('rr.id', 0);
+                }
             }
 
             $records = $query->orderBy('rr.id', 'desc')->get()->map(function ($row) {
@@ -521,6 +528,42 @@ class ResignationApiController extends Controller
                 $query->where('rr.resignation_date', '<=', $toDate);
             }
 
+            $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+            $isStaffRole = ($activeRole === 'staff');
+
+            $employee = $ctx['employee'];
+
+            // Privileged management roles: Super Admin, HR Head, Finance Head, Audit Head
+            $isPrivileged = !$isStaffRole && (
+                !empty($ctx['isSuperAdmin']) 
+                || !empty($ctx['isAdminStaff']) 
+                || !empty($ctx['isFinanceStaff']) 
+                || !empty($ctx['isAuditStaff'])
+                || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance', 'audit head', 'head of audit'])
+            );
+
+            $isActualHod = !$isStaffRole && $employee && (
+                !empty($ctx['isHod']) || $activeRole === 'hod' || (isset($employee->is_hod) && (int)$employee->is_hod === 1)
+            );
+
+            if ($isPrivileged) {
+                // HR Head, Audit Head, Finance Head, and Super Admin see all approved records
+            } elseif ($isActualHod) {
+                // HOD sees staff in their department + their own record
+                $hodDeptId = (!empty($ctx['isDelegatedHod'])) ? $ctx['delegated_department_id'] : $employee->departmentID;
+                $query->where(function ($q) use ($employee, $hodDeptId) {
+                    $q->where('rr.staff_id', $employee->ID)
+                      ->orWhere('p.departmentID', $hodDeptId);
+                });
+            } else {
+                // Regular staff strictly see their own record alone
+                if ($employee) {
+                    $query->where('rr.staff_id', $employee->ID);
+                } else {
+                    $query->where('rr.id', 0);
+                }
+            }
+
             $rawRecords = $query->orderBy('rr.admin_date', 'desc')->orderBy('rr.id', 'desc')->get();
 
             // Compute summary metrics for list view
@@ -565,6 +608,12 @@ class ResignationApiController extends Controller
                     'is_admin_staff'   => (bool)$ctx['isAdminStaff'],
                     'is_audit_staff'   => (bool)$ctx['isAuditStaff'],
                     'is_finance_staff' => (bool)$ctx['isFinanceStaff'],
+                    'is_hod'           => (bool)$isActualHod,
+                    'is_privileged'    => (bool)$isPrivileged,
+                    'employee'         => $ctx['employee'] ? [
+                        'id' => $ctx['employee']->ID,
+                        'name' => trim("{$ctx['employee']->surname} {$ctx['employee']->first_name}"),
+                    ] : null,
                 ]
             ]);
         } catch (\Throwable $th) {
@@ -585,9 +634,40 @@ class ResignationApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized.'], 401);
             }
 
+            $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+            $isStaffRole = ($activeRole === 'staff');
+            $employee = $ctx['employee'];
+
+            $isPrivileged = !$isStaffRole && (
+                !empty($ctx['isSuperAdmin']) 
+                || !empty($ctx['isAdminStaff']) 
+                || !empty($ctx['isFinanceStaff']) 
+                || !empty($ctx['isAuditStaff'])
+                || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance', 'audit head', 'head of audit'])
+            );
+
+            $isActualHod = !$isStaffRole && $employee && (
+                !empty($ctx['isHod']) || $activeRole === 'hod' || (isset($employee->is_hod) && (int)$employee->is_hod === 1)
+            );
+
             $settlementData = $this->computeDetailedSettlement($id);
             if (!$settlementData) {
                 return response()->json(['status' => 'error', 'message' => 'Approved resignation record not found.'], 404);
+            }
+
+            // Authorization check
+            if (!$isPrivileged) {
+                if ($isActualHod) {
+                    $hodDeptId = (!empty($ctx['isDelegatedHod'])) ? $ctx['delegated_department_id'] : $employee->departmentID;
+                    $staffRec = DB::table('tblper')->where('ID', $settlementData['resignation']->staff_id)->first();
+                    if ($settlementData['resignation']->staff_id != $employee->ID && (!$staffRec || $staffRec->departmentID != $hodDeptId)) {
+                        return response()->json(['status' => 'error', 'message' => 'Unauthorized to view this settlement.'], 403);
+                    }
+                } else {
+                    if (!$employee || $settlementData['resignation']->staff_id != $employee->ID) {
+                        return response()->json(['status' => 'error', 'message' => 'Unauthorized to view this settlement.'], 403);
+                    }
+                }
             }
 
             $settlementData['user_permissions'] = [
@@ -595,6 +675,8 @@ class ResignationApiController extends Controller
                 'is_admin_staff'   => (bool)$ctx['isAdminStaff'],
                 'is_audit_staff'   => (bool)$ctx['isAuditStaff'],
                 'is_finance_staff' => (bool)$ctx['isFinanceStaff'],
+                'is_hod'           => (bool)$isActualHod,
+                'is_privileged'    => (bool)$isPrivileged,
             ];
 
             return response()->json([
@@ -1550,6 +1632,36 @@ class ResignationApiController extends Controller
             $settlementData = $this->computeDetailedSettlement($id);
             if (!$settlementData) {
                 return response()->json(['status' => 'error', 'message' => 'Approved resignation record not found.'], 404);
+            }
+
+            $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+            $isStaffRole = ($activeRole === 'staff');
+            $employee = $ctx['employee'];
+
+            $isPrivileged = !$isStaffRole && (
+                !empty($ctx['isSuperAdmin']) 
+                || !empty($ctx['isAdminStaff']) 
+                || !empty($ctx['isFinanceStaff']) 
+                || !empty($ctx['isAuditStaff'])
+                || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance', 'audit head', 'head of audit'])
+            );
+
+            $isActualHod = !$isStaffRole && $employee && (
+                !empty($ctx['isHod']) || $activeRole === 'hod' || (isset($employee->is_hod) && (int)$employee->is_hod === 1)
+            );
+
+            if (!$isPrivileged) {
+                if ($isActualHod) {
+                    $hodDeptId = (!empty($ctx['isDelegatedHod'])) ? $ctx['delegated_department_id'] : $employee->departmentID;
+                    $staffRec = DB::table('tblper')->where('ID', $settlementData['resignation']->staff_id)->first();
+                    if ($settlementData['resignation']->staff_id != $employee->ID && (!$staffRec || $staffRec->departmentID != $hodDeptId)) {
+                        return response()->json(['status' => 'error', 'message' => 'Unauthorized to download this settlement PDF.'], 403);
+                    }
+                } else {
+                    if (!$employee || $settlementData['resignation']->staff_id != $employee->ID) {
+                        return response()->json(['status' => 'error', 'message' => 'Unauthorized to download this settlement PDF.'], 403);
+                    }
+                }
             }
 
             $pdfHtml = $this->buildSettlementSlipPdfHtml($settlementData);
