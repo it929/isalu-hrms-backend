@@ -223,8 +223,10 @@ class OtherDeductionSetupApiController extends Controller
             $startMonthNum = (int)$monthParts[1];
 
             $breakdownCtrl = app(\App\Http\Controllers\Api\SalaryBreakdownApiController::class);
+            $adminUserId = DB::table('users')->where('is_global', 1)->value('id') ?? ($ctx['userId'] ?? 10018);
             $breakdownReq = Request::create("/api/nextjs/payroll/salary-breakdown?staff_id={$validated['staffId']}&month={$startMonthNum}&year={$startYear}", 'GET', [], [], [], [
-                'HTTP_X_USER_ID' => $ctx['userId'] ?? 1,
+                'HTTP_X_USER_ID' => $adminUserId,
+                'HTTP_X_INTERNAL_CALL' => '1',
             ]);
             $breakdownRes = $breakdownCtrl->getBreakdown($breakdownReq);
             $breakdownData = json_decode($breakdownRes->getContent(), true);
