@@ -90,7 +90,8 @@ class SalaryBreakdownApiController extends Controller
 
             $currentUser = $ctx['employee'];
             $requestedStaffId = $request->query('staff_id');
-            $canGenerateAll = ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff'] || $ctx['isFinanceStaff']);
+            $isInternal = $request->header('X-Internal-Call') === '1';
+            $canGenerateAll = $isInternal || ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff'] || $ctx['isFinanceStaff']);
 
             // Determine effective staff ID based on role permissions
             $staffId = null;
@@ -494,7 +495,7 @@ class SalaryBreakdownApiController extends Controller
             }
 
             // 12. Other Deduction Setup
-            $otherDeductSetup = DB::table('other_deduction_setups')
+            $otherDeductSetups = DB::table('other_deduction_setups')
                 ->where('staffId', $staffId)
                 ->where('is_active', 1)
                 ->where(function($q) {
@@ -508,14 +509,41 @@ class SalaryBreakdownApiController extends Controller
                       ->orWhere('end_month', '>=', $currentMonthStr);
                 })
                 ->orderBy('id', 'desc')
-                ->first();
+                ->get();
+
+            $otherDeduct = 0.00;
             $otherDeductBal = 0.00;
-            if ($otherDeductSetup) {
-                $otherDeductBal = (float)$otherDeductSetup->balance_remaining > 0
-                    ? (float)$otherDeductSetup->balance_remaining
-                    : ((float)$otherDeductSetup->total_amount > 0 ? (float)$otherDeductSetup->total_amount : (float)$otherDeductSetup->monthly_deduction);
+            $otherRemarksList = [];
+            $otherDeductItems = [];
+
+            foreach ($otherDeductSetups as $setup) {
+                $bal = (float)$setup->balance_remaining > 0
+                    ? (float)$setup->balance_remaining
+                    : ((float)$setup->total_amount > 0 ? (float)$setup->total_amount : (float)$setup->monthly_deduction);
+                $amt = min((float)$setup->monthly_deduction, $bal);
+                $otherDeduct += $amt;
+                $otherDeductBal += $bal;
+
+                if (!empty($setup->remarks)) {
+                    $otherRemarksList[] = trim($setup->remarks);
+                }
+
+                $otherDeductItems[] = [
+                    'id' => $setup->id,
+                    'remarks' => $setup->remarks ?? '',
+                    'amount' => $amt,
+                    'monthly_deduction' => (float)$setup->monthly_deduction,
+                    'balance_remaining' => $bal,
+                    'calculation_mode' => $setup->calculation_mode,
+                    'deduction_days' => $setup->deduction_days ? (float)$setup->deduction_days : null,
+                    'daily_rate' => $setup->daily_rate ? (float)$setup->daily_rate : null,
+                    'deduction_type' => $setup->deduction_type,
+                    'start_month' => $setup->start_month,
+                    'end_month' => $setup->end_month,
+                ];
             }
-            $otherDeduct = $otherDeductSetup ? min((float)$otherDeductSetup->monthly_deduction, $otherDeductBal) : 0.00;
+
+            $otherRemarksTag = !empty($otherRemarksList) ? implode(', ', array_unique($otherRemarksList)) : null;
 
             // 13. Leave of Absence Deduction
             $loaDays = 0;
@@ -774,9 +802,11 @@ class SalaryBreakdownApiController extends Controller
                     'other_deductions' => [
                         'amount' => $otherDeduct,
                         'monthly_deduction' => $otherDeduct,
-                        'balance_remaining' => $otherDeductSetup ? (float)$otherDeductSetup->balance_remaining : 0.00,
-                        'is_active' => ($otherDeduct > 0 || $otherDeductSetup !== null),
-                        'label' => 'Other Deductions'
+                        'balance_remaining' => $otherDeductBal,
+                        'remarks' => $otherRemarksTag,
+                        'items' => $otherDeductItems,
+                        'is_active' => ($otherDeduct > 0 || count($otherDeductSetups) > 0),
+                        'label' => $otherRemarksTag ? "Other Deductions ({$otherRemarksTag})" : 'Other Deductions'
                     ],
                     'total_deductions' => round($totalDeductions, 2)
                 ],
@@ -1752,8 +1782,21 @@ class SalaryBreakdownApiController extends Controller
             $coopLoanBals = \Illuminate\Support\Facades\Schema::hasTable('coop_loan_deduction_setups') ? DB::table('coop_loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray() : [];
             $coopAssetBals = \Illuminate\Support\Facades\Schema::hasTable('coop_asset_finance_deduction_setups') ? DB::table('coop_asset_finance_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray() : [];
             $medLoanBals = \Illuminate\Support\Facades\Schema::hasTable('medical_loan_deduction_setups') ? DB::table('medical_loan_deduction_setups')->whereIn('staffId', $staffIds)->where('is_active', 1)->pluck('balance_remaining', 'staffId')->toArray() : [];
+            $otherRemarksByStaff = \Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups') ? DB::table('other_deduction_setups')
+                ->whereIn('staffId', $staffIds)
+                ->where('start_month', '<=', $currentMonthStr)
+                ->where(function($q) use ($currentMonthStr) {
+                    $q->whereNull('end_month')
+                      ->orWhere('end_month', '=', '')
+                      ->orWhere('end_month', '>=', $currentMonthStr);
+                })
+                ->get()
+                ->groupBy('staffId')
+                ->map(function($items) {
+                    return $items->pluck('remarks')->filter()->unique()->implode(', ');
+                })->toArray() : [];
 
-            $mapped = $rows->map(function($r) use ($loanBals, $empLoanBals, $coopSavingsBals, $coopLoanBals, $coopAssetBals, $medLoanBals) {
+            $mapped = $rows->map(function($r) use ($loanBals, $empLoanBals, $coopSavingsBals, $coopLoanBals, $coopAssetBals, $medLoanBals, $otherRemarksByStaff) {
                 $sid = $r->id;
                 $basicSum = (float)$r->basic_salary + (float)$r->housing_allowance + (float)$r->transport_allowance + (float)$r->medical_allowance + (float)$r->utility_allowance + (float)$r->meal_allowance;
                 $varAllowances = max(0.00, (float)$r->gross_pay - $basicSum);
@@ -1793,6 +1836,7 @@ class SalaryBreakdownApiController extends Controller
                     'leave_of_absence' => (float)$r->leave_of_absence,
                     'regular_loan' => (float)$r->regular_loan,
                     'other_deductions' => (float)$r->other_deductions,
+                    'other_deductions_remarks' => $otherRemarksByStaff[$sid] ?? '',
                     'total_deductions' => (float)$r->total_deductions,
                     'net_pay' => (float)$r->net_pay,
                     'bank_name' => $r->bank_name ?? '—',
@@ -2205,6 +2249,7 @@ class SalaryBreakdownApiController extends Controller
                     : ((float)$othSetup->total_amount > 0 ? (float)$othSetup->total_amount : (float)$othSetup->monthly_deduction);
             }
             $otherDeduct = $othSetup ? min((float)$othSetup->monthly_deduction, $othBal) : 0.00;
+            $otherDeductRemarks = $othSetup ? ($othSetup->remarks ?? '') : '';
 
             $totalDeductions = round(
                 $payeTax + $pension + $retention + $iou + $medLoan + $coopLoan +
@@ -2252,6 +2297,7 @@ class SalaryBreakdownApiController extends Controller
                 'leave_of_absence' => $leaveOfAbsence,
                 'regular_loan' => $regularLoan,
                 'other_deductions' => $otherDeduct,
+                'other_deductions_remarks' => $otherDeductRemarks,
                 'total_deductions' => $totalDeductions,
                 'net_pay' => $netPay,
                 'bank_name' => $staff->bank_name ?? '—',

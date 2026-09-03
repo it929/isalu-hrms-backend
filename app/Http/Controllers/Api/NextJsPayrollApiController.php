@@ -2666,13 +2666,25 @@ class NextJsPayrollApiController extends Controller
             ];
             $month = $monthNames[strtoupper($monthName)] ?? (int)date('n');
 
+            $requestedMonth = $request->query('month');
+            $requestedYear = $request->query('year');
+            if (!empty($requestedMonth) && is_numeric($requestedMonth)) {
+                $month = (int)$requestedMonth;
+                $monthName = date('F', mktime(0, 0, 0, $month, 1, $year));
+            }
+            if (!empty($requestedYear) && is_numeric($requestedYear)) {
+                $year = (int)$requestedYear;
+            }
+
             $excludeType = $request->query('exclude_type');
             $excludeId = $request->query('exclude_id');
 
             // Use the canonical SalaryBreakdownApiController calculation engine
             $breakdownCtrl = app(\App\Http\Controllers\Api\SalaryBreakdownApiController::class);
+            $adminUserId = DB::table('users')->where('is_global', 1)->value('id') ?? ($ctx['userId'] ?? 10018);
             $breakdownReq = Request::create("/api/nextjs/payroll/salary-breakdown?staff_id={$staffId}&month={$month}&year={$year}", 'GET', [], [], [], [
-                'HTTP_X_USER_ID' => $ctx['userId'] ?? 1,
+                'HTTP_X_USER_ID' => $adminUserId,
+                'HTTP_X_INTERNAL_CALL' => '1',
             ]);
             $breakdownRes = $breakdownCtrl->getBreakdown($breakdownReq);
             $breakdownData = json_decode($breakdownRes->getContent(), true);
