@@ -305,7 +305,8 @@ class NextJsApiController extends Controller
 
         try {
             // Check if superadmin/technical user
-            $isTechnical = \DB::table('assign_user_role')
+            $userRec = \DB::table('users')->where('id', $userId)->first();
+            $isTechnical = ($userRec && (int)$userRec->is_global === 1) || \DB::table('assign_user_role')
                 ->where('userID', $userId)
                 ->where('roleID', 1) // roleID 1 is Super Admin
                 ->exists();

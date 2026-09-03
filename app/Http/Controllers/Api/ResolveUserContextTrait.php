@@ -119,7 +119,7 @@ trait ResolveUserContextTrait
 
                 // Check for general HOD approval roles
                 $hodRoles = array_filter($perms, fn($p) => is_string($p) && str_starts_with($p, 'approve_'));
-                if (!empty($hodRoles) || !$isHod) {
+                if (!empty($hodRoles)) {
                     $isHod = true;
                     $isDelegatedHod = true;
                 }
