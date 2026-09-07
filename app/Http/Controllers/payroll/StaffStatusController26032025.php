@@ -94,7 +94,7 @@ class StaffStatusController extends ParentController
 			]);
 			$staffStatus         = trim($request['staffStatus']);
 
-			if ( ($staffStatus == "active service") || ($staffStatus == "contract service") ||  ($staffStatus == "maternity leave") )
+			if ( ($staffStatus == "active service") || ($staffStatus == "contract service")  )
 				$value = 1;
 			else
 				$value = 0;

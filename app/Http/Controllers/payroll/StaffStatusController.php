@@ -125,7 +125,7 @@ class StaffStatusController extends ParentController
             // ]);
 
             // Allowed statuses
-            $allowedStatuses = ["active service", "contract service", "maternity leave"];
+            $allowedStatuses = ["active service", "contract service"];
 
             // If staffStatus is in the allowed list, set value = 1, else 0
             $value = in_array($staffStatus, $allowedStatuses) ? 1 : 0;
