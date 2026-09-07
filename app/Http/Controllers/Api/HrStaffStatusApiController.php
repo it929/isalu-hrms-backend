@@ -206,7 +206,7 @@ class HrStaffStatusApiController extends Controller
                 }
 
                 $staffStatus = trim($request->input('staffStatus'));
-                $allowedStatuses = ["active service", "contract service", "maternity leave"];
+                $allowedStatuses = ["active service", "contract service"];
                 $value = in_array(strtolower($staffStatus), $allowedStatuses) ? 1 : 0;
 
                 DB::table('tblper')

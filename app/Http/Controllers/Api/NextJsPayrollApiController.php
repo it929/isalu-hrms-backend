@@ -1460,6 +1460,27 @@ class NextJsPayrollApiController extends Controller
                 ]);
             }
 
+            // Automatically deactivate staff with approved resignations prior to this payroll month:
+            // Staff who resigned on 11th+ remain active for their resignation month only.
+            // When payroll runs for any month subsequent to their resignation month, they are deactivated (staff_status = 0).
+            $currentMonthStart = sprintf('%04d-%02d-01', $year, $month);
+            $priorResignedStaffIds = DB::table('resignation_requests')
+                ->where('admin_status', 1)
+                ->where('resignation_date', '<', $currentMonthStart)
+                ->pluck('staff_id')
+                ->all();
+
+            if (!empty($priorResignedStaffIds)) {
+                DB::table('tblper')
+                    ->whereIn('ID', $priorResignedStaffIds)
+                    ->where('staff_status', 1)
+                    ->update([
+                        'staff_status' => 0,
+                        'status_value' => 'resignation',
+                        'updated_at'   => now(),
+                    ]);
+            }
+
             $employees = DB::table('tblper')
                 ->where('rank', '!=', 2) // Exclude terminated/retired
                 ->where('staff_status', 1) // Only active service status
