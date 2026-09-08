@@ -58,7 +58,16 @@ trait ResolveUserContextTrait
             }
         }
 
-        $isHod = $employee && $employee->is_hod == 1;
+        if ($employee && !empty($employee->departmentID)) {
+            $deptRec = DB::table('tbldepartment')->where('id', $employee->departmentID)->first();
+            if ($deptRec) {
+                $employee->department_name = $deptRec->department;
+                $employee->department = $deptRec->department;
+            }
+        }
+
+        $isHodRole = in_array(84, $roleIds) || in_array('hod', $roleNames) || in_array('head of department', $roleNames);
+        $isHod = ($employee && (int)$employee->is_hod === 1) || $isHodRole;
         $isDelegatedHod = false;
         $delegatedPermissions = [];
         $delegatedDepartmentId = null;
@@ -174,7 +183,8 @@ trait ResolveUserContextTrait
     {
         if (!$ctx) return false;
         if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff']) return true;
-        if ($ctx['employee'] && $ctx['employee']->is_hod == 1) return true;
+        if (!empty($ctx['isHod'])) return true;
+        if ($ctx['employee'] && (int)$ctx['employee']->is_hod === 1) return true;
 
         if (isset($ctx['isDelegatedHod']) && $ctx['isDelegatedHod']) {
             return in_array($permission, $ctx['delegatedPermissions']);
