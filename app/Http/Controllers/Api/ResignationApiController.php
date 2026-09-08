@@ -37,10 +37,9 @@ class ResignationApiController extends Controller
                 ->orderBy('p.surname', 'asc');
 
             $activeRole = strtolower(trim($request->header('X-User-Role', '')));
-            $isStaffRole = ($activeRole === 'staff');
 
             // Privileged roles: Super Admin, HR Head, Finance Head, Audit Head
-            $isPrivileged = !$isStaffRole && (
+            $isPrivileged = (
                 !empty($ctx['isSuperAdmin']) 
                 || !empty($ctx['isAdminStaff']) 
                 || !empty($ctx['isFinanceStaff']) 
@@ -48,7 +47,7 @@ class ResignationApiController extends Controller
                 || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance', 'audit head', 'head of audit'])
             );
 
-            $isActualHod = !$isStaffRole && $ctx['employee'] && (
+            $isActualHod = $ctx['employee'] && (
                 !empty($ctx['isHod']) || $activeRole === 'hod' || (isset($ctx['employee']->is_hod) && (int)$ctx['employee']->is_hod === 1)
             );
 
@@ -107,6 +106,7 @@ class ResignationApiController extends Controller
                 ->leftJoin('users as u_finance', 'u_finance.id', '=', 'rr.finance_id')
                 ->select(
                     'rr.*',
+                    'p.departmentID',
                     'p.fileNo',
                     'p.surname',
                     'p.first_name',
@@ -127,12 +127,11 @@ class ResignationApiController extends Controller
             }
 
             $activeRole = strtolower(trim($request->header('X-User-Role', '')));
-            $isStaffRole = ($activeRole === 'staff');
 
             $employee = $ctx['employee'];
 
             // Privileged management roles: Super Admin, HR Head, Finance Head, Audit Head
-            $isPrivileged = !$isStaffRole && (
+            $isPrivileged = (
                 !empty($ctx['isSuperAdmin']) 
                 || !empty($ctx['isAdminStaff']) 
                 || !empty($ctx['isFinanceStaff']) 
@@ -140,7 +139,7 @@ class ResignationApiController extends Controller
                 || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance', 'audit head', 'head of audit'])
             );
 
-            $isActualHod = !$isStaffRole && $employee && (
+            $isActualHod = $employee && (
                 !empty($ctx['isHod']) || $activeRole === 'hod' || (isset($employee->is_hod) && (int)$employee->is_hod === 1)
             );
 
@@ -340,7 +339,8 @@ class ResignationApiController extends Controller
             // HOD department check
             if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
                 $employee = DB::table('tblper')->where('ID', $record->staff_id)->first();
-                if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
+                $hodDeptId = (!empty($ctx['isDelegatedHod'])) ? $ctx['delegated_department_id'] : ($ctx['employee']->departmentID ?? null);
+                if (!$employee || (int)$employee->departmentID !== (int)$hodDeptId) {
                     return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
                 }
             }
@@ -383,7 +383,8 @@ class ResignationApiController extends Controller
 
             if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
                 $employee = DB::table('tblper')->where('ID', $record->staff_id)->first();
-                if (!$employee || $employee->departmentID != $ctx['employee']->departmentID) {
+                $hodDeptId = (!empty($ctx['isDelegatedHod'])) ? $ctx['delegated_department_id'] : ($ctx['employee']->departmentID ?? null);
+                if (!$employee || (int)$employee->departmentID !== (int)$hodDeptId) {
                     return response()->json(['status' => 'error', 'message' => 'Access denied: staff belongs to a different department.'], 403);
                 }
             }

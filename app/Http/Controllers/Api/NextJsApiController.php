@@ -270,21 +270,26 @@ class NextJsApiController extends Controller
      */
     public function getDashboardStats()
     {
-        $totalStaff = \DB::table('tblper')->count();
-        $maleStaff = \DB::table('tblper')->where('gender', 'Male')->count();
-        $femaleStaff = \DB::table('tblper')->where('gender', 'Female')->count();
+        $totalStaff = \DB::table('tblper')->where('staff_status', 1)->count();
+        $maleStaff = \DB::table('tblper')->where('gender', 'Male')->where('staff_status', 1)->count();
+        $femaleStaff = \DB::table('tblper')->where('gender', 'Female')->where('staff_status', 1)->count();
 
-        // Get count of staff in each department (including departments with 0 staff)
+        // Get count of active staff in each department (excluding departments with 0 staff)
         $departments = \DB::table('tbldepartment')
-            ->leftJoin('tblper', 'tblper.departmentID', '=', 'tbldepartment.id')
+            ->leftJoin('tblper', function ($join) {
+                $join->on('tblper.departmentID', '=', 'tbldepartment.id')
+                    ->where('tblper.staff_status', '=', 1);
+            })
             ->select('tbldepartment.department as name', \DB::raw('count(tblper.ID) as value'))
             ->groupBy('tbldepartment.id', 'tbldepartment.department')
+            ->having('value', '>', 0)
+            ->orderBy('value', 'desc')
             ->get();
         
         // Mocking other stats for now as they require leave/task tables
         return response()->json([
             'stats' => [
-                ['label' => 'Total Employees', 'value' => number_format($totalStaff), 'icon' => 'Users', 'color' => 'var(--primary)'],
+                ['label' => 'Total Active Employees', 'value' => number_format($totalStaff), 'icon' => 'Users', 'color' => 'var(--primary)'],
                 ['label' => 'Male Staff', 'value' => number_format($maleStaff), 'icon' => 'Users', 'color' => '#10b981'],
                 ['label' => 'Female Staff', 'value' => number_format($femaleStaff), 'icon' => '#f59e0b', 'color' => '#f59e0b'],
             ],
