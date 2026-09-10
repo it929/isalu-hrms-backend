@@ -504,9 +504,12 @@ class ResignationApiController extends Controller
                 ->select(
                     'rr.*',
                     'p.fileNo',
+                    'p.office_shift',
                     'p.surname',
                     'p.first_name',
                     'p.othernames',
+                    'p.appointment_date',
+                    'p.doj',
                     'p.staff_status',
                     'p.status_value',
                     'd.department',
@@ -589,6 +592,10 @@ class ResignationApiController extends Controller
             $records = $rawRecords->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $calc = $this->calculateQuickSettlement($row);
+                $appt = !empty($row->appointment_date) && $row->appointment_date !== '0000-00-00'
+                    ? $row->appointment_date
+                    : (!empty($row->doj) && $row->doj !== '0000-00-00' ? $row->doj : null);
+                $row->appointment_date = $appt;
                 $row->exit_date = $calc['exit_date'];
                 $row->notice_days = $calc['notice_days'];
                 $row->monthly_gross = $calc['monthly_gross'];
@@ -772,6 +779,7 @@ class ResignationApiController extends Controller
             ->select(
                 'rr.*',
                 'p.fileNo',
+                'p.office_shift',
                 'p.surname',
                 'p.first_name',
                 'p.othernames',
@@ -780,6 +788,7 @@ class ResignationApiController extends Controller
                 'p.phone as staff_phone',
                 'u_staff.email as user_account_email',
                 'p.appointment_date',
+                'p.doj',
                 'p.AccNo as account_no',
                 'p.staff_status',
                 'p.status_value',
@@ -1013,87 +1022,117 @@ class ResignationApiController extends Controller
 
         $totalNoticePayeTax = 0.00;
         $totalNoticePension = 0.00;
-        foreach ($noticeBreakdown as $b) {
-            // If already paid via regular payroll, skip tax & pension in settlement to avoid double deduction
-            if (!empty($b['is_paid_via_payroll'])) {
-                continue;
-            }
-            if (!empty($b['is_full_month'])) {
-                $totalNoticePayeTax += $monthlyPayeTax;
-                $totalNoticePension += $monthlyPension;
-            } else {
-                $ratio = $b['days_in_month'] > 0 ? ($b['days_worked'] / (float)$b['days_in_month']) : 0;
-                $totalNoticePayeTax += round($monthlyPayeTax * $ratio, 2);
-                $totalNoticePension += round($monthlyPension * $ratio, 2);
-            }
+        if ($startDay <= 10) {
+            // Early Month: Entire 1-month notice salary is paid via exit settlement
+            $totalNoticePayeTax = $monthlyPayeTax;
+            $totalNoticePension = $monthlyPension;
+        } else {
+            // Mid/Late Month: Month 1 was taxed on regular payroll; only prorate remaining notice days in exit month
+            $ratio = $daysInExitMonth > 0 ? ($exitDay / (float)$daysInExitMonth) : 0;
+            $totalNoticePayeTax = round($monthlyPayeTax * $ratio, 2);
+            $totalNoticePension = round($monthlyPension * $ratio, 2);
         }
-        $totalNoticePayeTax = round($totalNoticePayeTax, 2);
-        $totalNoticePension = round($totalNoticePension, 2);
+
 
         // ── 5. Itemized Outstanding Liabilities & Deductions ──
         $medLoan = 0.00;
         if (\Illuminate\Support\Facades\Schema::hasTable('medical_loan_deduction_setups')) {
-            $medSetup = DB::table('medical_loan_deduction_setups')->where('staffId', $staffId)->first();
-            if ($medSetup) {
-                $medLoan = (float)($medSetup->balance_remaining ?? 0);
-            }
+            $medLoan = (float)DB::table('medical_loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
 
         $coopLoan = 0.00;
         if (\Illuminate\Support\Facades\Schema::hasTable('coop_loan_deduction_setups')) {
-            $coopSetup = DB::table('coop_loan_deduction_setups')->where('staffId', $staffId)->first();
-            if ($coopSetup) {
-                $coopLoan = (float)($coopSetup->balance_remaining ?? 0);
-            }
+            $coopLoan = (float)DB::table('coop_loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
 
         $coopAsset = 0.00;
         if (\Illuminate\Support\Facades\Schema::hasTable('coop_asset_finance_deduction_setups')) {
-            $assetSetup = DB::table('coop_asset_finance_deduction_setups')->where('staffId', $staffId)->first();
-            if ($assetSetup) {
-                $coopAsset = (float)($assetSetup->balance_remaining ?? 0);
-            }
+            $coopAsset = (float)DB::table('coop_asset_finance_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
 
+        // IOU Repayment: Net un-deducted IOU balance (Total approved disbursed minus amount already deducted via regular payroll)
         $iouTotal = 0.00;
         if (\Illuminate\Support\Facades\Schema::hasTable('iou_records')) {
-            $iouTotal = (float)DB::table('iou_records')
+            $totalDisbursedIou = (float)DB::table('iou_records')
                 ->where('staff_id', $staffId)
                 ->where('status', '!=', 2)
                 ->sum('amount');
+            $totalDeductedIou = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('payroll_conpt')) {
+                $totalDeductedIou = (float)DB::table('payroll_conpt')
+                    ->where('staffID', $staffId)
+                    ->sum('iou');
+            }
+            $iouTotal = max(0.00, round($totalDisbursedIou - $totalDeductedIou, 2));
         }
 
         $surchargeTotal = 0.00;
         if (\Illuminate\Support\Facades\Schema::hasTable('surcharge_deduction_setups')) {
-            $surcharges = DB::table('surcharge_deduction_setups')->where('staffId', $staffId)->first();
-            if ($surcharges) {
-                $surchargeTotal = (float)($surcharges->balance_remaining ?? 0);
-            }
+            $surchargeTotal = (float)DB::table('surcharge_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
 
         $absencePenalty = 0.00;
         if (\Illuminate\Support\Facades\Schema::hasTable('absence_penalty_deduction_setups')) {
-            $absPenalty = DB::table('absence_penalty_deduction_setups')->where('staffId', $staffId)->first();
-            if ($absPenalty) {
-                $absencePenalty = (float)($absPenalty->balance_remaining ?? $absPenalty->penalty_amount ?? 0);
-            }
+            $absencePenalty = (float)DB::table('absence_penalty_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
 
+        // Regular Loan: Active setup balance from loan_deduction_setups, fallback to approved employee_loans balance
         $regularLoan = 0.00;
-        if (\Illuminate\Support\Facades\Schema::hasTable('employee_loans')) {
-            $regLoan = DB::table('employee_loans')->where('staffId', $staffId)->whereRaw("LOWER(status) = 'approved'")->first();
-            if ($regLoan) {
-                $regularLoan = (float)($regLoan->balance ?? 0);
-            }
+        if (\Illuminate\Support\Facades\Schema::hasTable('loan_deduction_setups')) {
+            $regularLoan = (float)DB::table('loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
+        }
+        if ($regularLoan <= 0 && \Illuminate\Support\Facades\Schema::hasTable('employee_loans')) {
+            $regularLoan = (float)DB::table('employee_loans')
+                ->where('staffId', $staffId)
+                ->whereRaw("LOWER(status) = 'approved'")
+                ->where('balance', '>', 0)
+                ->sum('balance');
         }
 
+        // Other Deductions: Active setup balance from other_deduction_setups + variable deductions
         $otherDeductTotal = 0.00;
         if (\Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups')) {
-            $otherD = DB::table('other_deduction_setups')->where('staffId', $staffId)->first();
-            if ($otherD) {
-                $otherDeductTotal = (float)($otherD->balance_remaining ?? 0);
-            }
+            $otherDeductTotal = (float)DB::table('other_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
+        if ($variableDeductionsTotal > 0) {
+            $otherDeductTotal += $variableDeductionsTotal;
+        }
+
+
+        // 5b. Leave of Absence Unpaid Days
+        $officeShift = (int)($resignation->office_shift ?? 1);
+        $loaData = $this->calculateStaffLoaDeduction($staffId, $monthlyGross, $officeShift);
+        $loaDeductTotal = (float)$loaData['total_deduction'];
+        $loaDaysTotal = (int)$loaData['total_days'];
+        $loaNote = $loaDaysTotal > 0 ? "{$loaDaysTotal} unpaid day(s)" : 'Nil';
 
         // Structured deductions mapping matching Salary Breakdown modal
         $itemizedDeductions = [
@@ -1107,7 +1146,7 @@ class ResignationApiController extends Controller
             ['name' => 'Coop. Asset Financing',             'amount' => $coopAsset, 'note' => $coopAsset > 0 ? 'Outstanding asset finance' : 'Nil'],
             ['name' => 'Surcharges / Penalties',            'amount' => $surchargeTotal, 'note' => $surchargeTotal > 0 ? 'Unpaid penalty charges' : 'Nil'],
             ['name' => 'Absence Penalty',                   'amount' => $absencePenalty, 'note' => $absencePenalty > 0 ? 'Unpaid penalty' : 'Nil'],
-            ['name' => 'Leave of Absence (Unpaid Days)',    'amount' => 0.00, 'note' => 'Nil'],
+            ['name' => 'Leave of Absence (Unpaid Days)',    'amount' => $loaDeductTotal, 'note' => $loaNote],
             ['name' => 'Regular Loan Repayment',            'amount' => $regularLoan, 'note' => $regularLoan > 0 ? 'Outstanding loan balance' : 'Nil'],
             ['name' => 'Other Deductions',                  'amount' => $otherDeductTotal, 'note' => $otherDeductTotal > 0 ? 'Other liabilities' : 'Nil'],
         ];
@@ -1128,6 +1167,10 @@ class ResignationApiController extends Controller
         $staffFullName = trim("{$resignation->surname} {$resignation->first_name} {$resignation->othernames}");
         $staffEmail = trim($resignation->staff_email ?: ($resignation->staff_alternate_email ?: ($resignation->user_account_email ?: '')));
 
+        $resolvedApptDate = !empty($resignation->appointment_date) && $resignation->appointment_date !== '0000-00-00'
+            ? $resignation->appointment_date
+            : (!empty($resignation->doj) && $resignation->doj !== '0000-00-00' ? $resignation->doj : null);
+
         return [
             'resignation_id'     => $resignation->id,
             'staff'              => [
@@ -1137,13 +1180,14 @@ class ResignationApiController extends Controller
                 'email'            => $staffEmail,
                 'phone'            => $resignation->staff_phone,
                 'department'       => $resignation->department ?? 'N/A',
-                'appointment_date' => $resignation->appointment_date,
+                'appointment_date' => $resolvedApptDate,
                 'bank_name'        => $resignation->bank_name ?? 'N/A',
                 'account_no'       => $resignation->account_no ?? 'N/A',
                 'staff_status'     => (int)$resignation->staff_status,
                 'status_value'     => $resignation->status_value,
             ],
             'timeline'           => [
+                'appointment_date'   => $resolvedApptDate,
                 'resignation_date'   => $resignationDate,
                 'notice_start_date'  => $resignationDate,
                 'notice_period_days' => $calendarNoticeDays,
@@ -1192,6 +1236,11 @@ class ResignationApiController extends Controller
             'deductions'         => [
                 'itemized_deductions' => $itemizedDeductions,
                 'total_deductions'    => $totalDeductions,
+            ],
+            'leave_of_absence'   => [
+                'total_days'      => $loaDaysTotal,
+                'total_deduction' => $loaDeductTotal,
+                'records'         => $loaData['records'],
             ],
             'settlement_summary' => [
                 'total_gross_notice_salary'   => $totalNoticeSalary,
@@ -1430,6 +1479,8 @@ class ResignationApiController extends Controller
                     $extraBadge = "<span style='color: #64748b; font-size: 11px;'> (Not Enrolled)</span>";
                 } elseif (stripos($dName, 'Savings') !== false) {
                     $extraBadge = "<span style='color: #059669; font-size: 11px; font-weight: 600;'> (Refunded under Earnings)</span>";
+                } elseif (stripos($dName, 'Leave of Absence') !== false && $dAmt > 0 && !empty($dNote) && $dNote !== 'Nil') {
+                    $extraBadge = "<span style='color: #dc2626; font-size: 11px; font-weight: 600;'> ({$dNote})</span>";
                 }
 
                 $deductionRowsHtml .= "
@@ -1459,6 +1510,7 @@ class ResignationApiController extends Controller
         $staffId = htmlspecialchars($staff['id'] ?? 'N/A');
         $department = htmlspecialchars($staff['department'] ?? 'N/A');
         $bankAccount = htmlspecialchars(($staff['bank_name'] ?? 'N/A') . ' — ' . ($staff['account_no'] ?? 'N/A'));
+        $appointmentDate = $formatDate($staff['appointment_date'] ?? ($timeline['appointment_date'] ?? ''));
         $noticeDate = $formatDate($timeline['resignation_date'] ?? '');
         $exitDate = $formatDate($timeline['exit_date'] ?? '');
         $declaredSalary = $fmt($structure['declared_salary'] ?? 0);
@@ -1542,18 +1594,18 @@ class ResignationApiController extends Controller
                                         </tr>
                                         <tr>
                                             <td style='width: 50%; padding-bottom: 10px; vertical-align: top;'>
-                                                <div style='font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;'>NOTICE SUBMISSION DATE:</div>
-                                                <div style='font-size: 13px; font-weight: 600; color: #0f172a; margin-top: 2px;'>{$noticeDate} (30 Days)</div>
+                                                <div style='font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;'>DATE OF APPOINTMENT:</div>
+                                                <div style='font-size: 13px; font-weight: 600; color: #0f172a; margin-top: 2px;'>{$appointmentDate}</div>
                                             </td>
                                             <td style='width: 50%; padding-bottom: 10px; vertical-align: top;'>
-                                                <div style='font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;'>EFFECTIVE EXIT DATE:</div>
-                                                <div style='font-size: 13px; font-weight: 700; color: #db2777; margin-top: 2px;'>{$exitDate}</div>
+                                                <div style='font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;'>RESIGNATION NOTICE DATE:</div>
+                                                <div style='font-size: 13px; font-weight: 600; color: #0f172a; margin-top: 2px;'>{$noticeDate} (1 Month Notice)</div>
                                             </td>
                                         </tr>
                                         <tr>
                                             <td style='width: 50%; vertical-align: top;'>
-                                                <div style='font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;'>PAYROLL STATUS:</div>
-                                                <div style='font-size: 13px; font-weight: 700; color: #d97706; margin-top: 2px;'>Removed from Active Payroll</div>
+                                                <div style='font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;'>EFFECTIVE EXIT DATE:</div>
+                                                <div style='font-size: 13px; font-weight: 700; color: #db2777; margin-top: 2px;'>{$exitDate}</div>
                                             </td>
                                             <td style='width: 50%; vertical-align: top;'>
                                                 <div style='font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;'>DECLARED BASE SALARY:</div>
@@ -1895,6 +1947,8 @@ class ResignationApiController extends Controller
                     $extraBadge = "<span style='color: #64748b; font-size: 9px;'> (Exempt)</span>";
                 } elseif (stripos($dName, 'Pension') !== false && $dAmt == 0) {
                     $extraBadge = "<span style='color: #64748b; font-size: 9px;'> (Not Enrolled)</span>";
+                } elseif (stripos($dName, 'Leave of Absence') !== false && $dAmt > 0 && !empty($dNote) && $dNote !== 'Nil') {
+                    $extraBadge = "<span style='color: #b91c1c; font-size: 9px; font-weight: bold;'> ({$dNote})</span>";
                 }
 
                 $deductionRowsHtml .= "
@@ -1924,6 +1978,7 @@ class ResignationApiController extends Controller
         $staffFileNo = htmlspecialchars($staff['file_no'] ?? ($staff['id'] ?? 'N/A'));
         $department = htmlspecialchars($staff['department'] ?? 'N/A');
         $bankAccount = htmlspecialchars(($staff['bank_name'] ?? 'N/A') . ' (' . ($staff['account_no'] ?? 'N/A') . ')');
+        $appointmentDate = $formatDate($staff['appointment_date'] ?? ($timeline['appointment_date'] ?? ''));
         $noticeDate = $formatDate($timeline['resignation_date'] ?? '');
         $exitDate = $formatDate($timeline['exit_date'] ?? '');
         $declaredSalary = $fmt($structure['declared_salary'] ?? 0);
@@ -1961,10 +2016,10 @@ class ResignationApiController extends Controller
                     size: a4 portrait;
                 }
                 body {
-                    font-family: 'DejaVu Sans', sans-serif;
-                    color: #0f172a;
-                    font-size: 9.5px;
+                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                    font-size: 10px;
                     line-height: 1.35;
+                    color: #1e293b;
                     margin: 0;
                     padding: 0;
                 }
@@ -1973,40 +2028,46 @@ class ResignationApiController extends Controller
                     border-collapse: collapse;
                 }
                 .header-table {
-                    margin-bottom: 8px;
                     border-bottom: 2px solid #0f172a;
                     padding-bottom: 6px;
+                    margin-bottom: 8px;
                 }
                 .meta-table {
                     background-color: #f8fafc;
                     border: 1px solid #cbd5e1;
-                    margin-bottom: 10px;
+                    margin-bottom: 8px;
                 }
                 .meta-table td {
-                    padding: 5px 8px;
+                    padding: 4px 7px;
+                    border: 1px solid #e2e8f0;
                     vertical-align: top;
                 }
-                .label {
-                    font-size: 8px;
-                    font-weight: bold;
+                .meta-table .label {
+                    font-size: 7.5px;
                     color: #64748b;
                     text-transform: uppercase;
+                    font-weight: bold;
+                    letter-spacing: 0.3px;
                 }
-                .val {
-                    font-size: 10.5px;
+                .meta-table .val {
+                    font-size: 10px;
                     font-weight: bold;
                     color: #0f172a;
+                    margin-top: 1px;
                 }
-                .section-header {
-                    padding: 5px 8px;
-                    font-size: 9.5px;
+                .section-title {
+                    font-size: 10px;
                     font-weight: bold;
                     text-transform: uppercase;
-                    border: 1px solid #cbd5e1;
+                    letter-spacing: 0.5px;
+                    padding: 4px 6px;
+                    border-top: 1px solid #cbd5e1;
+                    border-left: 1px solid #cbd5e1;
+                    border-right: 1px solid #cbd5e1;
                 }
                 .table-earnings th {
-                    background-color: #eff6ff;
-                    color: #1e40af;
+                    background-color: #f0fdf4;
+                    color: #166534;
                 }
                 .table-deductions th {
                     background-color: #fef2f2;
@@ -2057,10 +2118,10 @@ class ResignationApiController extends Controller
                 <tr>
                     <td style='width: 70%;'>
                         <div style='font-size: 14px; font-weight: bold; color: #0f172a; letter-spacing: 0.5px;'>ISALU HOSPITALS LIMITED</div>
-                        <div style='font-size: 11px; font-weight: bold; color: #2563eb; margin-top: 1px;'>EXIT SETTLEMENT BREAKDOWN & STATUTORY CLEARANCE SLIP</div>
-                        <div style='font-size: 8px; color: #64748b;'>Finance & Payroll Department &bull; Official Settlement Document</div>
+                        <div style='font-size: 10px; font-weight: bold; color: #2563eb; margin-top: 1px;'>STAFF EXIT SETTLEMENT BREAKDOWN & CLEARANCE SLIP</div>
+                        <div style='font-size: 8px; color: #64748b;'>Statutory HR, Audit & Finance Final Clearance Document</div>
                     </td>
-                    <td style='width: 30%; text-align: right; vertical-align: top;'>
+                    <td style='width: 30%; text-align: right;'>
                         <div style='font-size: 8px; color: #64748b;'>Generated On:</div>
                         <div style='font-size: 9px; font-weight: bold;'>{$generatedAt}</div>
                         <div style='font-size: 8px; color: #059669; font-weight: bold; margin-top: 2px;'>Status: HR & Audit Cleared</div>
@@ -2090,16 +2151,16 @@ class ResignationApiController extends Controller
                 </tr>
                 <tr>
                     <td>
-                        <div class='label'>Notice Date</div>
+                        <div class='label'>Date of Appointment</div>
+                        <div class='val'>{$appointmentDate}</div>
+                    </td>
+                    <td>
+                        <div class='label'>Resignation Date</div>
                         <div class='val'>{$noticeDate}</div>
                     </td>
                     <td>
                         <div class='label'>Effective Exit Date</div>
-                        <div class='val' style='color: #db2777;'>{$exitDate}</div>
-                    </td>
-                    <td>
-                        <div class='label'>Payroll Status</div>
-                        <div class='val' style='color: #d97706;'>Resigned / Off-Payroll</div>
+                        <div class='val' style='color: #db2777; font-weight: bold;'>{$exitDate}</div>
                     </td>
                     <td>
                         <div class='label'>Declared Base Salary</div>
@@ -2377,29 +2438,86 @@ class ResignationApiController extends Controller
         $totalDeductions = round($totalNoticePayeTax + $totalNoticePension, 2);
 
         if (\Illuminate\Support\Facades\Schema::hasTable('medical_loan_deduction_setups')) {
-            $totalDeductions += (float)DB::table('medical_loan_deduction_setups')->where('staffId', $staffId)->value('balance_remaining');
+            $totalDeductions += (float)DB::table('medical_loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
         if (\Illuminate\Support\Facades\Schema::hasTable('coop_loan_deduction_setups')) {
-            $totalDeductions += (float)DB::table('coop_loan_deduction_setups')->where('staffId', $staffId)->value('balance_remaining');
+            $totalDeductions += (float)DB::table('coop_loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
         if (\Illuminate\Support\Facades\Schema::hasTable('coop_asset_finance_deduction_setups')) {
-            $totalDeductions += (float)DB::table('coop_asset_finance_deduction_setups')->where('staffId', $staffId)->value('balance_remaining');
+            $totalDeductions += (float)DB::table('coop_asset_finance_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
         if (\Illuminate\Support\Facades\Schema::hasTable('surcharge_deduction_setups')) {
-            $totalDeductions += (float)DB::table('surcharge_deduction_setups')->where('staffId', $staffId)->value('balance_remaining');
+            $totalDeductions += (float)DB::table('surcharge_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
         if (\Illuminate\Support\Facades\Schema::hasTable('absence_penalty_deduction_setups')) {
-            $totalDeductions += (float)DB::table('absence_penalty_deduction_setups')->where('staffId', $staffId)->value('balance_remaining');
+            $totalDeductions += (float)DB::table('absence_penalty_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
-        if (\Illuminate\Support\Facades\Schema::hasTable('employee_loans')) {
-            $totalDeductions += (float)DB::table('employee_loans')->where('staffId', $staffId)->whereRaw("LOWER(status) = 'approved'")->value('balance');
+        $regularLoanBal = 0.00;
+        if (\Illuminate\Support\Facades\Schema::hasTable('loan_deduction_setups')) {
+            $regularLoanBal = (float)DB::table('loan_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
+        if ($regularLoanBal <= 0 && \Illuminate\Support\Facades\Schema::hasTable('employee_loans')) {
+            $regularLoanBal = (float)DB::table('employee_loans')
+                ->where('staffId', $staffId)
+                ->whereRaw("LOWER(status) = 'approved'")
+                ->where('balance', '>', 0)
+                ->sum('balance');
+        }
+        $totalDeductions += $regularLoanBal;
+
         if (\Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups')) {
-            $totalDeductions += (float)DB::table('other_deduction_setups')->where('staffId', $staffId)->value('balance_remaining');
+            $totalDeductions += (float)DB::table('other_deduction_setups')
+                ->where('staffId', $staffId)
+                ->where('is_active', 1)
+                ->where('balance_remaining', '>', 0)
+                ->sum('balance_remaining');
         }
+        if ($variableDeductionsTotal > 0) {
+            $totalDeductions += $variableDeductionsTotal;
+        }
+
         if (\Illuminate\Support\Facades\Schema::hasTable('iou_records')) {
-            $totalDeductions += (float)DB::table('iou_records')->where('staff_id', $staffId)->where('status', '!=', 2)->sum('amount');
+            $totalDisbursedIou = (float)DB::table('iou_records')
+                ->where('staff_id', $staffId)
+                ->where('status', '!=', 2)
+                ->sum('amount');
+            $totalDeductedIou = 0.00;
+            if (\Illuminate\Support\Facades\Schema::hasTable('payroll_conpt')) {
+                $totalDeductedIou = (float)DB::table('payroll_conpt')
+                    ->where('staffID', $staffId)
+                    ->sum('iou');
+            }
+            $totalDeductions += max(0.00, round($totalDisbursedIou - $totalDeductedIou, 2));
         }
+
+        $officeShift = (int)($row->office_shift ?? 1);
+        $loaData = $this->calculateStaffLoaDeduction($staffId, $monthlyGross, $officeShift);
+        $totalDeductions += (float)$loaData['total_deduction'];
+
 
         $totalFinalEarnings = round($totalNoticeSalary + $retentionRefund + $coopSavingsRefund + $activeBonusesTotal + $earningVarsTotal, 2);
         $totalDeductions = round($totalDeductions, 2);
@@ -2433,6 +2551,123 @@ class ResignationApiController extends Controller
             'total_deductions'       => $totalDeductions,
             'net_settlement'         => $netSettlement,
             'settlement_type'        => $settlementType,
+        ];
+    }
+
+    /**
+     * Compute un-deducted Leave of Absence (LOA) days and total deduction for a staff member.
+     */
+    protected function calculateStaffLoaDeduction($staffId, $monthlyGross, $officeShift = 1): array
+    {
+        $totalDays = 0;
+        $totalDeduction = 0.00;
+        $records = [];
+
+        if (!\Illuminate\Support\Facades\Schema::hasTable('leave_of_absent') || $monthlyGross <= 0) {
+            return [
+                'total_days'      => 0,
+                'total_deduction' => 0.00,
+                'records'         => [],
+            ];
+        }
+
+        $leaves = DB::table('leave_of_absent')
+            ->where('staffId', $staffId)
+            ->where('status', 2) // Approved by HR
+            ->orderBy('start_date', 'asc')
+            ->get();
+
+        foreach ($leaves as $leave) {
+            $start = \Carbon\Carbon::parse($leave->start_date);
+            $end = \Carbon\Carbon::parse($leave->end_date);
+            if ($start->gt($end)) {
+                continue;
+            }
+
+            // A leave may cross calendar month boundaries; calculate month by month
+            $curMonth = $start->copy()->startOfMonth();
+            $endMonth = $end->copy()->startOfMonth();
+
+            $leaveUnpaidDays = 0;
+            $leaveDeduction = 0.00;
+            $monthBreakdowns = [];
+
+            while ($curMonth->lte($endMonth)) {
+                $y = (int)$curMonth->year;
+                $m = (int)$curMonth->month;
+                $daysInMonth = (int)$curMonth->daysInMonth;
+                if ($daysInMonth < 28 || $daysInMonth > 31) {
+                    $daysInMonth = 30;
+                }
+
+                $mStart = $curMonth->copy()->startOfMonth();
+                $mEnd = $curMonth->copy()->endOfMonth();
+
+                $overlapStart = $start->gt($mStart) ? $start : $mStart;
+                $overlapEnd = $end->lt($mEnd) ? $end : $mEnd;
+
+                // Calculate absent days in this month
+                $mDays = 0;
+                if ((int)$officeShift === 1) {
+                    // Monday to Friday office worker: non-working weekend days excluded
+                    $tempD = $overlapStart->copy();
+                    while ($tempD->lte($overlapEnd)) {
+                        if (!$tempD->isWeekend()) {
+                            $mDays++;
+                        }
+                        $tempD->addDay();
+                    }
+                } else {
+                    // Shift worker / continuous: calendar days
+                    $mDays = $overlapStart->diffInDays($overlapEnd) + 1;
+                }
+
+                // Check if this month's LOA was already deducted in regular payroll (payroll_conpt)
+                $alreadyDeducted = false;
+                if (\Illuminate\Support\Facades\Schema::hasTable('payroll_conpt')) {
+                    $alreadyDeducted = DB::table('payroll_conpt')
+                        ->where('staffID', $staffId)
+                        ->where('year', $y)
+                        ->where('month', $m)
+                        ->where('leave_of_absence_deduction', '>', 0)
+                        ->exists();
+                }
+
+                if (!$alreadyDeducted && $mDays > 0) {
+                    $dailyRate = $monthlyGross / (float)$daysInMonth;
+                    $mDeduct = round($dailyRate * $mDays, 2);
+                    $leaveUnpaidDays += $mDays;
+                    $leaveDeduction += $mDeduct;
+                    $monthBreakdowns[] = [
+                        'month_name' => $curMonth->format('F Y'),
+                        'days'       => $mDays,
+                        'rate'       => round($dailyRate, 2),
+                        'deduction'  => $mDeduct,
+                    ];
+                }
+
+                $curMonth->addMonth();
+            }
+
+            if ($leaveUnpaidDays > 0) {
+                $totalDays += $leaveUnpaidDays;
+                $totalDeduction += $leaveDeduction;
+                $records[] = [
+                    'id'               => $leave->id,
+                    'start_date'       => $leave->start_date,
+                    'end_date'         => $leave->end_date,
+                    'reason'           => $leave->reason_of_leave,
+                    'unpaid_days'      => $leaveUnpaidDays,
+                    'deduction_amount' => round($leaveDeduction, 2),
+                    'month_breakdowns' => $monthBreakdowns,
+                ];
+            }
+        }
+
+        return [
+            'total_days'      => $totalDays,
+            'total_deduction' => round($totalDeduction, 2),
+            'records'         => $records,
         ];
     }
 
