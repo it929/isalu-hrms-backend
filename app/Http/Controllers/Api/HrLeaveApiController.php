@@ -206,7 +206,9 @@ class HrLeaveApiController extends Controller
 
         if ($ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || $ctx['isAuditStaff']) {
             $employees = DB::table('tblper')
-                ->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'gender', 'doj', 'appointment_date', 'created_at', 'departmentID')
+                ->where('staff_status', 1)
+                ->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'gender', 'doj', 'appointment_date', 'created_at', 'departmentID', 'staff_status')
+                ->orderBy('surname', 'ASC')
                 ->get()
                 ->map($enrichEmp);
         } elseif ($ctx['isHod'] && $ctx['employee']) {
@@ -216,8 +218,10 @@ class HrLeaveApiController extends Controller
 
             if ($hodDeptId) {
                 $employees = DB::table('tblper')
+                    ->where('staff_status', 1)
                     ->where('departmentID', $hodDeptId)
-                    ->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'gender', 'doj', 'appointment_date', 'created_at', 'departmentID')
+                    ->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'gender', 'doj', 'appointment_date', 'created_at', 'departmentID', 'staff_status')
+                    ->orderBy('surname', 'ASC')
                     ->get()
                     ->map($enrichEmp);
             } else {
@@ -377,6 +381,13 @@ class HrLeaveApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Employee not found.'], 404);
         }
 
+        if ((int)$employee->staff_status !== 1) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Only active staff (staff status: Active) are eligible to apply for Leave.'
+            ], 422);
+        }
+
         // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for Annual Leave
         $eligibility = $this->checkLeaveEligibility($employee, $request->start_date, $leaveType);
         if (!$eligibility['eligible']) {
@@ -458,6 +469,15 @@ class HrLeaveApiController extends Controller
         $employee = DB::table('tblper')->where('ID', $request->employee_id)->first();
         if (!$employee) {
             return response()->json(['status' => 'error', 'message' => 'Employee not found'], 404);
+        }
+
+        if ((int)$employee->staff_status !== 1) {
+            return response()->json([
+                'status'         => 'error',
+                'message'        => 'Only active staff (staff status: Active) are eligible to apply for Leave.',
+                'remaining_days' => 0,
+                'end_date'       => null,
+            ], 422);
         }
 
         $leaveType = DB::table('tblleave_type')->where('id', $request->leave_type)->first();
@@ -849,6 +869,13 @@ class HrLeaveApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Employee not found.'], 404);
         }
 
+        if ((int)$employee->staff_status !== 1) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Only active staff (staff status: Active) are eligible to apply for Leave.'
+            ], 422);
+        }
+
         // Service Duration Check: Employee must have worked for at least 1 full year in the company before applying for Annual Leave
         $eligibility = $this->checkLeaveEligibility($employee, $request->start_date, $leaveType);
         if (!$eligibility['eligible']) {
@@ -960,15 +987,20 @@ class HrLeaveApiController extends Controller
         };
 
         if ($isExecutive) {
-            $employees = DB::table('tblper')->select('ID', 'surname', 'first_name', 'othernames')->get()->map(function($emp) use ($calcSalary) {
-                $emp->has_uploaded_education = DB::table('tbleducations')
-                    ->where('staffid', $emp->ID)
-                    ->whereNotNull('document')
-                    ->where('document', '!=', '')
-                    ->exists();
-                $emp->monthly_salary = $calcSalary($emp->ID);
-                return $emp;
-            });
+            $employees = DB::table('tblper')
+                ->where('staff_status', 1)
+                ->select('ID', 'surname', 'first_name', 'othernames', 'office_shift', 'staff_status')
+                ->orderBy('surname', 'ASC')
+                ->get()
+                ->map(function($emp) use ($calcSalary) {
+                    $emp->has_uploaded_education = DB::table('tbleducations')
+                        ->where('staffid', $emp->ID)
+                        ->whereNotNull('document')
+                        ->where('document', '!=', '')
+                        ->exists();
+                    $emp->monthly_salary = $calcSalary($emp->ID);
+                    return $emp;
+                });
         } else {
             $employees = collect();
         }
@@ -1346,7 +1378,14 @@ class HrLeaveApiController extends Controller
 
         $employee = DB::table('tblper')->where('ID', $request->employee_id)->first();
         if (!$employee) {
-            return response()->json(['status' => 'error', 'message' => 'Employee not found.']);
+            return response()->json(['status' => 'error', 'message' => 'Employee not found.'], 404);
+        }
+
+        if ((int)$employee->staff_status !== 1) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Only active staff (staff status: Active) are eligible to apply for Leave of Absence.'
+            ], 422);
         }
 
         // Check for any pending application (status 0) of LOA for this employee
@@ -1408,6 +1447,13 @@ class HrLeaveApiController extends Controller
         $employee = DB::table('tblper')->where('ID', $request->employee_id)->first();
         if (!$employee) {
             return response()->json(['status' => 'error', 'message' => 'Employee not found.'], 404);
+        }
+
+        if ((int)$employee->staff_status !== 1) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Only active staff (staff status: Active) are eligible to apply for Leave of Absence.'
+            ], 422);
         }
 
         // Net Pay check: Leave of Absence deduction must not cause net pay to reach 0.00 or negative
