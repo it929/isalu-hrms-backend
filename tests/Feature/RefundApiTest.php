@@ -107,7 +107,31 @@ class RefundApiTest extends TestCase
         $this->assertEquals(50000.00, $updated->amount);
         $this->assertEquals('Updated test refund request reason', $updated->reason);
 
-        // 3. Test HOD Approval
+        // 3a. Assert HR approval fails before HOD approval
+        $responseHrEarly = $this->getJson("/api/nextjs/payroll/refunds/hr-approve/{$refundId}?remarks=HR+early", $headers);
+        $responseHrEarly->assertStatus(400)
+            ->assertJson([
+                'status'  => 'error',
+                'message' => 'This request is not in a pending HR state.'
+            ]);
+
+        // 3b. Assert Audit approval fails before HR approval
+        $responseAuditEarly = $this->getJson("/api/nextjs/payroll/refunds/audit-approve/{$refundId}?remarks=Audit+early", $headers);
+        $responseAuditEarly->assertStatus(400)
+            ->assertJson([
+                'status'  => 'error',
+                'message' => 'This request is not recommended by HR or already processed by Audit.'
+            ]);
+
+        // 3c. Assert Finance approval fails before Audit approval
+        $responseFinanceEarly1 = $this->getJson("/api/nextjs/payroll/refunds/finance-approve/{$refundId}?remarks=Finance+early", $headers);
+        $responseFinanceEarly1->assertStatus(400)
+            ->assertJson([
+                'status'  => 'error',
+                'message' => 'This request is not recommended by Audit or already processed by Finance.'
+            ]);
+
+        // 3. Test HOD Approval (Stage 1 succeeds)
         $responseHod = $this->getJson("/api/nextjs/payroll/refunds/hod-approve/{$refundId}?remarks=HOD+approved", $headers);
         $responseHod->assertStatus(200)
             ->assertJson(['status' => 'success']);
@@ -116,7 +140,15 @@ class RefundApiTest extends TestCase
         $this->assertEquals(1, $afterHod->hod_status);
         $this->assertEquals(0, $afterHod->status);
 
-        // 4. Test HR Approval
+        // 4a. Assert Audit approval still fails before HR approval
+        $responseAuditStillEarly = $this->getJson("/api/nextjs/payroll/refunds/audit-approve/{$refundId}?remarks=Audit+early", $headers);
+        $responseAuditStillEarly->assertStatus(400)
+            ->assertJson([
+                'status'  => 'error',
+                'message' => 'This request is not recommended by HR or already processed by Audit.'
+            ]);
+
+        // 4b. Test HR Approval (Stage 2 succeeds)
         $responseHr = $this->getJson("/api/nextjs/payroll/refunds/hr-approve/{$refundId}?remarks=HR+approved", $headers);
         $responseHr->assertStatus(200)
             ->assertJson(['status' => 'success']);
@@ -133,7 +165,7 @@ class RefundApiTest extends TestCase
                 'message' => 'This request is not recommended by Audit or already processed by Finance.'
             ]);
 
-        // 6. Test Audit Approval
+        // 6. Test Audit Approval (Stage 3 succeeds)
         $responseAudit = $this->getJson("/api/nextjs/payroll/refunds/audit-approve/{$refundId}?remarks=Audit+approved", $headers);
         $responseAudit->assertStatus(200)
             ->assertJson([

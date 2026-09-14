@@ -546,6 +546,13 @@ class HrStaffApiController extends Controller
     public function saveEducation(Request $request, $id)
     {
         try {
+            if (!$request->hasFile('document')) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'The certificate attachment is compulsory. Please attach a certificate.'
+                ], 422);
+            }
+
             $data = [
                 'staffid' => $id,
                 'categoryID' => $request->categoryID,
