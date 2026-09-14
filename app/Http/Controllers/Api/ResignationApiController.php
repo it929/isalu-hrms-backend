@@ -3065,5 +3065,244 @@ class ResignationApiController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * POST /api/nextjs/payroll/resignations/update-medical-loan-balance
+     * Update the medical loan balance for a resigned staff member during exit settlement.
+     */
+    public function updateMedicalLoanBalance(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized'
+            ], 401);
+        }
+
+        $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+        $canManage = !empty($ctx['isSuperAdmin']) 
+            || !empty($ctx['isAdminStaff']) 
+            || !empty($ctx['isFinanceStaff'])
+            || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance']);
+
+        if (!$canManage) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Permission denied: Only Super Administrators, HR Head, and Finance Head are authorized to edit medical loan balance.'
+            ], 403);
+        }
+
+        try {
+            $validated = $request->validate([
+                'staff_id'       => 'required|integer|exists:tblper,ID',
+                'balance'        => 'required|numeric|min:0',
+                'reason'         => 'nullable|string',
+                'resignation_id' => 'nullable|integer',
+            ]);
+
+            $staffId = (int)$validated['staff_id'];
+            $newBalance = round((float)$validated['balance'], 2);
+            $reason = trim($validated['reason'] ?? 'Exit settlement clearance adjustment');
+            $resignationId = $validated['resignation_id'] ?? null;
+
+            $currentUserId = $ctx['userId'] ?? null;
+            $balanceBefore = 0.00;
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('medical_loan_deduction_setups')) {
+                $existingSetup = DB::table('medical_loan_deduction_setups')
+                    ->where('staffId', $staffId)
+                    ->first();
+
+                if ($existingSetup) {
+                    $balanceBefore = (float)$existingSetup->balance_remaining;
+                    $isActive = $newBalance > 0 ? 1 : 0;
+                    $newLoanAmount = max((float)$existingSetup->loan_amount, $newBalance);
+
+                    DB::table('medical_loan_deduction_setups')
+                        ->where('id', $existingSetup->id)
+                        ->update([
+                            'loan_amount'       => $newLoanAmount,
+                            'balance_remaining' => $newBalance,
+                            'is_active'         => $isActive,
+                            'updated_at'        => now(),
+                        ]);
+                } else if ($newBalance > 0) {
+                    $currentMonth = date('Y-m');
+                    DB::table('medical_loan_deduction_setups')->insert([
+                        'staffId'           => $staffId,
+                        'loan_amount'       => $newBalance,
+                        'balance_remaining' => $newBalance,
+                        'monthly_deduction' => $newBalance,
+                        'duration_months'   => 1,
+                        'start_month'       => $currentMonth,
+                        'end_month'         => $currentMonth,
+                        'is_active'         => 1,
+                        'created_at'        => now(),
+                        'updated_at'        => now(),
+                    ]);
+                }
+            }
+
+            // Log entry in medical_loan_entries if table exists
+            if (\Illuminate\Support\Facades\Schema::hasTable('medical_loan_entries')) {
+                DB::table('medical_loan_entries')->insert([
+                    'staffId'           => $staffId,
+                    'loan_date'         => now()->toDateString(),
+                    'amount'            => abs($newBalance - $balanceBefore),
+                    'reason'            => $reason ?: 'Exit settlement clearance adjustment',
+                    'balance_before'    => $balanceBefore,
+                    'balance_after'     => $newBalance,
+                    'monthly_deduction' => $newBalance,
+                    'created_by'        => $currentUserId,
+                    'created_at'        => now(),
+                    'updated_at'        => now(),
+                ]);
+            }
+
+            $updatedSettlement = null;
+            if ($resignationId) {
+                $updatedSettlement = $this->computeDetailedSettlement((int)$resignationId);
+            }
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => "Successfully updated medical loan balance to ₦" . number_format($newBalance, 2) . ".",
+                'data'    => [
+                    'staff_id'   => $staffId,
+                    'balance'    => $newBalance,
+                    'settlement' => $updatedSettlement,
+                ]
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Validation error.',
+                'errors'  => $ve->errors()
+            ], 422);
+        } catch (\Throwable $th) {
+            Log::error('ResignationAPI updateMedicalLoanBalance: ' . $th->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /api/nextjs/payroll/resignations/update-coop-loan-balance
+     * Update the cooperative loan balance for a resigned staff member during exit settlement.
+     */
+    public function updateCoopLoanBalance(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized'
+            ], 401);
+        }
+
+        $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+        $canManage = !empty($ctx['isSuperAdmin']) 
+            || !empty($ctx['isAdminStaff']) 
+            || !empty($ctx['isFinanceStaff'])
+            || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance']);
+
+        if (!$canManage) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Permission denied: Only Super Administrators, HR Head, and Finance Head are authorized to edit cooperative loan balance.'
+            ], 403);
+        }
+
+        try {
+            $validated = $request->validate([
+                'staff_id'       => 'required|integer|exists:tblper,ID',
+                'balance'        => 'required|numeric|min:0',
+                'reason'         => 'nullable|string',
+                'resignation_id' => 'nullable|integer',
+            ]);
+
+            $staffId = (int)$validated['staff_id'];
+            $newBalance = round((float)$validated['balance'], 2);
+            $reason = trim($validated['reason'] ?? 'Exit settlement clearance adjustment');
+            $resignationId = $validated['resignation_id'] ?? null;
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('coop_loan_deduction_setups')) {
+                $existingSetup = DB::table('coop_loan_deduction_setups')
+                    ->where('staffId', $staffId)
+                    ->first();
+
+                if ($existingSetup) {
+                    $isActive = $newBalance > 0 ? 1 : 0;
+                    $newLoanAmount = max((float)$existingSetup->loan_amount, $newBalance);
+
+                    DB::table('coop_loan_deduction_setups')
+                        ->where('id', $existingSetup->id)
+                        ->update([
+                            'loan_amount'       => $newLoanAmount,
+                            'balance_remaining' => $newBalance,
+                            'is_active'         => $isActive,
+                            'updated_at'        => now(),
+                        ]);
+                } else if ($newBalance > 0) {
+                    $currentMonth = date('Y-m');
+                    DB::table('coop_loan_deduction_setups')->insert([
+                        'staffId'           => $staffId,
+                        'loan_amount'       => $newBalance,
+                        'interest_rate'     => 0.00,
+                        'duration_months'   => 1,
+                        'monthly_deduction' => $newBalance,
+                        'balance_remaining' => $newBalance,
+                        'start_month'       => $currentMonth,
+                        'end_month'         => $currentMonth,
+                        'is_active'         => 1,
+                        'created_at'        => now(),
+                        'updated_at'        => now(),
+                    ]);
+                }
+            }
+
+            // Sync with coop_loans table if present
+            if (\Illuminate\Support\Facades\Schema::hasTable('coop_loans')) {
+                $existingCoopLoan = DB::table('coop_loans')->where('staffId', $staffId)->first();
+                if ($existingCoopLoan) {
+                    DB::table('coop_loans')->where('id', $existingCoopLoan->id)->update([
+                        'balance'    => $newBalance,
+                        'status'     => $newBalance > 0 ? 'active' : 'completed',
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            $updatedSettlement = null;
+            if ($resignationId) {
+                $updatedSettlement = $this->computeDetailedSettlement((int)$resignationId);
+            }
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => "Successfully updated cooperative loan balance to ₦" . number_format($newBalance, 2) . ".",
+                'data'    => [
+                    'staff_id'   => $staffId,
+                    'balance'    => $newBalance,
+                    'settlement' => $updatedSettlement,
+                ]
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Validation error.',
+                'errors'  => $ve->errors()
+            ], 422);
+        } catch (\Throwable $th) {
+            Log::error('ResignationAPI updateCoopLoanBalance: ' . $th->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
 }
 

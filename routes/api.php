@@ -490,6 +490,8 @@ Route::prefix('nextjs')->group(function () {
             Route::post('/settlement/{id}/send-email', [\App\Http\Controllers\Api\ResignationApiController::class, 'sendSettlementEmail']);
             Route::get('/settlement/{id}/download-pdf', [\App\Http\Controllers\Api\ResignationApiController::class, 'downloadSettlementPdf']);
             Route::post('/update-retention-months', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateRetentionMonths']);
+            Route::post('/update-medical-loan-balance', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateMedicalLoanBalance']);
+            Route::post('/update-coop-loan-balance', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateCoopLoanBalance']);
         });
 
         // Resignation Settlement Alias Group
@@ -498,6 +500,8 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/settlement/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'getSettlementBreakdown']);
             Route::match(['get', 'post'], '/resubmit-audit/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'resubmitToAudit']);
             Route::post('/update-retention-months', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateRetentionMonths']);
+            Route::post('/update-medical-loan-balance', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateMedicalLoanBalance']);
+            Route::post('/update-coop-loan-balance', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateCoopLoanBalance']);
         });
 
         // Pension Activation

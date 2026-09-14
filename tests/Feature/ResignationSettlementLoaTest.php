@@ -617,6 +617,236 @@ class ResignationSettlementLoaTest extends TestCase
         $this->assertEquals(1, $approvedRecord->audit_status);
         $this->assertNotNull($approvedRecord->audit_date);
     }
+
+    /**
+     * Test editing medical loan balance directly during exit settlement.
+     */
+    public function test_update_medical_loan_balance_during_exit_settlement()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in DB.');
+        }
+
+        DB::table('assign_user_role')->updateOrInsert(
+            ['userID' => $user->id, 'roleID' => 1],
+            ['created_at' => now()]
+        );
+
+        $staffId = DB::table('tblper')->insertGetId([
+            'UserID'            => $user->id,
+            'fileNo'            => 'TEST-MED-LOAN-001',
+            'surname'           => 'MED',
+            'first_name'        => 'LOAN',
+            'staff_status'      => 1,
+            'status_value'      => 'active',
+            'appointment_date'  => '2024-01-01',
+            'created_at'        => now(),
+            'updated_at'        => now(),
+        ]);
+
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $staffId],
+            [
+                'basic_salary'        => 100000.00,
+                'housing_allowance'   => 50000.00,
+                'transport_allowance' => 30000.00,
+                'medical_allowance'   => 20000.00,
+                'utility_allowance'   => 20000.00,
+                'meal_allowance'      => 20000.00,
+                'pen_act'             => 0,
+                'created_at'          => now(),
+            ]
+        );
+
+        // Initial active medical loan of ₦60,000
+        DB::table('medical_loan_deduction_setups')->updateOrInsert(
+            ['staffId' => $staffId],
+            [
+                'loan_amount'       => 60000.00,
+                'balance_remaining' => 60000.00,
+                'monthly_deduction' => 10000.00,
+                'duration_months'   => 6,
+                'start_month'       => '2026-01',
+                'end_month'         => '2026-06',
+                'is_active'         => 1,
+                'created_at'        => now(),
+                'updated_at'        => now(),
+            ]
+        );
+
+        $resignationId = DB::table('resignation_requests')->insertGetId([
+            'staff_id'         => $staffId,
+            'reason'           => 'Career change',
+            'resignation_date' => '2026-08-10',
+            'status'           => 1,
+            'hod_status'       => 1,
+            'admin_status'     => 1,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        $controller = new \App\Http\Controllers\Api\ResignationApiController();
+        $settlementBefore = $controller->computeDetailedSettlement($resignationId);
+
+        // Verify that medical loan is captured as ₦60,000 initially
+        $medLoanItem = collect($settlementBefore['deductions']['itemized_deductions'])->firstWhere('name', 'Medical Loan');
+        $this->assertNotNull($medLoanItem);
+        $this->assertEquals(60000.00, $medLoanItem['amount']);
+
+        // HR Head or Finance Head edits medical loan balance down to ₦25,000
+        $headers = [
+            'X-User-Id'   => $user->id,
+            'X-User-Role' => 'Head of HR',
+        ];
+
+        $resp = $this->postJson('/api/nextjs/payroll/resignations/update-medical-loan-balance', [
+            'staff_id'       => $staffId,
+            'balance'        => 25000.00,
+            'reason'         => 'Reconciled with pharmacy bills and cashier payment',
+            'resignation_id' => $resignationId,
+        ], $headers);
+
+        $resp->assertStatus(200);
+        $resp->assertJson(['status' => 'success']);
+
+        // Assert database setup was updated
+        $updatedSetup = DB::table('medical_loan_deduction_setups')->where('staffId', $staffId)->first();
+        $this->assertEquals(25000.00, (float)$updatedSetup->balance_remaining);
+        $this->assertEquals(1, (int)$updatedSetup->is_active);
+
+        // Assert recomputed settlement reflects ₦25,000
+        $settlementData = $resp->json('data.settlement');
+        $medLoanUpdated = collect($settlementData['deductions']['itemized_deductions'])->firstWhere('name', 'Medical Loan');
+        $this->assertEquals(25000.00, $medLoanUpdated['amount']);
+
+        // Also test clearing medical loan to ₦0.00
+        $respZero = $this->postJson('/api/nextjs/payroll/resignations/update-medical-loan-balance', [
+            'staff_id'       => $staffId,
+            'balance'        => 0.00,
+            'reason'         => 'Full cash settlement cleared at cashier',
+            'resignation_id' => $resignationId,
+        ], $headers);
+
+        $respZero->assertStatus(200);
+        $clearedSetup = DB::table('medical_loan_deduction_setups')->where('staffId', $staffId)->first();
+        $this->assertEquals(0.00, (float)$clearedSetup->balance_remaining);
+        $this->assertEquals(0, (int)$clearedSetup->is_active);
+
+        $settlementCleared = $respZero->json('data.settlement');
+        $medLoanCleared = collect($settlementCleared['deductions']['itemized_deductions'])->firstWhere('name', 'Medical Loan');
+        $this->assertEquals(0.00, $medLoanCleared['amount']);
+    }
+
+    /**
+     * Test updating and reconciling staff cooperative loan balance during exit settlement.
+     */
+    public function test_update_coop_loan_balance_during_exit_settlement()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in DB.');
+        }
+
+        $staffId = DB::table('tblper')->insertGetId([
+            'UserID'            => $user->id,
+            'fileNo'            => 'TEST-COOP-LOAN-001',
+            'surname'           => 'COOP',
+            'first_name'        => 'BORROWER',
+            'staff_status'      => 1,
+            'status_value'      => 'active',
+            'created_at'        => now(),
+            'updated_at'        => now(),
+        ]);
+
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $staffId],
+            [
+                'basic_salary'      => 200000.00,
+                'pen_act'           => 0,
+                'created_at'        => now(),
+            ]
+        );
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('coop_loan_deduction_setups')) {
+            DB::table('coop_loan_deduction_setups')->insert([
+                'staffId'           => $staffId,
+                'loan_amount'       => 80000.00,
+                'balance_remaining' => 80000.00,
+                'monthly_deduction' => 20000.00,
+                'interest_rate'     => 0.00,
+                'duration_months'   => 4,
+                'start_month'       => date('Y-m'),
+                'end_month'         => date('Y-m', strtotime('+3 months')),
+                'is_active'         => 1,
+                'created_at'        => now(),
+                'updated_at'        => now(),
+            ]);
+        }
+
+        $resignationId = DB::table('resignation_requests')->insertGetId([
+            'staff_id'         => $staffId,
+            'reason'           => 'Relocation',
+            'resignation_date' => '2026-08-15',
+            'status'           => 1,
+            'hod_status'       => 1,
+            'admin_status'     => 1,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        $controller = new \App\Http\Controllers\Api\ResignationApiController();
+        $settlementBefore = $controller->computeDetailedSettlement($resignationId);
+
+        // Verify that cooperative loan is captured as ₦80,000 initially
+        $coopLoanItem = collect($settlementBefore['deductions']['itemized_deductions'])->firstWhere('name', 'Cooperative Loan');
+        $this->assertNotNull($coopLoanItem);
+        $this->assertEquals(80000.00, $coopLoanItem['amount']);
+
+        // HR Head or Finance Head edits cooperative loan balance down to ₦35,000
+        $headers = [
+            'X-User-Id'   => $user->id,
+            'X-User-Role' => 'Finance Head',
+        ];
+
+        $resp = $this->postJson('/api/nextjs/payroll/resignations/update-coop-loan-balance', [
+            'staff_id'       => $staffId,
+            'balance'        => 35000.00,
+            'reason'         => 'Reconciled with coop passbook and offset against savings',
+            'resignation_id' => $resignationId,
+        ], $headers);
+
+        $resp->assertStatus(200);
+        $resp->assertJson(['status' => 'success']);
+
+        // Assert database setup was updated
+        $updatedSetup = DB::table('coop_loan_deduction_setups')->where('staffId', $staffId)->first();
+        $this->assertEquals(35000.00, (float)$updatedSetup->balance_remaining);
+        $this->assertEquals(1, (int)$updatedSetup->is_active);
+
+        // Assert recomputed settlement reflects ₦35,000
+        $settlementData = $resp->json('data.settlement');
+        $coopLoanUpdated = collect($settlementData['deductions']['itemized_deductions'])->firstWhere('name', 'Cooperative Loan');
+        $this->assertEquals(35000.00, $coopLoanUpdated['amount']);
+
+        // Also test clearing cooperative loan to ₦0.00
+        $respZero = $this->postJson('/api/nextjs/payroll/resignations/update-coop-loan-balance', [
+            'staff_id'       => $staffId,
+            'balance'        => 0.00,
+            'reason'         => 'Full settlement approved by cooperative executive',
+            'resignation_id' => $resignationId,
+        ], $headers);
+
+        $respZero->assertStatus(200);
+        $clearedSetup = DB::table('coop_loan_deduction_setups')->where('staffId', $staffId)->first();
+        $this->assertEquals(0.00, (float)$clearedSetup->balance_remaining);
+        $this->assertEquals(0, (int)$clearedSetup->is_active);
+
+        $settlementCleared = $respZero->json('data.settlement');
+        $coopLoanCleared = collect($settlementCleared['deductions']['itemized_deductions'])->firstWhere('name', 'Cooperative Loan');
+        $this->assertEquals(0.00, $coopLoanCleared['amount']);
+    }
 }
+
 
 
