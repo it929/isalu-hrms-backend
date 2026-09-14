@@ -2992,12 +2992,17 @@ class ResignationApiController extends Controller
             ], 401);
         }
 
-        // Only Super Administrators and HR Head can adjust retention months
-        $canManage = !empty($ctx['isSuperAdmin']) || !empty($ctx['isAdminStaff']);
+        $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+        // Super Administrators, HR Head, and Finance Head can adjust retention months
+        $canManage = !empty($ctx['isSuperAdmin']) 
+            || !empty($ctx['isAdminStaff']) 
+            || !empty($ctx['isFinanceStaff'])
+            || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance']);
+
         if (!$canManage) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Permission denied: Only Super Administrators and HR Head are authorized to edit retention months.'
+                'message' => 'Permission denied: Only Super Administrators, HR Head, and Finance Head are authorized to edit retention months.'
             ], 403);
         }
 

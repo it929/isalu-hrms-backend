@@ -846,6 +846,80 @@ class ResignationSettlementLoaTest extends TestCase
         $coopLoanCleared = collect($settlementCleared['deductions']['itemized_deductions'])->firstWhere('name', 'Cooperative Loan');
         $this->assertEquals(0.00, $coopLoanCleared['amount']);
     }
+
+    /**
+     * Test that Finance Head is authorized to edit and update deducted retention months.
+     */
+    public function test_finance_head_can_update_retention_months()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in DB.');
+        }
+
+        $staffId = DB::table('tblper')->insertGetId([
+            'UserID'            => $user->id,
+            'fileNo'            => 'TEST-RETEN-FIN-001',
+            'surname'           => 'FINANCE',
+            'first_name'        => 'AUTHORITY',
+            'staff_status'      => 1,
+            'status_value'      => 'active',
+            'created_at'        => now(),
+            'updated_at'        => now(),
+        ]);
+
+        DB::table('first_salary_structure')->updateOrInsert(
+            ['staffId' => $staffId],
+            [
+                'basic_salary'     => 150000.00,
+                'num_rente_months' => 5,
+                'reten_act'        => 1,
+                'created_at'       => now(),
+                'updated_at'       => now(),
+            ]
+        );
+
+        $resignationId = DB::table('resignation_requests')->insertGetId([
+            'staff_id'         => $staffId,
+            'reason'           => 'Exit plan',
+            'resignation_date' => '2026-08-20',
+            'status'           => 1,
+            'hod_status'       => 1,
+            'admin_status'     => 1,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        $headers = [
+            'X-User-Id'   => $user->id,
+            'X-User-Role' => 'Finance Head',
+        ];
+
+        // 1. Test update retention months on Resignation Settlement endpoint
+        $resp = $this->postJson('/api/nextjs/payroll/resignation-settlement/update-retention-months', [
+            'staff_id'         => $staffId,
+            'num_rente_months' => 12,
+            'resignation_id'   => $resignationId,
+        ], $headers);
+
+        $resp->assertStatus(200);
+        $resp->assertJson(['status' => 'success']);
+
+        $updatedFss = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+        $this->assertEquals(12, (int)$updatedFss->num_rente_months);
+
+        // 2. Test update retention months on Retention Activation endpoint
+        $respActivation = $this->postJson('/api/nextjs/payroll/retention-activation/update-months', [
+            'staff_id'         => $staffId,
+            'num_rente_months' => 15,
+        ], $headers);
+
+        $respActivation->assertStatus(200);
+        $respActivation->assertJson(['status' => 'success']);
+
+        $updatedFss2 = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
+        $this->assertEquals(15, (int)$updatedFss2->num_rente_months);
+    }
 }
 
 

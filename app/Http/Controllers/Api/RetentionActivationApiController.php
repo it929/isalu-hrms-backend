@@ -119,10 +119,11 @@ class RetentionActivationApiController extends Controller
             });
 
             return response()->json([
-                'status' => 'success',
-                'data' => $records,
+                'status'       => 'success',
+                'data'         => $records,
                 'isSuperAdmin' => $isSuperAdmin,
                 'isAdminStaff' => $ctx ? (bool)$ctx['isAdminStaff'] : false,
+                'isFinanceStaff' => $ctx ? (bool)$ctx['isFinanceStaff'] : false,
             ]);
         } catch (\Throwable $th) {
             Log::error('RetentionActivationAPI index: ' . $th->getMessage());
@@ -318,12 +319,17 @@ class RetentionActivationApiController extends Controller
                 'start_month' => 'nullable|string|regex:/^\d{4}-\d{2}$/',
             ]);
 
-            // Only Super Administrators and HR Head are authorized to update retention deducted months
-            $canManage = !empty($ctx['isSuperAdmin']) || !empty($ctx['isAdminStaff']);
+            $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+            // Super Administrators, HR Head, and Finance Head are authorized to update retention deducted months
+            $canManage = !empty($ctx['isSuperAdmin']) 
+                || !empty($ctx['isAdminStaff']) 
+                || !empty($ctx['isFinanceStaff'])
+                || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance']);
+
             if (!$canManage) {
                 return response()->json([
                     'status'  => 'error',
-                    'message' => 'Permission denied: Only Super Administrators and HR Head are authorized to update retention deducted months.'
+                    'message' => 'Permission denied: Only Super Administrators, HR Head, and Finance Head are authorized to update retention deducted months.'
                 ], 403);
             }
 
