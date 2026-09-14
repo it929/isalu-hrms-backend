@@ -2844,6 +2844,63 @@ class ResignationApiController extends Controller
     }
 
     /**
+     * POST|GET /api/nextjs/payroll/resignations/resubmit-audit/{id}
+     * HR Head or Finance Head reviews audit query, makes corrections, and forwards back to Audit Head for approval.
+     */
+    public function resubmitToAudit(Request $request, $id)
+    {
+        try {
+            $ctx = $this->getUserContext($request);
+            $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+            $isAuthorized = (
+                !empty($ctx['isSuperAdmin']) 
+                || !empty($ctx['isAdminStaff']) 
+                || !empty($ctx['isFinanceStaff'])
+                || in_array($activeRole, ['super admin', 'super administrator', 'hr head', 'head of hr', 'finance head', 'head of finance'])
+            );
+
+            if (!$ctx || !$isAuthorized) {
+                return response()->json(['status' => 'error', 'message' => 'HR Head, Finance Head, or Super Admin privileges required to forward to Audit.'], 401);
+            }
+
+            $record = DB::table('resignation_requests')->where('id', $id)->first();
+            if (!$record) {
+                return response()->json(['status' => 'error', 'message' => 'Resignation record not found.'], 404);
+            }
+
+            if ((int)$record->admin_status !== 1) {
+                return response()->json(['status' => 'error', 'message' => 'This request must be approved by HR Head.'], 400);
+            }
+
+            if ((int)$record->audit_status !== 2) {
+                return response()->json(['status' => 'error', 'message' => 'Only records queried/held by Audit Head can be forwarded back for re-audit.'], 400);
+            }
+
+            $remarks = trim($request->input('remarks', ''));
+            $updaterName = $ctx['employee'] ? trim("{$ctx['employee']->surname} {$ctx['employee']->first_name}") : ($ctx['user']->name ?? 'Management');
+            $roleLabel = (!empty($ctx['isAdminStaff']) || in_array($activeRole, ['hr head', 'head of hr'])) ? 'HR Head' : ((!empty($ctx['isFinanceStaff']) || in_array($activeRole, ['finance head', 'head of finance'])) ? 'Finance Head' : 'Super Admin');
+            
+            $resubmissionNote = "\n[Corrected & Forwarded to Audit by {$updaterName} ({$roleLabel}) on " . now()->format('d M, Y H:i') . "]: " . ($remarks ?: 'Corrections completed and forwarded for audit approval.');
+
+            $newRemarks = trim(($record->audit_remarks ?? '') . $resubmissionNote);
+
+            DB::table('resignation_requests')->where('id', $id)->update([
+                'audit_status'  => 0, // Reset to Pending Audit Review
+                'audit_remarks' => $newRemarks,
+                'updated_at'    => now(),
+            ]);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Exit settlement calculation corrected and forwarded back to Audit Head for approval.'
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('ResignationApiController resubmitToAudit: ' . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
      * POST|GET /api/nextjs/payroll/resignations/finance-pay/{id}
      * Finance Head marks settlement as paid or recovered.
      */

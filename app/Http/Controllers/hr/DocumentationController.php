@@ -534,7 +534,7 @@ class DocumentationController extends DatabaseDocumentationController
             'to'          => 'required|date|after_or_equal:from',
             'description' => 'required|string',
             'class_of_qualification'  => 'required|string',
-            'certificate' => 'mimes:pdf,doc,docx,jpeg,jpg,gif,png,bmp|max:2048',
+            'certificate' => 'required|mimes:pdf,doc,docx,jpeg,jpg,gif,png,bmp|max:2048',
 
         ]);
 

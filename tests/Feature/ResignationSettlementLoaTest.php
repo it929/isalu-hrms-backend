@@ -530,5 +530,93 @@ class ResignationSettlementLoaTest extends TestCase
         // Total notice salary = ₦300,000 + ₦40,000 = ₦340,000.00
         $this->assertEquals(340000.00, $settlement['notice_earnings']['total_notice_salary']);
     }
+
+    /**
+     * Test Audit reject -> HR/Finance review & forward back to Audit -> Audit approve cycle.
+     */
+    public function test_audit_query_and_resubmission_by_hr_or_finance_flow()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in DB.');
+        }
+
+        DB::table('assign_user_role')->updateOrInsert(
+            ['userID' => $user->id, 'roleID' => 1],
+            ['created_at' => now()]
+        );
+
+        $staffId = DB::table('tblper')->insertGetId([
+            'UserID'            => $user->id,
+            'fileNo'            => 'TEST-AUDIT-RESUBMIT-001',
+            'surname'           => 'AUDIT',
+            'first_name'        => 'FLOW',
+            'staff_status'      => 1,
+            'status_value'      => 'active',
+            'appointment_date'  => '2024-01-01',
+            'created_at'        => now(),
+            'updated_at'        => now(),
+        ]);
+
+        $resignationId = DB::table('resignation_requests')->insertGetId([
+            'staff_id'         => $staffId,
+            'reason'           => 'Relocation',
+            'resignation_date' => '2026-08-10',
+            'status'           => 1,
+            'hod_status'       => 1,
+            'admin_status'     => 1, // HR Approved
+            'audit_status'     => 0, // Pending Audit
+            'finance_status'   => 0,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        // Step 1: Audit Head queries the settlement
+        $auditHeaders = [
+            'X-User-Id'   => $user->id,
+            'X-User-Role' => 'Head of Audit',
+        ];
+        $rejectResp = $this->postJson("/api/nextjs/payroll/resignations/audit-reject/{$resignationId}", [
+            'remarks' => 'Please verify retention months deduction before audit approval.',
+        ], $auditHeaders);
+
+        $rejectResp->assertStatus(200);
+        $rejectResp->assertJson(['status' => 'success']);
+
+        $queriedRecord = DB::table('resignation_requests')->where('id', $resignationId)->first();
+        $this->assertEquals(2, $queriedRecord->audit_status);
+        $this->assertStringContainsString('Please verify retention months deduction', $queriedRecord->audit_remarks);
+
+        // Step 2: HR Head or Finance Head reviews query, corrects it, and forwards back to Audit
+        $financeHeaders = [
+            'X-User-Id'   => $user->id,
+            'X-User-Role' => 'Head of Finance',
+        ];
+        $resubmitResp = $this->postJson("/api/nextjs/payroll/resignations/resubmit-audit/{$resignationId}", [
+            'remarks' => 'Retention months have been corrected to 12 months. Forwarding back for approval.',
+        ], $financeHeaders);
+
+        $resubmitResp->assertStatus(200);
+        $resubmitResp->assertJson(['status' => 'success']);
+
+        $resubmittedRecord = DB::table('resignation_requests')->where('id', $resignationId)->first();
+        // audit_status must be reset to 0 so Audit Head can approve it
+        $this->assertEquals(0, $resubmittedRecord->audit_status);
+        $this->assertStringContainsString('Retention months have been corrected to 12 months', $resubmittedRecord->audit_remarks);
+        $this->assertStringContainsString('Corrected & Forwarded to Audit', $resubmittedRecord->audit_remarks);
+
+        // Step 3: Audit Head can now approve the settlement for payment
+        $approveResp = $this->postJson("/api/nextjs/payroll/resignations/audit-approve/{$resignationId}", [
+            'remarks' => 'Verified and approved for payment disbursement.',
+        ], $auditHeaders);
+
+        $approveResp->assertStatus(200);
+        $approveResp->assertJson(['status' => 'success']);
+
+        $approvedRecord = DB::table('resignation_requests')->where('id', $resignationId)->first();
+        $this->assertEquals(1, $approvedRecord->audit_status);
+        $this->assertNotNull($approvedRecord->audit_date);
+    }
 }
+
 

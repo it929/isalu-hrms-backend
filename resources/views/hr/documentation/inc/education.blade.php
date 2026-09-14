@@ -125,8 +125,8 @@
                 </div>
 
                 <div class="col-md-3">
-                    <label>Attach Certificate</label>
-                    <input type="file" name="certificate" class="form-control input-sm">
+                    <label>Attach Certificate <span class="text-danger">*</span></label>
+                    <input type="file" name="certificate" class="form-control input-sm" required>
                 </div>
 
                 <div class="col-md-3" style="padding-top: 25px;">

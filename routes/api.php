@@ -484,6 +484,7 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'hrReject']);
             Route::match(['get', 'post'], '/audit-approve/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'auditApprove']);
             Route::match(['get', 'post'], '/audit-reject/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'auditReject']);
+            Route::match(['get', 'post'], '/resubmit-audit/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'resubmitToAudit']);
             Route::match(['get', 'post'], '/finance-pay/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'financePay']);
             Route::get('/settlement/{id}/send-email', [\App\Http\Controllers\Api\ResignationApiController::class, 'sendSettlementEmail']);
             Route::post('/settlement/{id}/send-email', [\App\Http\Controllers\Api\ResignationApiController::class, 'sendSettlementEmail']);
@@ -495,6 +496,7 @@ Route::prefix('nextjs')->group(function () {
         Route::prefix('resignation-settlement')->group(function () {
             Route::get('/approved', [\App\Http\Controllers\Api\ResignationApiController::class, 'getApprovedResignations']);
             Route::get('/settlement/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'getSettlementBreakdown']);
+            Route::match(['get', 'post'], '/resubmit-audit/{id}', [\App\Http\Controllers\Api\ResignationApiController::class, 'resubmitToAudit']);
             Route::post('/update-retention-months', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateRetentionMonths']);
         });
 
