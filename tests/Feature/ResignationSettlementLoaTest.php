@@ -454,5 +454,81 @@ class ResignationSettlementLoaTest extends TestCase
         // 15000 + 25000 + 12000 + 8000 + 5000 + 30000 + 7500 + 30000 = 132,500 (+ notice PAYE/Pension if any)
         $this->assertGreaterThanOrEqual(132500.00, $settlement['deductions']['total_deductions']);
     }
+
+    /**
+     * Test that an early month resignation (Day 1-10, e.g. August 4) calculates
+     * Full August Salary (31 days) + Prorated September Exit Days (4 days out of 30).
+     */
+    public function test_early_month_resignation_calculates_full_start_month_plus_exit_month_days()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in DB.');
+        }
+
+        $staffId = DB::table('tblper')->insertGetId([
+            'UserID'            => $user->id,
+            'fileNo'            => 'TEST-EARLY-001',
+            'surname'           => 'JOHNSON',
+            'first_name'        => 'MARY',
+            'office_shift'      => 1,
+            'staff_status'      => 1,
+            'status_value'      => 'active',
+            'appointment_date'  => '2024-01-01',
+            'created_at'        => now(),
+            'updated_at'        => now(),
+        ]);
+
+        // Monthly gross = ₦300,000
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $staffId],
+            [
+                'basic_salary'        => 150000.00,
+                'housing_allowance'   => 50000.00,
+                'transport_allowance' => 40000.00,
+                'medical_allowance'   => 20000.00,
+                'utility_allowance'   => 20000.00,
+                'meal_allowance'      => 20000.00,
+                'pen_act'             => 0,
+                'created_at'          => now(),
+            ]
+        );
+
+        // Staff resigns on August 4th, 2026 (1-month notice exits on September 4th, 2026)
+        $resignationId = DB::table('resignation_requests')->insertGetId([
+            'staff_id'         => $staffId,
+            'reason'           => 'Career growth',
+            'resignation_date' => '2026-08-04',
+            'status'           => 1,
+            'hod_status'       => 1,
+            'admin_status'     => 1,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        $controller = new \App\Http\Controllers\Api\ResignationApiController();
+        $settlement = $controller->computeDetailedSettlement($resignationId);
+
+        $this->assertEquals('early_month', $settlement['timeline']['resignation_rule']);
+        $this->assertEquals('2026-09-04', $settlement['timeline']['exit_date']);
+
+        $breakdown = $settlement['notice_earnings']['breakdown'];
+        $this->assertCount(2, $breakdown);
+
+        // Month 1: Full August (31 days) = ₦300,000.00
+        $this->assertEquals('August 2026', $breakdown[0]['month_name']);
+        $this->assertEquals(31, $breakdown[0]['days_worked']);
+        $this->assertEquals(300000.00, $breakdown[0]['earned_salary']);
+        $this->assertFalse($breakdown[0]['is_paid_via_payroll']);
+
+        // Month 2: September 4 days (4/30 of ₦300,000 = ₦40,000.00)
+        $this->assertEquals('September 2026', $breakdown[1]['month_name']);
+        $this->assertEquals(4, $breakdown[1]['days_worked']);
+        $this->assertEquals(40000.00, $breakdown[1]['earned_salary']);
+        $this->assertFalse($breakdown[1]['is_paid_via_payroll']);
+
+        // Total notice salary = ₦300,000 + ₦40,000 = ₦340,000.00
+        $this->assertEquals(340000.00, $settlement['notice_earnings']['total_notice_salary']);
+    }
 }
 

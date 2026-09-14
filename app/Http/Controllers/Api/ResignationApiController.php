@@ -451,7 +451,7 @@ class ResignationApiController extends Controller
                     'updated_at'   => now(),
                 ]);
 
-                $approvalMessage = 'Resignation request approved by HR Admin. Early month resignation (Day 1–10): staff removed from active payroll and full 1-month notice will be settled on Exit Settlement Registry.';
+                $approvalMessage = 'Resignation request approved by HR Admin. Early month resignation (Day 1–10): staff removed from active payroll; full current month salary plus exit month notice days will be settled on Exit Settlement Registry.';
             } else {
                 DB::table('tblper')->where('ID', $record->staff_id)->update([
                     'staff_status' => 1,
@@ -863,36 +863,36 @@ class ResignationApiController extends Controller
         if ($startDay <= 10) {
             // ── Early Month Resignation Rule (1st - 10th of the month) ──
             // Staff is immediately removed from regular monthly payroll on HR approval.
-            // The entire 1-month notice period earnings are paid via Exit Settlement Registry.
-            $daysInM1 = max(1, $daysInStartMonth - $startDay + 1);
-            $m1Amount = round($monthlyGross * ($daysInM1 / $daysInStartMonth), 2);
-            $m2Amount = round($monthlyGross - $m1Amount, 2); // Exact remainder to equal 1 full month gross
-
+            // Full current month salary + remaining exit month notice days are settled via Exit Settlement Registry.
+            
+            // Month 1: Full current month worked
             $noticeBreakdown[] = [
                 'month_name'          => $startMonthName,
-                'period_label'        => "{$startMonthName} (Notice Days: {$daysInM1}/{$daysInStartMonth} days)",
+                'period_label'        => "{$startMonthName} (Full Month Worked — Exit Settlement)",
                 'days_in_month'       => $daysInStartMonth,
-                'days_worked'         => $daysInM1,
-                'is_full_month'       => false,
+                'days_worked'         => $daysInStartMonth,
+                'is_full_month'       => true,
                 'is_paid_via_payroll' => false,
                 'monthly_gross'       => $monthlyGross,
-                'earned_salary'       => $m1Amount,
-                'payroll_note'        => 'Removed from active payroll; notice salary paid via Exit Settlement Registry.',
+                'earned_salary'       => $monthlyGross,
+                'payroll_note'        => 'Removed from active payroll; full month salary paid via Exit Settlement Registry.',
             ];
 
+            // Month 2: Remaining notice completion days in exit month
+            $m2Amount = round($monthlyGross * ($exitDay / $daysInExitMonth), 2);
             $noticeBreakdown[] = [
                 'month_name'          => $exitMonthName,
-                'period_label'        => "{$exitMonthName} (Notice Completion: {$exitDay}/{$daysInExitMonth} days)",
+                'period_label'        => "{$exitMonthName} (Exit Month Notice Days: {$exitDay}/{$daysInExitMonth} days)",
                 'days_in_month'       => $daysInExitMonth,
                 'days_worked'         => $exitDay,
                 'is_full_month'       => false,
                 'is_paid_via_payroll' => false,
                 'monthly_gross'       => $monthlyGross,
                 'earned_salary'       => $m2Amount,
-                'payroll_note'        => 'Remaining notice days to complete 1-month notice.',
+                'payroll_note'        => "Prorated {$exitDay} notice days in exit month to complete 1-month notice.",
             ];
 
-            $totalNoticeSalary = round($monthlyGross, 2);
+            $totalNoticeSalary = round($monthlyGross + $m2Amount, 2);
         } else {
             // ── Mid/Late Month Resignation Rule (11th of the month upward) ──
             // Staff receives current month full salary via regular monthly payroll.
@@ -1023,9 +1023,10 @@ class ResignationApiController extends Controller
         $totalNoticePayeTax = 0.00;
         $totalNoticePension = 0.00;
         if ($startDay <= 10) {
-            // Early Month: Entire 1-month notice salary is paid via exit settlement
-            $totalNoticePayeTax = $monthlyPayeTax;
-            $totalNoticePension = $monthlyPension;
+            // Early Month: Full month 1 + prorated month 2 notice days paid via Exit Settlement
+            $ratio = $daysInExitMonth > 0 ? ($exitDay / (float)$daysInExitMonth) : 0;
+            $totalNoticePayeTax = round($monthlyPayeTax * (1.0 + $ratio), 2);
+            $totalNoticePension = round($monthlyPension * (1.0 + $ratio), 2);
         } else {
             // Mid/Late Month: Month 1 was taxed on regular payroll; only prorate remaining notice days in exit month
             $ratio = $daysInExitMonth > 0 ? ($exitDay / (float)$daysInExitMonth) : 0;
@@ -1196,7 +1197,7 @@ class ResignationApiController extends Controller
                 'resignation_day'    => $startDay,
                 'resignation_rule'   => $startDay <= 10 ? 'early_month' : 'mid_late_month',
                 'rule_description'   => $startDay <= 10
-                    ? 'Early Month Resignation (1st–10th): Staff removed from active payroll; full 1-month notice paid via Exit Settlement Registry.'
+                    ? "Early Month Resignation (1st–10th): Staff removed from active payroll; full {$startMonthName} salary plus {$exitDay} exit notice days of {$exitMonthName} paid via Exit Settlement Registry."
                     : "Mid/Late Month Resignation (11th+): Staff receives {$startMonthName} salary via regular payroll; remaining {$exitDay} prorated notice days of {$exitMonthName} paid via Exit Settlement Registry.",
                 'admin_approved_at'  => $resignation->admin_date,
                 'approved_by'        => $resignation->approved_by_name ?? 'HR Head',
@@ -2330,14 +2331,14 @@ class ResignationApiController extends Controller
         $isEarlyResignation = ($startDay <= 10);
         $totalNoticeSalary = 0.00;
 
+        $m2Amount = round($monthlyGross * ($exitDay / $daysInExitMonth), 2);
         if ($isEarlyResignation) {
             // Early Month Resignation (1st - 10th):
-            // Staff removed from active payroll; full 1-month notice paid via settlement registry
-            $totalNoticeSalary = round($monthlyGross, 2);
+            // Staff removed from active payroll; full start month salary + next month remaining prorated notice days settled here
+            $totalNoticeSalary = round($monthlyGross + $m2Amount, 2);
         } else {
             // Mid/Late Month Resignation (11th+):
             // Current month paid via regular payroll; only next month remaining prorated notice days settled here
-            $m2Amount = round($monthlyGross * ($exitDay / $daysInExitMonth), 2);
             $totalNoticeSalary = $m2Amount;
         }
 
@@ -2425,8 +2426,9 @@ class ResignationApiController extends Controller
         $totalNoticePayeTax = 0.00;
         $totalNoticePension = 0.00;
         if ($isEarlyResignation) {
-            $totalNoticePayeTax = $monthlyPayeTax;
-            $totalNoticePension = $monthlyPension;
+            $ratio = $daysInExitMonth > 0 ? ($exitDay / (float)$daysInExitMonth) : 0;
+            $totalNoticePayeTax = round($monthlyPayeTax * (1.0 + $ratio), 2);
+            $totalNoticePension = round($monthlyPension * (1.0 + $ratio), 2);
         } else {
             // Only prorate for next month notice days; Month 1 was already taxed on regular payroll
             $ratio = $daysInExitMonth > 0 ? ($exitDay / (float)$daysInExitMonth) : 0;
