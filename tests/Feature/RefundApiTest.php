@@ -107,15 +107,7 @@ class RefundApiTest extends TestCase
         $this->assertEquals(50000.00, $updated->amount);
         $this->assertEquals('Updated test refund request reason', $updated->reason);
 
-        // 3a. Assert HR approval fails before HOD approval
-        $responseHrEarly = $this->getJson("/api/nextjs/payroll/refunds/hr-approve/{$refundId}?remarks=HR+early", $headers);
-        $responseHrEarly->assertStatus(400)
-            ->assertJson([
-                'status'  => 'error',
-                'message' => 'This request is not in a pending HR state.'
-            ]);
-
-        // 3b. Assert Audit approval fails before HR approval
+        // 3a. Assert Audit approval fails before HR approval
         $responseAuditEarly = $this->getJson("/api/nextjs/payroll/refunds/audit-approve/{$refundId}?remarks=Audit+early", $headers);
         $responseAuditEarly->assertStatus(400)
             ->assertJson([
@@ -123,7 +115,7 @@ class RefundApiTest extends TestCase
                 'message' => 'This request is not recommended by HR or already processed by Audit.'
             ]);
 
-        // 3c. Assert Finance approval fails before Audit approval
+        // 3b. Assert Finance approval fails before Audit approval
         $responseFinanceEarly1 = $this->getJson("/api/nextjs/payroll/refunds/finance-approve/{$refundId}?remarks=Finance+early", $headers);
         $responseFinanceEarly1->assertStatus(400)
             ->assertJson([
@@ -131,24 +123,7 @@ class RefundApiTest extends TestCase
                 'message' => 'This request is not recommended by Audit or already processed by Finance.'
             ]);
 
-        // 3. Test HOD Approval (Stage 1 succeeds)
-        $responseHod = $this->getJson("/api/nextjs/payroll/refunds/hod-approve/{$refundId}?remarks=HOD+approved", $headers);
-        $responseHod->assertStatus(200)
-            ->assertJson(['status' => 'success']);
-
-        $afterHod = DB::table('refund_requests')->where('id', $refundId)->first();
-        $this->assertEquals(1, $afterHod->hod_status);
-        $this->assertEquals(0, $afterHod->status);
-
-        // 4a. Assert Audit approval still fails before HR approval
-        $responseAuditStillEarly = $this->getJson("/api/nextjs/payroll/refunds/audit-approve/{$refundId}?remarks=Audit+early", $headers);
-        $responseAuditStillEarly->assertStatus(400)
-            ->assertJson([
-                'status'  => 'error',
-                'message' => 'This request is not recommended by HR or already processed by Audit.'
-            ]);
-
-        // 4b. Test HR Approval (Stage 2 succeeds)
+        // 3. Test HR Setup & Approval (Stage 1 directly without HOD)
         $responseHr = $this->getJson("/api/nextjs/payroll/refunds/hr-approve/{$refundId}?remarks=HR+approved", $headers);
         $responseHr->assertStatus(200)
             ->assertJson(['status' => 'success']);
@@ -196,4 +171,93 @@ class RefundApiTest extends TestCase
 
         $this->assertDatabaseMissing('refund_requests', ['id' => $refundId]);
     }
+
+    /**
+     * Test staff submits without amount, and HR Head sets up refund by days and by direct amount.
+     */
+    public function test_hr_setup_refund_by_days_and_by_amount()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in DB.');
+        }
+
+        DB::table('assign_user_role')->updateOrInsert(
+            ['userID' => $user->id, 'roleID' => 1],
+            ['created_at' => now()]
+        );
+
+        $staff = DB::table('tblper')->first();
+        if (!$staff) {
+            $this->markTestSkipped('No staff record found in tblper.');
+        }
+
+        // Configure salary_structure for staff to ₦150,000 gross
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $staff->ID],
+            [
+                'basic_salary'        => 30000.00,
+                'housing_allowance'   => 30000.00,
+                'transport_allowance' => 15000.00,
+                'medical_allowance'   => 15000.00,
+                'utility_allowance'   => 30000.00,
+                'meal_allowance'      => 30000.00,
+                'created_at'          => now()
+            ]
+        );
+
+        $headers = $this->getHeaders($user->id);
+
+        // 1. Staff submits refund request WITHOUT specifying an amount
+        $submitPayload = [
+            'staff_id'    => $staff->ID,
+            'reason'      => 'Refund for extra duty in April',
+            'refund_date' => '2026-04-10',
+        ];
+
+        $submitRes = $this->postJson('/api/nextjs/payroll/refunds', $submitPayload, $headers);
+        $submitRes->assertStatus(200)
+            ->assertJson([
+                'status'  => 'success',
+                'message' => 'Refund request submitted successfully.'
+            ]);
+
+        $record = DB::table('refund_requests')
+            ->where('staff_id', $staff->ID)
+            ->where('reason', 'Refund for extra duty in April')
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $this->assertNotNull($record);
+        $this->assertEquals(0.00, (float)$record->amount);
+        $refundId = $record->id;
+
+        // 2. HR Head sets up refund directly with "days" mode for April 2026 (30 days, no HOD approval required)
+        $hrSetupPayload = [
+            'refund_type'  => 'days',
+            'refund_days'  => 1,
+            'refund_month' => '2026-04',
+            'gross_salary' => 150000.00,
+            'remarks'      => 'Calculated 1 day rate for April',
+        ];
+
+        $hrRes = $this->postJson("/api/nextjs/payroll/refunds/hr-approve/{$refundId}", $hrSetupPayload, $headers);
+        $hrRes->assertStatus(200)
+            ->assertJson([
+                'status'  => 'success',
+                'message' => 'Refund request setup and approved successfully by HR Admin.'
+            ]);
+
+        $updatedRecord = DB::table('refund_requests')->where('id', $refundId)->first();
+        $this->assertEquals('days', $updatedRecord->refund_type);
+        $this->assertEquals(1.00, (float)$updatedRecord->refund_days);
+        $this->assertEquals('2026-04', $updatedRecord->refund_month);
+        $this->assertEquals(5000.00, (float)$updatedRecord->daily_rate);
+        $this->assertEquals(5000.00, (float)$updatedRecord->amount);
+        $this->assertEquals(1, $updatedRecord->admin_status);
+
+        // Clean up
+        DB::table('refund_requests')->where('id', $refundId)->delete();
+    }
 }
+

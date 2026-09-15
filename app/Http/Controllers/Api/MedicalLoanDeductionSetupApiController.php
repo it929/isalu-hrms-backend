@@ -30,6 +30,7 @@ class MedicalLoanDeductionSetupApiController extends Controller
             }
 
             $search = trim($request->input('search', ''));
+            $staffStatus = $request->input('staff_status');
             $query = DB::table('medical_loan_deduction_setups as mlds')
                 ->join('tblper as p', 'p.ID', '=', 'mlds.staffId')
                 ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
@@ -39,6 +40,7 @@ class MedicalLoanDeductionSetupApiController extends Controller
                     'p.surname',
                     'p.first_name',
                     'p.othernames',
+                    'p.staff_status',
                     'd.department'
                 );
 
@@ -51,11 +53,16 @@ class MedicalLoanDeductionSetupApiController extends Controller
                 });
             }
 
+            if ($staffStatus !== null && $staffStatus !== '' && $staffStatus !== 'all') {
+                $query->where('p.staff_status', (int) $staffStatus);
+            }
+
             $employee = $ctx['employee'];
 
             $records = $query->orderBy('mlds.id', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $row->is_active = (int) $row->is_active;
+                $row->staff_status = isset($row->staff_status) ? (int) $row->staff_status : 1;
                 return $row;
             });
 

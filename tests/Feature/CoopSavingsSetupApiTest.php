@@ -62,4 +62,33 @@ class CoopSavingsSetupApiTest extends TestCase
             'is_active' => 1
         ]);
     }
+
+    public function test_index_returns_staff_status_and_filters()
+    {
+        $employee = DB::table('tblper')->first();
+        if (!$employee) {
+            $this->markTestSkipped('No user found');
+        }
+
+        DB::table('assign_user_role')->insertOrIgnore([
+            'userID' => $employee->UserID ?? 1,
+            'roleID' => 1
+        ]);
+
+        $headers = ['X-User-Id' => $employee->UserID ?? 1];
+
+        $resAll = $this->getJson('/api/nextjs/payroll/coop-savings-setups?staff_status=all', $headers);
+        $resAll->assertStatus(200)->assertJson(['status' => 'success']);
+
+        if (!empty($resAll->json('data'))) {
+            $first = $resAll->json('data')[0];
+            $this->assertArrayHasKey('staff_status', $first);
+        }
+
+        $resActive = $this->getJson('/api/nextjs/payroll/coop-savings-setups?staff_status=active', $headers);
+        $resActive->assertStatus(200);
+
+        $resInactive = $this->getJson('/api/nextjs/payroll/coop-savings-setups?staff_status=inactive', $headers);
+        $resInactive->assertStatus(200);
+    }
 }

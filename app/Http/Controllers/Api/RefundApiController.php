@@ -24,6 +24,7 @@ class RefundApiController extends Controller
             }
 
             $query = DB::table('tblper as p')
+                ->leftJoin('salary_structures as ss', 'ss.staffId', '=', 'p.ID')
                 ->where('p.rank', '!=', 2) // Exclude terminated/retired
                 ->where('p.staff_status', 1)
                 ->select(
@@ -31,7 +32,16 @@ class RefundApiController extends Controller
                     'p.fileNo',
                     'p.surname',
                     'p.first_name',
-                    'p.othernames'
+                    'p.othernames',
+                    DB::raw('(
+                        COALESCE(ss.basic_salary, 0.00) +
+                        COALESCE(ss.housing_allowance, 0.00) +
+                        COALESCE(ss.transport_allowance, 0.00) +
+                        COALESCE(ss.medical_allowance, 0.00) +
+                        COALESCE(ss.utility_allowance, 0.00) +
+                        COALESCE(ss.meal_allowance, 0.00)
+                    ) as current_gross_salary'),
+                    'ss.declare_salary'
                 )
                 ->orderBy('p.surname', 'asc');
 
@@ -46,11 +56,16 @@ class RefundApiController extends Controller
 
             $staff = $query->get()->map(function ($row) {
                 $fullName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                $gross = (float)($row->current_gross_salary ?? 0);
+                if ($gross <= 0 && !empty($row->declare_salary)) {
+                    $gross = (float)$row->declare_salary;
+                }
                 return [
-                    'id'     => $row->id,
-                    'fileNo' => $row->fileNo ?? '',
-                    'name'   => $fullName,
-                    'label'  => $fullName,
+                    'id'           => $row->id,
+                    'fileNo'       => $row->fileNo ?? '',
+                    'name'         => $fullName,
+                    'label'        => $fullName,
+                    'gross_salary' => $gross,
                 ];
             });
 
@@ -82,6 +97,7 @@ class RefundApiController extends Controller
             $search = trim($request->input('search', ''));
             $query = DB::table('refund_requests as rr')
                 ->join('tblper as p', 'p.ID', '=', 'rr.staff_id')
+                ->leftJoin('salary_structures as ss', 'ss.staffId', '=', 'p.ID')
                 ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
                 ->leftJoin('users as u_hod', 'u_hod.id', '=', 'rr.hod_id')
                 ->leftJoin('users as u_admin', 'u_admin.id', '=', 'rr.admin_id')
@@ -98,7 +114,16 @@ class RefundApiController extends Controller
                     'u_hod.name as hod_name',
                     'u_admin.name as admin_name',
                     'u_audit.name as audit_name',
-                    'u_finance.name as finance_name'
+                    'u_finance.name as finance_name',
+                    DB::raw('(
+                        COALESCE(ss.basic_salary, 0.00) +
+                        COALESCE(ss.housing_allowance, 0.00) +
+                        COALESCE(ss.transport_allowance, 0.00) +
+                        COALESCE(ss.medical_allowance, 0.00) +
+                        COALESCE(ss.utility_allowance, 0.00) +
+                        COALESCE(ss.meal_allowance, 0.00)
+                    ) as current_gross_salary'),
+                    'ss.declare_salary as current_declare_salary'
                 );
 
             if ($search !== '') {
@@ -124,12 +149,9 @@ class RefundApiController extends Controller
                         $hasCondition = true;
                     }
 
-                    // 2. HR Head / HR Admin sees requests from all departments that have been approved by HOD (or acted on by HR)
+                    // 2. HR Head / HR Admin sees requests from all departments directly (no HOD approval needed)
                     if ($ctx['isAdminStaff']) {
-                        $q->orWhere(function ($sub) {
-                            $sub->where('rr.hod_status', 1)
-                                ->orWhere('rr.admin_status', '!=', 0);
-                        });
+                        $q->orWhereNotNull('rr.id');
                         $hasCondition = true;
                     }
 
@@ -165,6 +187,14 @@ class RefundApiController extends Controller
 
             $records = $query->orderBy('rr.id', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                $gross = (float)($row->current_gross_salary ?? 0);
+                if ($gross <= 0 && !empty($row->current_declare_salary)) {
+                    $gross = (float)$row->current_declare_salary;
+                }
+                $row->staff_gross_salary = $gross;
+                if (!isset($row->gross_salary) || (float)$row->gross_salary <= 0) {
+                    $row->gross_salary = $gross;
+                }
                 return $row;
             });
 
@@ -202,7 +232,7 @@ class RefundApiController extends Controller
             $validated = $request->validate([
                 'id'          => 'nullable|integer',
                 'staff_id'    => 'required|integer',
-                'amount'      => 'required|numeric|min:0.01',
+                'amount'      => 'nullable|numeric|min:0',
                 'reason'      => 'required|string',
                 'refund_date' => 'required|date',
             ]);
@@ -219,7 +249,7 @@ class RefundApiController extends Controller
             $id = $validated['id'] ?? null;
             $data = [
                 'staff_id'    => $validated['staff_id'],
-                'amount'      => (float) $validated['amount'],
+                'amount'      => isset($validated['amount']) && $validated['amount'] !== '' ? (float) $validated['amount'] : 0.00,
                 'reason'      => $validated['reason'],
                 'refund_date' => $validated['refund_date'],
                 'updated_at'  => now(),
@@ -411,7 +441,7 @@ class RefundApiController extends Controller
     }
 
     /**
-     * GET /api/nextjs/payroll/refunds/hr-approve/{id}
+     * GET/POST /api/nextjs/payroll/refunds/hr-approve/{id}
      */
     public function hrApprove(Request $request, $id)
     {
@@ -426,20 +456,94 @@ class RefundApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Refund request not found.'], 404);
             }
 
-            if ($record->hod_status !== 1 || $record->admin_status !== 0 || $record->status !== 0) {
+            if ($record->admin_status !== 0 || $record->status !== 0) {
                 return response()->json(['status' => 'error', 'message' => 'This request is not in a pending HR state.'], 400);
             }
 
+            // Fetch employee gross salary from salary_structures
+            $struct = DB::table('salary_structures')->where('staffId', $record->staff_id)->first();
+            $staffGross = 0.00;
+            if ($struct) {
+                $staffGross = (float)$struct->basic_salary +
+                              (float)$struct->housing_allowance +
+                              (float)$struct->transport_allowance +
+                              (float)$struct->medical_allowance +
+                              (float)$struct->utility_allowance +
+                              (float)$struct->meal_allowance;
+                if ($staffGross <= 0 && !empty($struct->declare_salary)) {
+                    $staffGross = (float)$struct->declare_salary;
+                }
+            }
+
+            $refundType = $request->input('refund_type', 'amount'); // 'amount' or 'days'
             $remarks = $request->input('remarks');
-            DB::table('refund_requests')->where('id', $id)->update([
+            $updateData = [
                 'admin_status' => 1,
                 'admin_id'     => $ctx['userId'],
                 'admin_date'   => now(),
                 'remarks'      => $remarks,
                 'updated_at'   => now(),
-            ]);
+            ];
 
-            return response()->json(['status' => 'success', 'message' => 'Refund request approved by HR Admin.']);
+            if ($refundType === 'days') {
+                $days = (float) $request->input('refund_days', 1);
+                if ($days <= 0) {
+                    $days = 1.0;
+                }
+
+                $monthStr = trim($request->input('refund_month', '')); // 'YYYY-MM'
+                if (empty($monthStr)) {
+                    $monthStr = date('Y-m');
+                }
+
+                // Parse month and calculate days in month considering leap year (28, 29, 30, or 31)
+                $parsedDate = \Carbon\Carbon::parse($monthStr . '-01');
+                $daysInMonth = $parsedDate->daysInMonth;
+
+                // Gross salary
+                $grossToUse = (float)$request->input('gross_salary', $staffGross);
+                if ($grossToUse <= 0) {
+                    $grossToUse = $staffGross;
+                }
+
+                // Daily rate: gross / days in month
+                $dailyRate = $daysInMonth > 0 ? round($grossToUse / $daysInMonth, 2) : 0.00;
+                $calculatedAmount = round($dailyRate * $days, 2);
+
+                $updateData['refund_type']  = 'days';
+                $updateData['refund_days']  = $days;
+                $updateData['refund_month'] = $monthStr;
+                $updateData['daily_rate']   = $dailyRate;
+                $updateData['gross_salary'] = $grossToUse;
+                $updateData['amount']       = $calculatedAmount;
+            } else {
+                // Direct amount mode
+                $inputAmount = $request->input('amount');
+                if ($inputAmount !== null && is_numeric($inputAmount) && (float)$inputAmount > 0) {
+                    $updateData['amount'] = (float)$inputAmount;
+                } elseif ((float)$record->amount > 0) {
+                    $updateData['amount'] = (float)$record->amount;
+                } else {
+                    return response()->json([
+                        'status'  => 'error',
+                        'message' => 'Please enter a valid refund amount.'
+                    ], 422);
+                }
+
+                $updateData['refund_type']  = 'amount';
+                $updateData['refund_days']  = null;
+                $updateData['refund_month'] = null;
+                $updateData['daily_rate']   = null;
+                $updateData['gross_salary'] = $staffGross > 0 ? $staffGross : null;
+            }
+
+            DB::table('refund_requests')->where('id', $id)->update($updateData);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Refund request setup and approved successfully by HR Admin.',
+                'data'    => $updateData
+            ]);
         } catch (\Throwable $th) {
             Log::error('RefundApiController hrApprove: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
@@ -462,7 +566,7 @@ class RefundApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Refund request not found.'], 404);
             }
  
-            if ($record->hod_status !== 1 || $record->admin_status !== 0 || $record->status !== 0) {
+            if ($record->admin_status !== 0 || $record->status !== 0) {
                 return response()->json(['status' => 'error', 'message' => 'This request is not in a pending HR state.'], 400);
             }
  
