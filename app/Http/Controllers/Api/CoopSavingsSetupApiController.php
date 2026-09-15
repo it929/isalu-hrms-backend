@@ -39,8 +39,18 @@ class CoopSavingsSetupApiController extends Controller
                     'p.surname',
                     'p.first_name',
                     'p.othernames',
+                    'p.staff_status',
                     'd.department'
                 );
+
+            $staffStatus = $request->input('staff_status');
+            if ($staffStatus !== null && $staffStatus !== '' && $staffStatus !== 'all') {
+                if ($staffStatus === 'active' || $staffStatus === '1' || $staffStatus === 1) {
+                    $query->where('p.staff_status', 1);
+                } elseif ($staffStatus === 'inactive' || $staffStatus === '0' || $staffStatus === 0) {
+                    $query->where('p.staff_status', 0);
+                }
+            }
 
             if ($search !== '') {
                 $query->where(function ($q) use ($search) {
@@ -56,6 +66,7 @@ class CoopSavingsSetupApiController extends Controller
             $records = $query->orderBy('css.id', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $row->is_active = (int) $row->is_active;
+                $row->staff_status = isset($row->staff_status) ? (int) $row->staff_status : 1;
                 return $row;
             });
 

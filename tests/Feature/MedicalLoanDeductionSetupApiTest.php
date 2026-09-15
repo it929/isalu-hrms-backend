@@ -59,7 +59,7 @@ class MedicalLoanDeductionSetupApiTest extends TestCase
         ]);
 
         // Get the setup ID
-        $setup = DB::table('medical_loan_deduction_setups')->where('staffId', $user->ID)->first();
+        $setup = DB::table('medical_loan_deduction_setups')->where('staffId', $user->ID)->orderBy('id', 'desc')->first();
         $this->assertNotNull($setup);
 
         // Toggle setup

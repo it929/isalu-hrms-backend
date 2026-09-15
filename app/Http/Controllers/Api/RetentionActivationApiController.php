@@ -45,6 +45,7 @@ class RetentionActivationApiController extends Controller
                     'p.surname',
                     'p.first_name',
                     'p.othernames',
+                    'p.staff_status',
                     'fss.reten_start_date',
                     'fss.created_at as fss_created_at',
                     DB::raw('COALESCE(fss.reten_act, 0) as reten_act'),
@@ -60,6 +61,11 @@ class RetentionActivationApiController extends Controller
                     DB::raw('COALESCE(fss.declare_salary, 0.00) as declare_salary'),
                     DB::raw('COALESCE(fss.basic_salary, 0.00) as basic_salary')
                 );
+
+            $staffStatus = $request->input('staff_status');
+            if ($staffStatus !== null && $staffStatus !== '' && $staffStatus !== 'all') {
+                $query->where('p.staff_status', (int)$staffStatus);
+            }
 
             if (!empty($search)) {
                 $query->where(function ($q) use ($search) {
@@ -85,6 +91,7 @@ class RetentionActivationApiController extends Controller
 
             $records = $staffRecords->map(function ($row) use ($payrollDeductions, $firstDeductions) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                $row->staff_status = isset($row->staff_status) ? (int)$row->staff_status : 1;
                 $row->reten_act = (int)$row->reten_act;
                 $row->num_rente_months = (int)$row->num_rente_months;
                 $row->remaining_months = max(0, 20 - $row->num_rente_months);

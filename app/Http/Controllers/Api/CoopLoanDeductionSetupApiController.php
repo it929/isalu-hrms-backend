@@ -29,6 +29,7 @@ class CoopLoanDeductionSetupApiController extends Controller
             }
 
             $search = trim($request->input('search', ''));
+            $staffStatus = $request->input('staff_status');
             $query = DB::table('coop_loan_deduction_setups as clds')
                 ->join('tblper as p', 'p.ID', '=', 'clds.staffId')
                 ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
@@ -38,6 +39,7 @@ class CoopLoanDeductionSetupApiController extends Controller
                     'p.surname',
                     'p.first_name',
                     'p.othernames',
+                    'p.staff_status',
                     'd.department'
                 );
 
@@ -50,11 +52,16 @@ class CoopLoanDeductionSetupApiController extends Controller
                 });
             }
 
+            if ($staffStatus !== null && $staffStatus !== '' && $staffStatus !== 'all') {
+                $query->where('p.staff_status', (int) $staffStatus);
+            }
+
             $employee = $ctx['employee'];
 
             $records = $query->orderBy('clds.id', 'desc')->get()->map(function ($row) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $row->is_active = (int) $row->is_active;
+                $row->staff_status = isset($row->staff_status) ? (int) $row->staff_status : 1;
                 return $row;
             });
 

@@ -464,7 +464,7 @@ Route::prefix('nextjs')->group(function () {
             Route::get('/hod-reject/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'hodReject']);
             Route::get('/finance-approve/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'financeApprove']);
             Route::get('/finance-reject/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'financeReject']);
-            Route::get('/hr-approve/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'hrApprove']);
+            Route::match(['get', 'post'], '/hr-approve/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'hrApprove']);
             Route::get('/hr-reject/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'hrReject']);
             Route::get('/audit-approve/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'auditApprove']);
             Route::get('/audit-reject/{id}', [\App\Http\Controllers\Api\RefundApiController::class, 'auditReject']);
