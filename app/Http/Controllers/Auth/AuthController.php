@@ -79,6 +79,47 @@ class AuthController extends Controller
 
             $user = Auth::user();
 
+            $isSuperAdmin = ((int)($user->is_global ?? 0) === 1)
+                || (strtolower($user->user_type ?? '') === 'technical')
+                || \DB::table('assign_user_role')
+                    ->leftJoin('user_role', 'assign_user_role.roleID', '=', 'user_role.roleID')
+                    ->where('assign_user_role.userID', $user->id)
+                    ->where(function ($q) {
+                        $q->where('assign_user_role.roleID', 1)
+                          ->orWhere('user_role.rolename', 'like', '%Super Admin%');
+                    })->exists();
+
+            // Find corresponding staff record in tblper
+            $staff = \DB::table('tblper')->where('UserID', $user->id)->first();
+            if (!$staff && is_numeric($user->username)) {
+                $staff = \DB::table('tblper')->where('ID', (int)$user->username)->first();
+            }
+            if (!$staff && is_numeric($user->id)) {
+                $staff = \DB::table('tblper')
+                    ->where('ID', (int)$user->id)
+                    ->where(function ($q) use ($user) {
+                        $q->whereNull('UserID')->orWhere('UserID', 0)->orWhere('UserID', $user->id);
+                    })
+                    ->first();
+            }
+            if (!$staff) {
+                $staff = \DB::table('tblper')->where('fileNo', $user->username)->first();
+                if (!$staff && !empty($user->email)) {
+                    $staff = \DB::table('tblper')
+                        ->where('email', $user->email)
+                        ->where(function ($q) use ($user) {
+                            $q->whereNull('UserID')->orWhere('UserID', 0)->orWhere('UserID', $user->id);
+                        })
+                        ->first();
+                }
+            }
+
+            // Block inactive staff (staff_status == 0) from logging in, unless Super Admin
+            if ($staff && (int)$staff->staff_status === 0 && !$isSuperAdmin) {
+                Auth::logout();
+                return redirect('/login')->with('error', 'Your staff account is inactive. Inactive staff are not permitted to log in. Please contact HR administration.');
+            }
+
             // ✅ Check if user is still using default password
             if (Hash::check('12345', $user->password) && $user->user_type != "Technical") {
                 // dd($request->all());

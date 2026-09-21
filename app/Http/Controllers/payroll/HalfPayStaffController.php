@@ -70,7 +70,8 @@ class HalfPayStaffController extends ParentController
             DB::table('tblper')->where('ID', $request['fileNo'])->update([
                 'grade' => $request->newGrade,
                 'step'   => $request->newStep,
-                // 'staff_status' => 0,
+                'staff_status' => 1,
+                'status_value' => 'active service',
             ]);
 
             if ($insert) {

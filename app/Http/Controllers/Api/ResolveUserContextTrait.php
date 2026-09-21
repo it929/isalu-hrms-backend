@@ -32,6 +32,7 @@ trait ResolveUserContextTrait
         })->toArray();
 
         $isSuperAdmin = ($userRec && (int)$userRec->is_global === 1)
+            || ($userRec && strtolower($userRec->user_type ?? '') === 'technical')
             || in_array(1, $roleIds) 
             || in_array('super administrator', $roleNames) 
             || in_array('superadmin', $roleNames)
@@ -46,16 +47,31 @@ trait ResolveUserContextTrait
         $isFinanceStaff = in_array(36, $roleIds) || in_array(37, $roleIds) || in_array(69, $roleIds) || in_array('finance head', $roleNames) || in_array('head of finance', $roleNames) || in_array('finance', $roleNames);
 
         $employee = DB::table('tblper')->where('UserID', $userId)->first();
-        if (!$employee && is_numeric($userId)) {
-            $employee = DB::table('tblper')->where('ID', (int)$userId)->first();
+        if (!$employee && $userRec && is_numeric($userRec->username)) {
+            $employee = DB::table('tblper')->where('ID', (int)$userRec->username)->first();
         }
-        if (!$employee) {
-            if ($userRec) {
-                $employee = DB::table('tblper')->where('fileNo', $userRec->username)->first();
-                if (!$employee && !empty($userRec->email)) {
-                    $employee = DB::table('tblper')->where('email', $userRec->email)->first();
-                }
+        if (!$employee && is_numeric($userId)) {
+            $employee = DB::table('tblper')
+                ->where('ID', (int)$userId)
+                ->where(function ($q) use ($userId) {
+                    $q->whereNull('UserID')->orWhere('UserID', 0)->orWhere('UserID', $userId);
+                })
+                ->first();
+        }
+        if (!$employee && $userRec) {
+            $employee = DB::table('tblper')->where('fileNo', $userRec->username)->first();
+            if (!$employee && !empty($userRec->email)) {
+                $employee = DB::table('tblper')
+                    ->where('email', $userRec->email)
+                    ->where(function ($q) use ($userId) {
+                        $q->whereNull('UserID')->orWhere('UserID', 0)->orWhere('UserID', $userId);
+                    })
+                    ->first();
             }
+        }
+
+        if ($employee && (int)$employee->staff_status === 0 && !$isSuperAdmin) {
+            return null;
         }
 
         if ($employee && !empty($employee->departmentID)) {

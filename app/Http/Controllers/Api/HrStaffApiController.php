@@ -730,7 +730,9 @@ class HrStaffApiController extends Controller
             DB::table('tblper')->where('ID', $id)->update([
                 'bankID' => $request->bankID,
                 'AccNo' => $request->accountNumber,
-                'bankGroup' => 1
+                'bankGroup' => 1,
+                'staff_status' => 1,
+                'status_value' => 'active service'
             ]);
 
             // Add new staff to half payment if they do not already exist
@@ -752,6 +754,11 @@ class HrStaffApiController extends Controller
                     'due_date' => $myPer->doj,
                     'month_payment' => $month,
                     'year_payment' => $year,
+                ]);
+
+                DB::table('tblper')->where('ID', $id)->update([
+                    'staff_status' => 1,
+                    'status_value' => 'active service'
                 ]);
             }
 

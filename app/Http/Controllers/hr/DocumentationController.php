@@ -1050,6 +1050,11 @@ class DocumentationController extends DatabaseDocumentationController
                     'month_payment'          => $data['PayrollActivePeriod']->month,
                     'year_payment'           => $data['PayrollActivePeriod']->year,
                 ));
+
+                DB::table('tblper')->where('ID', $fileNo)->update([
+                    'staff_status' => 1,
+                    'status_value' => 'active service',
+                ]);
             }
 
             $d = Session::get('progress');
