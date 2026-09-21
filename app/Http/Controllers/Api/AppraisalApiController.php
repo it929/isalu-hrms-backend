@@ -201,10 +201,17 @@ class AppraisalApiController extends Controller
 
             // Fallback appraiser if staff is the HOD or no HOD in dept
             if (!$hodStaff || $hodStaff->ID == $staff->ID) {
-                // Assign Head of HR (role 48/68) or Admin
+                // Assign Head of HR or Admin dynamically by role ID or rolename
                 $hrUser = DB::table('assign_user_role as aur')
+                    ->leftJoin('user_role as ur', 'ur.roleID', '=', 'aur.roleID')
                     ->join('tblper as p', 'p.UserID', '=', 'aur.userID')
-                    ->whereIn('aur.roleID', [1, 48, 68])
+                    ->where(function($query) {
+                        $query->whereIn('aur.roleID', [1, 48, 68])
+                              ->orWhereIn(DB::raw('LOWER(ur.rolename)'), [
+                                  'super administrator', 'superadmin', 'super admin',
+                                  'administrator', 'admin', 'hr head', 'head of hr', 'hr'
+                              ]);
+                    })
                     ->where('p.ID', '!=', $staff->ID)
                     ->select('p.ID')
                     ->first();
@@ -402,6 +409,8 @@ class AppraisalApiController extends Controller
                 ->where('s.id', $submissionId)
                 ->select(
                     's.*',
+                    'staff.ID as staffID',
+                    'staff.ID as staff_id',
                     'p.title as period_title',
                     'p.review_type',
                     'p.self_review_deadline',
@@ -607,6 +616,8 @@ class AppraisalApiController extends Controller
 
                 ->select(
                     's.*',
+                    'staff.ID as staffID',
+                    'staff.ID as staff_id',
                     'p.title as period_title',
                     'p.self_review_deadline',
                     'p.appraiser_review_deadline',
@@ -801,6 +812,8 @@ class AppraisalApiController extends Controller
 
                 ->select(
                     's.*',
+                    'staff.ID as staffID',
+                    'staff.ID as staff_id',
                     'p.title as period_title',
                     't.title as template_title',
                     'staff.surname as staff_surname',

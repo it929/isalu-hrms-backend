@@ -2767,8 +2767,17 @@ class ResignationApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isAuditStaff'])) {
-                return response()->json(['status' => 'error', 'message' => 'Audit Head or delegated audit privileges required.'], 401);
+            $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+            $isSuperAdmin = !empty($ctx['isSuperAdmin']) 
+                || in_array($activeRole, ['super admin', 'super administrator', 'administrator', 'admin']);
+            $isAuditHead = !empty($ctx['isAuditStaff']) 
+                || in_array($activeRole, ['audit head', 'head of audit', 'audit staff']);
+
+            if (!$ctx || (!$isSuperAdmin && !$isAuditHead)) {
+                return response()->json([
+                    'status' => 'error', 
+                    'message' => 'Permission denied: Only Audit Head and Super Admin are authorized to check and approve exit settlement.'
+                ], 403);
             }
 
             $record = DB::table('resignation_requests')->where('id', $id)->first();
@@ -2811,8 +2820,17 @@ class ResignationApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isAuditStaff'])) {
-                return response()->json(['status' => 'error', 'message' => 'Audit Head or delegated audit privileges required.'], 401);
+            $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+            $isSuperAdmin = !empty($ctx['isSuperAdmin']) 
+                || in_array($activeRole, ['super admin', 'super administrator', 'administrator', 'admin']);
+            $isAuditHead = !empty($ctx['isAuditStaff']) 
+                || in_array($activeRole, ['audit head', 'head of audit', 'audit staff']);
+
+            if (!$ctx || (!$isSuperAdmin && !$isAuditHead)) {
+                return response()->json([
+                    'status' => 'error', 
+                    'message' => 'Permission denied: Only Audit Head and Super Admin are authorized to query or hold exit settlement.'
+                ], 403);
             }
 
             $record = DB::table('resignation_requests')->where('id', $id)->first();
@@ -2908,8 +2926,17 @@ class ResignationApiController extends Controller
     {
         try {
             $ctx = $this->getUserContext($request);
-            if (!$ctx || (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff'] && !$ctx['isFinanceStaff'])) {
-                return response()->json(['status' => 'error', 'message' => 'Finance Head or delegated finance privileges required.'], 401);
+            $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+            $isSuperAdmin = !empty($ctx['isSuperAdmin']) 
+                || in_array($activeRole, ['super admin', 'super administrator', 'administrator', 'admin']);
+            $isFinanceHead = !empty($ctx['isFinanceStaff']) 
+                || in_array($activeRole, ['finance head', 'head of finance', 'finance staff']);
+
+            if (!$ctx || (!$isSuperAdmin && !$isFinanceHead)) {
+                return response()->json([
+                    'status' => 'error', 
+                    'message' => 'Permission denied: Only Finance Head and Super Admin are authorized to process and mark exit settlement as paid.'
+                ], 403);
             }
 
             $record = DB::table('resignation_requests')->where('id', $id)->first();

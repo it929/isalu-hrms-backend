@@ -19,11 +19,40 @@ class NextJsApiController extends Controller
         $username = trim($request->input('username'));
         $password = $request->input('password');
 
-        // 1. Try finding user by username or email directly
-        $user = \App\Models\User::where('username', $username)->orWhere('email', $username)->first();
+        $staff = null;
+        $user = null;
 
-        // 2. If not found, look up the staff by fileNo (PF Number) in tblper
+        // 1. If input is numeric, look up directly by Staff ID in tblper
+        if (is_numeric($username)) {
+            $staff = \DB::table('tblper')->where('ID', (int)$username)->first();
+            if ($staff) {
+                if ($staff->UserID) {
+                    $user = \App\Models\User::find($staff->UserID);
+                }
+                if (!$user) {
+                    $user = \App\Models\User::where('username', (string)$staff->ID)->first();
+                }
+                if (!$user) {
+                    $user = $this->autoCreateUserForStaff($staff);
+                }
+
+                // Immediately block if staff_status is 0, unless user is Super Admin
+                if ((int)$staff->staff_status === 0 && !$this->isSuperAdminUser($user)) {
+                    return response()->json([
+                        'status'  => 'error',
+                        'message' => 'Your staff account is inactive. Inactive staff are not permitted to log in to the application. Please contact HR administration.'
+                    ], 403);
+                }
+            }
+        }
+
+        // 2. Try finding user by username or email directly
         if (!$user) {
+            $user = \App\Models\User::where('username', $username)->orWhere('email', $username)->first();
+        }
+
+        // 3. If not found, look up the staff by fileNo (PF Number) in tblper
+        if (!$user && !$staff) {
             $staff = \DB::table('tblper')->where('fileNo', $username)->first();
             if ($staff) {
                 if ($staff->UserID) {
@@ -32,40 +61,61 @@ class NextJsApiController extends Controller
                 if (!$user) {
                     $user = $this->autoCreateUserForStaff($staff);
                 }
+
+                if ((int)$staff->staff_status === 0 && !$this->isSuperAdminUser($user)) {
+                    return response()->json([
+                        'status'  => 'error',
+                        'message' => 'Your staff account is inactive. Inactive staff are not permitted to log in to the application. Please contact HR administration.'
+                    ], 403);
+                }
             }
         }
 
-        // 3. If still not found, try to look up by ID
-        if (!$user && is_numeric($username)) {
-            $staff = \DB::table('tblper')->where('ID', (int)$username)->first();
-            if ($staff) {
-                if ($staff->UserID) {
-                    $user = \App\Models\User::find($staff->UserID);
-                }
-                if (!$user) {
-                    $user = $this->autoCreateUserForStaff($staff);
-                }
-            }
+        // Resolve staff record if not already resolved
+        if (!$staff && $user) {
+            $staff = $this->resolveStaffForUser($user, $username);
+        }
+
+        // Block inactive staff (staff_status == 0) from logging in, unless Super Admin
+        if ($staff && (int)$staff->staff_status === 0 && !$this->isSuperAdminUser($user)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Your staff account is inactive. Inactive staff are not permitted to log in to the application. Please contact HR administration.'
+            ], 403);
         }
 
         // 4. If a user is found, attempt authentication with their actual username and password
         if ($user && Auth::attempt(['username' => $user->username, 'password' => $password])) {
+            // Find corresponding staff record in tblper if not already found
+            if (!isset($staff) || !$staff) {
+                $staff = $this->resolveStaffForUser($user, $username);
+            }
+
+            // Block inactive staff (staff_status == 0) from logging in, unless Super Admin
+            if ($staff && (int)$staff->staff_status === 0 && !$this->isSuperAdminUser($user)) {
+                Auth::logout();
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Your staff account is inactive. Inactive staff are not permitted to log in to the application. Please contact HR administration.'
+                ], 403);
+            }
+
             // Only enforce default password warning for staff users
             $mustChangePassword = ($user->user_type === 'staff') && \Illuminate\Support\Facades\Hash::check('12345', $user->password);
             
             $userData = $user->toArray();
             $userData['must_change_password'] = $mustChangePassword;
-
-            $staff = \DB::table('tblper')->where('UserID', $user->id)->first();
             $userData['passport_url'] = $staff ? $staff->passport_url : null;
 
-            // Fetch actual role name from database
-            $role = \DB::table('assign_user_role')
+            // Fetch actual role name from database prioritizing Super Administrator
+            $roles = \DB::table('assign_user_role')
                 ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
                 ->where('assign_user_role.userID', $user->id)
-                ->first();
+                ->orderByRaw("CASE WHEN user_role.roleID = 1 OR user_role.rolename LIKE '%Super Admin%' THEN 0 ELSE 1 END")
+                ->pluck('user_role.rolename')
+                ->toArray();
 
-            $roleName = $role ? $role->rolename : 'Staff';
+            $roleName = !empty($roles) ? $roles[0] : (strtolower($user->user_type ?? '') === 'technical' ? 'Super Administrator' : 'Staff');
 
             // Log user login activity
             \App\Services\UserActivityLogger::logLogin($user, $request, $roleName);
@@ -158,6 +208,92 @@ class NextJsApiController extends Controller
         }
 
         return \App\Models\User::find($userId);
+    }
+
+    /**
+     * Determine if a user is a Super Administrator or Technical administrative user.
+     */
+    private function isSuperAdminUser($user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if ((int)($user->is_global ?? 0) === 1 || strtolower($user->user_type ?? '') === 'technical') {
+            return true;
+        }
+
+        $userRoles = \DB::table('assign_user_role')
+            ->leftJoin('user_role', 'assign_user_role.roleID', '=', 'user_role.roleID')
+            ->where('assign_user_role.userID', $user->id)
+            ->select('assign_user_role.roleID', 'user_role.rolename')
+            ->get();
+
+        $roleIds = $userRoles->pluck('roleID')->toArray();
+        $roleNames = $userRoles->pluck('rolename')->filter()->map(function ($role) {
+            return strtolower($role);
+        })->toArray();
+
+        return in_array(1, $roleIds)
+            || in_array('super administrator', $roleNames)
+            || in_array('superadmin', $roleNames)
+            || in_array('super admin', $roleNames)
+            || in_array('administrator', $roleNames)
+            || in_array('admin', $roleNames);
+    }
+
+    /**
+     * Resolve staff record strictly belonging to the given user or username.
+     */
+    private function resolveStaffForUser($user, $username = null)
+    {
+        $staff = null;
+
+        if ($user) {
+            // 1. Direct match by foreign key tblper.UserID
+            $staff = \DB::table('tblper')->where('UserID', $user->id)->first();
+
+            // 2. Match by username if it matches fileNo (PF Number)
+            if (!$staff && !empty($user->username)) {
+                $staff = \DB::table('tblper')->where('fileNo', $user->username)->first();
+            }
+
+            // 3. Match by ID if username is numeric
+            if (!$staff && is_numeric($user->username)) {
+                $staff = \DB::table('tblper')->where('ID', (int)$user->username)->first();
+            }
+
+            // 4. Match by ID if user->id matches tblper.ID ONLY IF UserID is null, 0, or matches this user
+            if (!$staff && is_numeric($user->id)) {
+                $staff = \DB::table('tblper')
+                    ->where('ID', (int)$user->id)
+                    ->where(function ($q) use ($user) {
+                        $q->whereNull('UserID')->orWhere('UserID', 0)->orWhere('UserID', $user->id);
+                    })
+                    ->first();
+            }
+
+            // 5. Match by email ONLY IF tblper.UserID is null, 0, or matches this user
+            if (!$staff && !empty($user->email)) {
+                $staff = \DB::table('tblper')
+                    ->where('email', $user->email)
+                    ->where(function ($q) use ($user) {
+                        $q->whereNull('UserID')->orWhere('UserID', 0)->orWhere('UserID', $user->id);
+                    })
+                    ->first();
+            }
+        }
+
+        if (!$staff && $username) {
+            if (is_numeric($username)) {
+                $staff = \DB::table('tblper')->where('ID', (int)$username)->first();
+            }
+            if (!$staff) {
+                $staff = \DB::table('tblper')->where('fileNo', $username)->first();
+            }
+        }
+
+        return $staff;
     }
 
     /**
