@@ -21,10 +21,12 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 // AI Document & Letter Generator Root Level & Next.js Level
 Route::prefix('hr/letters')->group(function () {
     Route::get('/templates', [\App\Http\Controllers\Api\AiLetterApiController::class, 'getTemplates']);
+    Route::get('/staff', [\App\Http\Controllers\Api\AiLetterApiController::class, 'getStaffList']);
     Route::post('/generate', [\App\Http\Controllers\Api\AiLetterApiController::class, 'generateLetter']);
 });
 Route::prefix('nextjs/hr/letters')->group(function () {
     Route::get('/templates', [\App\Http\Controllers\Api\AiLetterApiController::class, 'getTemplates']);
+    Route::get('/staff', [\App\Http\Controllers\Api\AiLetterApiController::class, 'getStaffList']);
     Route::post('/generate', [\App\Http\Controllers\Api\AiLetterApiController::class, 'generateLetter']);
 });
 
@@ -235,6 +237,7 @@ Route::prefix('nextjs')->group(function () {
         // AI Document & Letter Generator
         Route::prefix('hr/letters')->group(function () {
             Route::get('/templates', [\App\Http\Controllers\Api\AiLetterApiController::class, 'getTemplates']);
+            Route::get('/staff', [\App\Http\Controllers\Api\AiLetterApiController::class, 'getStaffList']);
             Route::post('/generate', [\App\Http\Controllers\Api\AiLetterApiController::class, 'generateLetter']);
         });
 
