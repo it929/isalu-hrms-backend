@@ -59,7 +59,13 @@ class AiLetterApiController extends Controller
     public function getStaffList(Request $request)
     {
         try {
+            $latestResignations = DB::table('resignation_requests')
+                ->select('staff_id', DB::raw('MAX(id) as max_resignation_id'))
+                ->groupBy('staff_id');
+
             $query = DB::table('tblper as p')
+                ->leftJoinSub($latestResignations, 'lr', 'lr.staff_id', '=', 'p.ID')
+                ->leftJoin('resignation_requests as r', 'r.id', '=', 'lr.max_resignation_id')
                 ->where('p.rank', '!=', 2)
                 ->whereIn('p.staff_status', [0, 1])
                 ->select(
@@ -68,7 +74,9 @@ class AiLetterApiController extends Controller
                     'p.surname',
                     'p.first_name',
                     'p.othernames',
-                    'p.staff_status'
+                    'p.staff_status',
+                    'r.id as resignation_id',
+                    'r.resignation_date'
                 )
                 ->orderBy('p.surname', 'asc')
                 ->orderBy('p.first_name', 'asc');
@@ -77,11 +85,14 @@ class AiLetterApiController extends Controller
                 $fullName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $statusLabel = (int)$row->staff_status === 1 ? 'Active' : 'Inactive';
                 return [
-                    'id'           => $row->id,
-                    'fileNo'       => $row->fileNo ?? '',
-                    'name'         => $fullName,
-                    'label'        => "{$fullName} ({$statusLabel})",
-                    'staff_status' => (int)$row->staff_status,
+                    'id'               => $row->id,
+                    'staffID'          => $row->id,
+                    'fileNo'           => $row->fileNo ?? '',
+                    'name'             => $fullName,
+                    'label'            => "{$fullName} ({$statusLabel})",
+                    'staff_status'     => (int)$row->staff_status,
+                    'resignation_id'   => $row->resignation_id ? (int)$row->resignation_id : null,
+                    'resignation_date' => $row->resignation_date ?: null,
                 ];
             });
 
@@ -176,16 +187,20 @@ class AiLetterApiController extends Controller
             $department = $staff ? ($staff->department ?? 'General Operations') : ($customDepartment ?: 'Operations');
             $designation = $customDesignation ?: 'Staff Member';
 
+            // Format the Selected Issue / Effective Date
+            $issueTimestamp = !empty($effectiveDate) ? strtotime($effectiveDate) : time();
+            $letterDateFormatted = date('d F, Y', $issueTimestamp);
+            $issueYear = date('Y', $issueTimestamp);
+
             // Generate Reference Number
-            $refNumber = "IH/HR/LT/" . date('Y') . "/" . sprintf("%04d", rand(100, 9999));
-            $todayFormatted = date('d F, Y');
+            $refNumber = "IH/HR/LT/" . $issueYear . "/" . sprintf("%04d", rand(100, 9999));
 
             // Check if OpenAI API Key is configured
             $openAiKey = env('OPENAI_API_KEY');
             $aiGeneratedBody = null;
 
             if (!empty($openAiKey) && !empty($customPrompt)) {
-                $aiGeneratedBody = $this->callOpenAiLlm($openAiKey, $type, $staffName, $department, $customPrompt);
+                $aiGeneratedBody = $this->callOpenAiLlm($openAiKey, $type, $staffName, $department, $customPrompt, $effectiveDate);
             }
 
             // Fallback to Smart Structured Template Engine if AI key not present or returned null
@@ -208,7 +223,7 @@ class AiLetterApiController extends Controller
                     'organization'  => 'ISALU HOSPITALS LIMITED',
                     'tagline'       => 'Specialist Healthcare Provider • RC: 502112',
                     'ref_number'    => $refNumber,
-                    'date'          => $todayFormatted,
+                    'date'          => $letterDateFormatted,
                     'recipient'     => [
                         'name'        => $staffName,
                         'staffID'     => $staffIdVal,
@@ -220,9 +235,10 @@ class AiLetterApiController extends Controller
                     'salutation'    => "Dear {$staffName},",
                     'body'          => $aiGeneratedBody['body'],
                     'signatory'     => [
-                        'name'  => 'Head of Human Resources',
-                        'title' => 'Human Resources Department',
-                        'org'   => 'ISALU HOSPITALS LIMITED',
+                        'name'          => 'Head of Human Resources',
+                        'title'         => 'Human Resources Department',
+                        'org'           => 'ISALU HOSPITALS LIMITED',
+                        'signature_url' => $this->getHrHeadSignature(),
                     ],
                 ]
             ]);
@@ -242,12 +258,13 @@ class AiLetterApiController extends Controller
         
         switch ($type) {
             case 'resignation_acceptance':
-                $noticeDate = $resignation ? date('d F, Y', strtotime($resignation->resignation_date)) : date('d F, Y');
-                $exitDate = $resignation ? date('d F, Y', strtotime($resignation->resignation_date . ' + 30 days')) : date('d F, Y', strtotime('+30 days'));
+                $resigDate = !empty($effectiveDate) ? $effectiveDate : ($resignation ? $resignation->resignation_date : date('Y-m-d'));
+                $noticeDate = date('d F, Y', strtotime($resigDate));
+                $exitDate = date('d F, Y', strtotime($resigDate . ' + 30 days'));
 
                 $subject = "ACCEPTANCE OF RESIGNATION — STAFF ID: {$staffFileNo}";
                 $body = "We write to acknowledge receipt of your resignation notice dated {$noticeDate}.\n\n"
-                    . "Management has accepted your resignation from ISALU HOSPITAL as {$designation} in the {$department} Department. Your last official working day with the hospital will be {$exitDate}.\n\n"
+                    . "Management has accepted your resignation from ISALU HOSPITAL as {$designation} in the {$department} Department, with effect from {$noticeDate}. Your last official working day with the hospital will be {$exitDate}.\n\n"
                     . "Please ensure that all hospital properties, identity cards, documentation, and operational records in your custody are fully handed over to your Head of Department prior to your final departure date.\n\n"
                     . ($customPrompt ? "Note / Directive: {$customPrompt}\n\n" : "")
                     . "We express our sincere appreciation for your valuable contributions to ISALU HOSPITAL during your period of service, and we wish you success in your future professional endeavors.";
@@ -296,10 +313,11 @@ class AiLetterApiController extends Controller
     /**
      * Optional LLM Integration via OpenAI API.
      */
-    private function callOpenAiLlm($apiKey, $type, $staffName, $department, $prompt)
+    private function callOpenAiLlm($apiKey, $type, $staffName, $department, $prompt, $effectiveDate = null)
     {
         try {
             $systemPrompt = "You are the Head of Human Resources at ISALU HOSPITAL. Write a formal, professional HR letter for staff member '{$staffName}' in '{$department}'. Return a JSON object with keys 'subject' and 'body'.";
+            $dateInfo = !empty($effectiveDate) ? "\nEffective / Resignation Date: {$effectiveDate}" : "";
             
             $response = Http::withHeaders([
                 'Authorization' => "Bearer {$apiKey}",
@@ -308,7 +326,7 @@ class AiLetterApiController extends Controller
                 'model' => 'gpt-4o-mini',
                 'messages' => [
                     ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user', 'content' => "Type: {$type}\nInstructions: {$prompt}"],
+                    ['role' => 'user', 'content' => "Type: {$type}{$dateInfo}\nInstructions: {$prompt}"],
                 ],
                 'temperature' => 0.4,
                 'response_format' => ['type' => 'json_object'],
@@ -331,4 +349,65 @@ class AiLetterApiController extends Controller
 
         return null;
     }
+
+    /**
+     * Retrieve the authorized HR Head signature.
+     */
+    private function getHrHeadSignature(): ?string
+    {
+        try {
+            // 1. Check for user assigned with role HR HEAD / HR MANAGER
+            $hrSignature = DB::table('users')
+                ->join('assign_user_role', 'assign_user_role.userID', '=', 'users.id')
+                ->join('user_role', 'user_role.roleID', '=', 'assign_user_role.roleID')
+                ->where(function($q) {
+                    $q->where('user_role.rolename', 'like', '%HR HEAD%')
+                      ->orWhere('user_role.rolename', 'like', '%HEAD OF HR%')
+                      ->orWhere('user_role.rolename', 'like', '%HR MANAGER%');
+                })
+                ->whereNotNull('users.signature')
+                ->where('users.signature', '!=', '')
+                ->value('users.signature');
+
+            // 2. Check Super Admin role
+            if (!$hrSignature) {
+                $hrSignature = DB::table('users')
+                    ->join('assign_user_role', 'assign_user_role.userID', '=', 'users.id')
+                    ->where('assign_user_role.roleID', 1)
+                    ->whereNotNull('users.signature')
+                    ->where('users.signature', '!=', '')
+                    ->value('users.signature');
+            }
+
+            // 3. Check any user with saved signature
+            if (!$hrSignature) {
+                $hrSignature = DB::table('users')
+                    ->whereNotNull('signature')
+                    ->where('signature', '!=', '')
+                    ->value('signature');
+            }
+
+            // 4. Check tblper signature_url for HR staff
+            if (!$hrSignature) {
+                $hrStaffSig = DB::table('tblper')
+                    ->where(function($q) {
+                        $q->where('department', 80)
+                          ->orWhere('departmentID', 80)
+                          ->orWhere('is_hod', 1);
+                    })
+                    ->whereNotNull('signature_url')
+                    ->where('signature_url', '!=', '')
+                    ->value('signature_url');
+                if ($hrStaffSig) {
+                    $hrSignature = $hrStaffSig;
+                }
+            }
+
+            return $hrSignature ?: null;
+        } catch (\Throwable $th) {
+            Log::error('getHrHeadSignature error: ' . $th->getMessage());
+            return null;
+        }
+    }
 }
+
