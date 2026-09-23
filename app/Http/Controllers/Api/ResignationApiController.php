@@ -25,16 +25,23 @@ class ResignationApiController extends Controller
             }
 
             $query = DB::table('tblper as p')
-                ->where('p.rank', '!=', 2) // Exclude terminated/retired
-                ->where('p.staff_status', 1)
-                ->select(
-                    'p.ID as id',
-                    'p.fileNo',
-                    'p.surname',
-                    'p.first_name',
-                    'p.othernames'
-                )
-                ->orderBy('p.surname', 'asc');
+                ->where('p.rank', '!=', 2); // Exclude terminated/retired
+
+            if ($request->has('all_status') || $request->has('include_inactive')) {
+                $query->whereIn('p.staff_status', [0, 1]);
+            } else {
+                $query->where('p.staff_status', 1);
+            }
+
+            $query->select(
+                'p.ID as id',
+                'p.fileNo',
+                'p.surname',
+                'p.first_name',
+                'p.othernames',
+                'p.staff_status'
+            )
+            ->orderBy('p.surname', 'asc');
 
             $activeRole = strtolower(trim($request->header('X-User-Role', '')));
 
@@ -65,10 +72,11 @@ class ResignationApiController extends Controller
             $staff = $query->get()->map(function ($row) {
                 $fullName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 return [
-                    'id'     => $row->id,
-                    'fileNo' => $row->fileNo ?? '',
-                    'name'   => $fullName,
-                    'label'  => $fullName,
+                    'id'           => $row->id,
+                    'fileNo'       => $row->fileNo ?? '',
+                    'name'         => $fullName,
+                    'label'        => $fullName,
+                    'staff_status' => (int)($row->staff_status ?? 0),
                 ];
             });
 

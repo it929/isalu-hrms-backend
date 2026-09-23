@@ -53,6 +53,52 @@ class AiLetterApiController extends Controller
     }
 
     /**
+     * GET /api/nextjs/hr/letters/staff
+     * Fetch all staff members for letter generation (including both staff_status 1 and staff_status 0).
+     */
+    public function getStaffList(Request $request)
+    {
+        try {
+            $query = DB::table('tblper as p')
+                ->where('p.rank', '!=', 2)
+                ->whereIn('p.staff_status', [0, 1])
+                ->select(
+                    'p.ID as id',
+                    'p.fileNo',
+                    'p.surname',
+                    'p.first_name',
+                    'p.othernames',
+                    'p.staff_status'
+                )
+                ->orderBy('p.surname', 'asc')
+                ->orderBy('p.first_name', 'asc');
+
+            $staff = $query->get()->map(function ($row) {
+                $fullName = trim("{$row->surname} {$row->first_name} {$row->othernames}");
+                $statusLabel = (int)$row->staff_status === 1 ? 'Active' : 'Inactive';
+                return [
+                    'id'           => $row->id,
+                    'fileNo'       => $row->fileNo ?? '',
+                    'name'         => $fullName,
+                    'label'        => "{$fullName} ({$statusLabel})",
+                    'staff_status' => (int)$row->staff_status,
+                ];
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'data'   => $staff,
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('AiLetterApiController getStaffList: ' . $th->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * POST /api/nextjs/hr/generate-letter
      * Generates a formal HR letter with ISALU HOSPITAL letterhead metadata.
      */
@@ -159,8 +205,8 @@ class AiLetterApiController extends Controller
             return response()->json([
                 'status' => 'success',
                 'data'   => [
-                    'organization'  => 'ISALU HOSPITAL',
-                    'tagline'       => 'Excellence in Healthcare & Patient Services',
+                    'organization'  => 'ISALU HOSPITALS LIMITED',
+                    'tagline'       => 'Specialist Healthcare Provider • RC: 502112',
                     'ref_number'    => $refNumber,
                     'date'          => $todayFormatted,
                     'recipient'     => [
@@ -176,7 +222,7 @@ class AiLetterApiController extends Controller
                     'signatory'     => [
                         'name'  => 'Head of Human Resources',
                         'title' => 'Human Resources Department',
-                        'org'   => 'ISALU HOSPITAL',
+                        'org'   => 'ISALU HOSPITALS LIMITED',
                     ],
                 ]
             ]);
