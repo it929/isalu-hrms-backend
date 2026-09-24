@@ -545,6 +545,38 @@ class SalaryBreakdownApiController extends Controller
 
             $otherRemarksTag = !empty($otherRemarksList) ? implode(', ', array_unique($otherRemarksList)) : null;
 
+            // Check if employee joined mid-month (doj or appointment_date)
+            $effectiveJoinDate = !empty($staff->appointment_date) && $staff->appointment_date !== '0000-00-00'
+                ? $staff->appointment_date
+                : (!empty($staff->doj) && $staff->doj !== '0000-00-00' ? $staff->doj : null);
+
+            // Automatically record unworked days before appointment as approved Leave of Absence for new staff if missing
+            if (!empty($effectiveJoinDate) && \Illuminate\Support\Facades\Schema::hasTable('leave_of_absent')) {
+                try {
+                    $dojDate = \Carbon\Carbon::parse($effectiveJoinDate);
+                    if ($dojDate->year === $year && $dojDate->month === $month && $dojDate->day > 1) {
+                        $startOfMonthStr = $dojDate->copy()->startOfMonth()->format('Y-m-d');
+                        $dayBeforeApptStr = $dojDate->copy()->subDay()->format('Y-m-d');
+                        $hasLoa = DB::table('leave_of_absent')
+                            ->where('staffId', $staffId)
+                            ->where('start_date', '<=', $dayBeforeApptStr)
+                            ->where('end_date', '>=', $startOfMonthStr)
+                            ->exists();
+                        if (!$hasLoa) {
+                            DB::table('leave_of_absent')->insert([
+                                'staffId'         => $staffId,
+                                'start_date'      => $startOfMonthStr,
+                                'end_date'        => $dayBeforeApptStr,
+                                'reason_of_leave' => 'Leave of absence for new staff (unworked days before appointment)',
+                                'status'          => 2, // Approved
+                                'created_at'      => now(),
+                                'updated_at'      => now(),
+                            ]);
+                        }
+                    }
+                } catch (\Throwable $e) { /* ignore */ }
+            }
+
             // 13. Leave of Absence Deduction
             $loaDays = 0;
             try {
@@ -585,11 +617,6 @@ class SalaryBreakdownApiController extends Controller
                 $daysInPayrollMonth = 30;
             }
 
-            // Check if employee joined mid-month (doj or appointment_date)
-            $effectiveJoinDate = !empty($staff->appointment_date) && $staff->appointment_date !== '0000-00-00'
-                ? $staff->appointment_date
-                : (!empty($staff->doj) && $staff->doj !== '0000-00-00' ? $staff->doj : null);
-
             $dojDaysDeducted = 0;
             $isFutureAppointment = false;
             $appointmentDay = 1;
@@ -606,7 +633,7 @@ class SalaryBreakdownApiController extends Controller
                     } elseif ($dojDate->year === $year && $dojDate->month === $month) {
                         $appointmentDay = (int)$dojDate->day;
                         $daysBefore = max(0, min($daysInPayrollMonth, $appointmentDay - 1));
-                        $dojDaysDeducted = $daysBefore;
+                        $dojDaysDeducted = max(0, $daysBefore - $loaDays);
                     }
                 } catch (\Throwable $e) { /* ignore */ }
             }
@@ -2127,7 +2154,7 @@ class SalaryBreakdownApiController extends Controller
                         $dojDaysDeducted = $daysInPayrollMonth;
                     } elseif ($dojDate->year === $year && $dojDate->month === $month) {
                         $daysBefore = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
-                        $dojDaysDeducted = $daysBefore;
+                        $dojDaysDeducted = max(0, $daysBefore - $loaDays);
                     }
                 } catch (\Throwable $e) { /* ignore */ }
             }
@@ -3202,7 +3229,8 @@ class SalaryBreakdownApiController extends Controller
         $dojDaysDeducted = 0;
         if ($effectiveJoinDate && $effectiveJoinDate->year === $year && $effectiveJoinDate->month === $month && $effectiveJoinDate->day > 1) {
             $dailyRate = ($daysInPayrollMonth > 0) ? ($totalBasicAllowances / (float)$daysInPayrollMonth) : 0.00;
-            $dojDaysDeducted = max(0, min($daysInPayrollMonth, $effectiveJoinDate->day - 1));
+            $daysBefore = max(0, min($daysInPayrollMonth, $effectiveJoinDate->day - 1));
+            $dojDaysDeducted = max(0, $daysBefore - $loaDays);
             $midMonthAdjustment = round($dailyRate * $dojDaysDeducted, 2);
         }
 

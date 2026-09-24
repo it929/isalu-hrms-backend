@@ -149,6 +149,26 @@ class HrStaffApiController extends Controller
                 'progress_regID'=> 19,
             ]);
 
+            // If new staff joins mid-month (day > 1), automatically record unworked days as approved Leave of Absence
+            if (!empty($request->date_of_joining)) {
+                try {
+                    $doj = \Carbon\Carbon::parse($request->date_of_joining);
+                    if ($doj->day > 1 && \Illuminate\Support\Facades\Schema::hasTable('leave_of_absent')) {
+                        $startOfJoinMonth = $doj->copy()->startOfMonth()->format('Y-m-d');
+                        $dayBeforeJoin = $doj->copy()->subDay()->format('Y-m-d');
+                        DB::table('leave_of_absent')->insert([
+                            'staffId'         => $staffId,
+                            'start_date'      => $startOfJoinMonth,
+                            'end_date'        => $dayBeforeJoin,
+                            'reason_of_leave' => 'Leave of absence for new staff (unworked days before appointment)',
+                            'status'          => 2, // Approved
+                            'created_at'      => now(),
+                            'updated_at'      => now(),
+                        ]);
+                    }
+                } catch (\Throwable $e) { /* ignore */ }
+            }
+
             // Create user account in the users table
             $fullname = trim($request->surname . ' ' . $request->firstname . ' ' . ($request->othernames ?? ''));
             $rawUsername = (string)$staffId;
