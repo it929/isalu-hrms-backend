@@ -1519,11 +1519,40 @@ class NextJsPayrollApiController extends Controller
                 if ($daysInPayrollMonth < 28 || $daysInPayrollMonth > 31) {
                     $daysInPayrollMonth = 30;
                 }
-                $loaDays = $this->getLoaDaysForMonth($emp->ID, $year, $month);
-                $dojDaysDeducted = 0;
+
                 $effectiveJoinDate = !empty($emp->appointment_date) && $emp->appointment_date !== '0000-00-00'
                     ? $emp->appointment_date
                     : (!empty($emp->doj) && $emp->doj !== '0000-00-00' ? $emp->doj : null);
+
+                // Auto-record unworked days before appointment as approved Leave of Absence for new staff if missing
+                if (!empty($effectiveJoinDate) && \Illuminate\Support\Facades\Schema::hasTable('leave_of_absent')) {
+                    try {
+                        $dojDate = \Carbon\Carbon::parse($effectiveJoinDate);
+                        if ($dojDate->year === $year && $dojDate->month === $month && $dojDate->day > 1) {
+                            $startOfMonthStr = $dojDate->copy()->startOfMonth()->format('Y-m-d');
+                            $dayBeforeApptStr = $dojDate->copy()->subDay()->format('Y-m-d');
+                            $hasLoa = DB::table('leave_of_absent')
+                                ->where('staffId', $emp->ID)
+                                ->where('start_date', '<=', $dayBeforeApptStr)
+                                ->where('end_date', '>=', $startOfMonthStr)
+                                ->exists();
+                            if (!$hasLoa) {
+                                DB::table('leave_of_absent')->insert([
+                                    'staffId'         => $emp->ID,
+                                    'start_date'      => $startOfMonthStr,
+                                    'end_date'        => $dayBeforeApptStr,
+                                    'reason_of_leave' => 'Leave of absence for new staff (unworked days before appointment)',
+                                    'status'          => 2, // Approved
+                                    'created_at'      => now(),
+                                    'updated_at'      => now(),
+                                ]);
+                            }
+                        }
+                    } catch (\Throwable $e) { /* ignore */ }
+                }
+
+                $loaDays = $this->getLoaDaysForMonth($emp->ID, $year, $month);
+                $dojDaysDeducted = 0;
 
                 if (!empty($effectiveJoinDate)) {
                     try {
@@ -1535,7 +1564,7 @@ class NextJsPayrollApiController extends Controller
                             $dojDaysDeducted = $daysInPayrollMonth;
                         } elseif ($dojDate->year === $year && $dojDate->month === $month) {
                             $daysBefore = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
-                            $dojDaysDeducted = $daysBefore;
+                            $dojDaysDeducted = max(0, $daysBefore - $loaDays);
                         }
                     } catch (\Throwable $e) { /* ignore */ }
                 }
