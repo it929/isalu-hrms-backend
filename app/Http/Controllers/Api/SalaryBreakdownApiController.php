@@ -3604,11 +3604,13 @@ class SalaryBreakdownApiController extends Controller
             $currentYear = (int)date('Y');
             $fromYear = (int)$request->query('from_year', $currentYear);
             $toYear = (int)$request->query('to_year', $currentYear);
+            $fromMonth = max(1, min(12, (int)$request->query('from_month', 1)));
+            $toMonth = max(1, min(12, (int)$request->query('to_month', 12)));
 
-            if ($fromYear > $toYear) {
-                $temp = $fromYear;
-                $fromYear = $toYear;
-                $toYear = $temp;
+            if (($fromYear * 100 + $fromMonth) > ($toYear * 100 + $toMonth)) {
+                $tempY = $fromYear; $tempM = $fromMonth;
+                $fromYear = $toYear; $fromMonth = $toMonth;
+                $toYear = $tempY; $toMonth = $tempM;
             }
 
             // Cap year range between 2020 and 2035 to protect performance
@@ -3678,6 +3680,15 @@ class SalaryBreakdownApiController extends Controller
                 'net_pay'                   => 0.00,
             ];
 
+            $startPeriod = $fromYear * 100 + $fromMonth;
+            $endPeriod = $toYear * 100 + $toMonth;
+
+            $monthNames = [
+                1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+                5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+                9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'
+            ];
+
             for ($yr = $fromYear; $yr <= $toYear; $yr++) {
                 $monthsData = [];
                 $yearTotals = [
@@ -3713,6 +3724,11 @@ class SalaryBreakdownApiController extends Controller
                 ];
 
                 for ($m = 1; $m <= 12; $m++) {
+                    $periodKey = $yr * 100 + $m;
+                    if ($periodKey < $startPeriod || $periodKey > $endPeriod) {
+                        continue;
+                    }
+
                     $monthRow = $this->computeSingleStaffMonthlyData($staffId, $m, $yr, $staff, $struct, $firstStruct);
                     $monthsData[] = $monthRow;
 
@@ -3725,16 +3741,25 @@ class SalaryBreakdownApiController extends Controller
                     }
                 }
 
-                // Round year totals
-                foreach ($yearTotals as $key => $val) {
-                    $yearTotals[$key] = round($val, 2);
-                }
+                if (!empty($monthsData)) {
+                    // Round year totals
+                    foreach ($yearTotals as $key => $val) {
+                        $yearTotals[$key] = round($val, 2);
+                    }
 
-                $yearsData[] = [
-                    'year'        => $yr,
-                    'months'      => $monthsData,
-                    'year_totals' => $yearTotals,
-                ];
+                    $firstM = $monthsData[0]['month_name'] ?? 'January';
+                    $lastM = end($monthsData)['month_name'] ?? 'December';
+                    $periodBadge = ($firstM === $lastM) ? $firstM : "{$firstM} – {$lastM}";
+
+                    $yearsData[] = [
+                        'year'         => $yr,
+                        'months'       => $monthsData,
+                        'year_totals'  => $yearTotals,
+                        'from_month'   => $monthsData[0]['month_num'] ?? 1,
+                        'to_month'     => end($monthsData)['month_num'] ?? 12,
+                        'period_badge' => $periodBadge,
+                    ];
+                }
             }
 
             // Round grand totals
@@ -3757,6 +3782,11 @@ class SalaryBreakdownApiController extends Controller
                 ],
                 'from_year'              => $fromYear,
                 'to_year'                => $toYear,
+                'from_month'             => $fromMonth,
+                'to_month'               => $toMonth,
+                'from_month_name'        => $monthNames[$fromMonth] ?? 'January',
+                'to_month_name'          => $monthNames[$toMonth] ?? 'December',
+                'period_label'           => "{$monthNames[$fromMonth]} {$fromYear} – {$monthNames[$toMonth]} {$toYear}",
                 'years'                  => $yearsData,
                 'grand_totals'           => $grandTotals,
                 'can_generate_all_staff' => $canGenerateAll,
@@ -3814,11 +3844,20 @@ class SalaryBreakdownApiController extends Controller
             $currentYear = (int)date('Y');
             $fromYear = max(2020, (int)$request->query('from_year', $currentYear));
             $toYear = min(2035, (int)$request->query('to_year', $currentYear));
-            if ($fromYear > $toYear) {
-                $temp = $fromYear;
-                $fromYear = $toYear;
-                $toYear = $temp;
+            $fromMonth = max(1, min(12, (int)$request->query('from_month', 1)));
+            $toMonth = max(1, min(12, (int)$request->query('to_month', 12)));
+
+            if (($fromYear * 100 + $fromMonth) > ($toYear * 100 + $toMonth)) {
+                $tempY = $fromYear; $tempM = $fromMonth;
+                $fromYear = $toYear; $fromMonth = $toMonth;
+                $toYear = $tempY; $toMonth = $tempM;
             }
+
+            $monthNames = [
+                1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+                5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+                9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'
+            ];
 
             $staff = DB::table('tblper as p')
                 ->leftJoin('tbldepartment as d', 'd.id', '=', 'p.departmentID')
@@ -3846,28 +3885,50 @@ class SalaryBreakdownApiController extends Controller
             $struct = DB::table('salary_structures')->where('staffId', $staffId)->first();
             $firstStruct = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
 
+            $fromMShort = substr($monthNames[$fromMonth] ?? 'Jan', 0, 3);
+            $toMShort = substr($monthNames[$toMonth] ?? 'Dec', 0, 3);
+            $filename = "Staff_Spreadsheet_{$staff->file_no}_{$fromMShort}_{$fromYear}_to_{$toMShort}_{$toYear}.csv";
+
             $headers = [
                 'Content-Type' => 'text/csv; charset=UTF-8',
-                'Content-Disposition' => "attachment; filename=\"Staff_Spreadsheet_{$staff->file_no}_{$fromYear}_{$toYear}.csv\"",
+                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
                 'Pragma' => 'no-cache',
                 'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
                 'Expires' => '0'
             ];
 
-            $callback = function () use ($staff, $staffName, $struct, $firstStruct, $fromYear, $toYear, $staffId) {
+            $callback = function () use ($staff, $staffName, $struct, $firstStruct, $fromYear, $toYear, $fromMonth, $toMonth, $monthNames, $staffId) {
                 $handle = fopen('php://output', 'w');
                 // UTF-8 BOM for Excel compatibility
                 fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+
+                $startPeriod = $fromYear * 100 + $fromMonth;
+                $endPeriod = $toYear * 100 + $toMonth;
 
                 // Title & Staff Profile Header
                 fputcsv($handle, ['ISALU HOSPITALS LIMITED - INDIVIDUAL STAFF PAYROLL SPREADSHEET']);
                 fputcsv($handle, ['Staff ID / File No:', $staff->file_no, 'Staff Name:', $staffName]);
                 fputcsv($handle, ['Department:', $staff->department ?? 'General', 'Designation:', $staff->designation ?? 'Staff']);
-                fputcsv($handle, ['Bank:', $staff->bank_name ?? '', 'Account No:', $staff->account_number ?? '', 'Period:', "{$fromYear} – {$toYear}"]);
+                fputcsv($handle, ['Bank:', $staff->bank_name ?? '', 'Account No:', $staff->account_number ?? '', 'Period:', "{$monthNames[$fromMonth]} {$fromYear} – {$monthNames[$toMonth]} {$toYear}"]);
                 fputcsv($handle, []);
 
                 for ($yr = $fromYear; $yr <= $toYear; $yr++) {
-                    fputcsv($handle, ["=== {$yr} PAYROLL SPREADSHEET (JANUARY - DECEMBER) ==="]);
+                    $includedMonths = [];
+                    for ($m = 1; $m <= 12; $m++) {
+                        $pKey = $yr * 100 + $m;
+                        if ($pKey >= $startPeriod && $pKey <= $endPeriod) {
+                            $includedMonths[] = $m;
+                        }
+                    }
+                    if (empty($includedMonths)) {
+                        continue;
+                    }
+
+                    $firstMName = $monthNames[$includedMonths[0]] ?? 'January';
+                    $lastMName = $monthNames[end($includedMonths)] ?? 'December';
+                    $badge = ($firstMName === $lastMName) ? $firstMName : "{$firstMName} - {$lastMName}";
+
+                    fputcsv($handle, ["=== {$yr} PAYROLL SPREADSHEET ({$badge}) ==="]);
                     fputcsv($handle, [
                         'Month',
                         'Basic (₦)',
@@ -3907,7 +3968,7 @@ class SalaryBreakdownApiController extends Controller
                         'regular_loan' => 0.0, 'other_deductions' => 0.0, 'total_deductions' => 0.0, 'net_pay' => 0.0
                     ];
 
-                    for ($m = 1; $m <= 12; $m++) {
+                    foreach ($includedMonths as $m) {
                         $mRow = $this->computeSingleStaffMonthlyData($staffId, $m, $yr, $staff, $struct, $firstStruct);
 
                         fputcsv($handle, [
