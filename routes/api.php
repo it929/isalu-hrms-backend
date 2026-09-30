@@ -345,6 +345,30 @@ Route::prefix('nextjs')->group(function () {
             Route::post('/',              [\App\Http\Controllers\Api\CoopSavingsLoanOffsetApiController::class, 'store']);
         });
 
+        // Cooperative Savings Top-Up
+        Route::prefix('coop-savings-top-up')->group(function () {
+            Route::get('/staff-list',              [\App\Http\Controllers\Api\CoopSavingsTopUpApiController::class, 'staffList']);
+            Route::get('/staff-balance/{staffId}', [\App\Http\Controllers\Api\CoopSavingsTopUpApiController::class, 'staffBalance']);
+            Route::get('/history',                 [\App\Http\Controllers\Api\CoopSavingsTopUpApiController::class, 'history']);
+            Route::get('/receipt/{id}',            [\App\Http\Controllers\Api\CoopSavingsTopUpApiController::class, 'receipt']);
+            Route::post('/',                       [\App\Http\Controllers\Api\CoopSavingsTopUpApiController::class, 'store']);
+            Route::delete('/{id}',                 [\App\Http\Controllers\Api\CoopSavingsTopUpApiController::class, 'destroy']);
+        });
+
+        // Cooperative Savings Withdrawal
+        Route::prefix('coop-savings-withdrawal')->group(function () {
+            Route::get('/staff-list',              [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'staffList']);
+            Route::get('/staff-details/{staffId}', [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'staffDetails']);
+            Route::get('/requests',                [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'requests']);
+            Route::get('/request/{id}',            [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'show']);
+            Route::get('/voucher/{id}',            [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'voucher']);
+            Route::post('/apply',                  [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'apply']);
+            Route::post('/hr-review/{id}',         [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'hrReview']);
+            Route::post('/audit-review/{id}',      [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'auditReview']);
+            Route::post('/finance-payout/{id}',    [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'financePayout']);
+            Route::delete('/{id}',                 [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'destroy']);
+        });
+
         // Medical Loan Entries
         Route::prefix('medical-loan-entries')->group(function () {
             Route::get('/',                     [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'index']);
