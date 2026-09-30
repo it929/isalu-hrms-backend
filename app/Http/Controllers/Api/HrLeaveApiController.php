@@ -1912,10 +1912,10 @@ class HrLeaveApiController extends Controller
                 }
             }
 
-            // Other Deductions Setup
+            // Other Deductions Setup (supports multiple active setups)
             $otherDeduct = 0.00;
             if (\Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups')) {
-                $otherSetup = DB::table('other_deduction_setups')
+                $otherSetups = DB::table('other_deduction_setups')
                     ->where('staffId', $staffId)
                     ->where('is_active', 1)
                     ->where('balance_remaining', '>', 0)
@@ -1925,9 +1925,9 @@ class HrLeaveApiController extends Controller
                           ->orWhere('end_month', '=', '')
                           ->orWhere('end_month', '>=', $currentMonthStr);
                     })
-                    ->orderBy('id', 'desc')->first();
-                if ($otherSetup) {
-                    $otherDeduct = min((float)$otherSetup->monthly_deduction, (float)$otherSetup->balance_remaining);
+                    ->get();
+                foreach ($otherSetups as $os) {
+                    $otherDeduct += min((float)$os->monthly_deduction, (float)$os->balance_remaining);
                 }
             }
 
