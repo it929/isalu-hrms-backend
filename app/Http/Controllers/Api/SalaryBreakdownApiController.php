@@ -495,21 +495,25 @@ class SalaryBreakdownApiController extends Controller
             }
 
             // 12. Other Deduction Setup
-            $otherDeductSetups = DB::table('other_deduction_setups')
+            $otherDeductQuery = DB::table('other_deduction_setups')
                 ->where('staffId', $staffId)
-                ->where('is_active', 1)
-                ->where(function($q) {
-                    $q->where('balance_remaining', '>', 0)
-                      ->orWhere('total_amount', '>', 0);
-                })
                 ->where('start_month', '<=', $currentMonthStr)
                 ->where(function($q) use ($currentMonthStr) {
                     $q->whereNull('end_month')
                       ->orWhere('end_month', '=', '')
                       ->orWhere('end_month', '>=', $currentMonthStr);
-                })
-                ->orderBy('id', 'desc')
-                ->get();
+                });
+
+            // When payroll is not yet computed, only select active setups with remaining balance
+            if (!$isComputed) {
+                $otherDeductQuery->where('is_active', 1)
+                    ->where(function($q) {
+                        $q->where('balance_remaining', '>', 0)
+                          ->orWhere('total_amount', '>', 0);
+                    });
+            }
+
+            $otherDeductSetups = $otherDeductQuery->orderBy('id', 'desc')->get();
 
             $otherDeduct = 0.00;
             $otherDeductBal = 0.00;
@@ -521,8 +525,12 @@ class SalaryBreakdownApiController extends Controller
                     ? (float)$setup->balance_remaining
                     : ((float)$setup->total_amount > 0 ? (float)$setup->total_amount : (float)$setup->monthly_deduction);
                 $amt = min((float)$setup->monthly_deduction, $bal);
-                $otherDeduct += $amt;
-                $otherDeductBal += $bal;
+                if (!$isComputed) {
+                    $otherDeduct += $amt;
+                    $otherDeductBal += $bal;
+                } else {
+                    $otherDeductBal += (float)$setup->balance_remaining;
+                }
 
                 if (!empty($setup->remarks)) {
                     $otherRemarksList[] = trim($setup->remarks);
@@ -531,9 +539,9 @@ class SalaryBreakdownApiController extends Controller
                 $otherDeductItems[] = [
                     'id' => $setup->id,
                     'remarks' => $setup->remarks ?? '',
-                    'amount' => $amt,
+                    'amount' => $isComputed ? (float)$setup->monthly_deduction : $amt,
                     'monthly_deduction' => (float)$setup->monthly_deduction,
-                    'balance_remaining' => $bal,
+                    'balance_remaining' => (float)$setup->balance_remaining,
                     'calculation_mode' => $setup->calculation_mode,
                     'deduction_days' => $setup->deduction_days ? (float)$setup->deduction_days : null,
                     'daily_rate' => $setup->daily_rate ? (float)$setup->daily_rate : null,
@@ -827,9 +835,9 @@ class SalaryBreakdownApiController extends Controller
                         'label' => 'Mid-Month Appointment Adjustment (' . $dojDaysDeducted . ' Unworked Days)'
                     ],
                     'other_deductions' => [
-                        'amount' => $otherDeduct,
-                        'monthly_deduction' => $otherDeduct,
-                        'balance_remaining' => $otherDeductBal,
+                        'amount' => round($otherDeduct, 2),
+                        'monthly_deduction' => round($otherDeduct, 2),
+                        'balance_remaining' => round($otherDeductBal, 2),
                         'remarks' => $otherRemarksTag,
                         'items' => $otherDeductItems,
                         'is_active' => ($otherDeduct > 0 || count($otherDeductSetups) > 0),
@@ -2076,7 +2084,7 @@ class SalaryBreakdownApiController extends Controller
                   ->orWhere('end_month', '>=', $currentMonthStr);
             })
             ->get()
-            ->keyBy('staffId') : collect();
+            ->groupBy('staffId') : collect();
 
         // 14. Fetch LOA days
         $loaDaysByStaff = [];
@@ -2267,16 +2275,20 @@ class SalaryBreakdownApiController extends Controller
                 $regularLoan = min((float)$empLoan->monthly_deduction, (float)$empLoan->balance);
             }
 
-            // Other Deductions
-            $othSetup = $otherDeductSetups[$sid] ?? null;
-            $othBal = 0.00;
-            if ($othSetup) {
+            // Other Deductions (supports multiple setups per staff)
+            $staffOtherSetups = $otherDeductSetups->get($sid) ?? collect();
+            $otherDeduct = 0.00;
+            $otherRemarksArr = [];
+            foreach ($staffOtherSetups as $othSetup) {
                 $othBal = (float)$othSetup->balance_remaining > 0
                     ? (float)$othSetup->balance_remaining
                     : ((float)$othSetup->total_amount > 0 ? (float)$othSetup->total_amount : (float)$othSetup->monthly_deduction);
+                $otherDeduct += min((float)$othSetup->monthly_deduction, $othBal);
+                if (!empty($othSetup->remarks)) {
+                    $otherRemarksArr[] = trim($othSetup->remarks);
+                }
             }
-            $otherDeduct = $othSetup ? min((float)$othSetup->monthly_deduction, $othBal) : 0.00;
-            $otherDeductRemarks = $othSetup ? ($othSetup->remarks ?? '') : '';
+            $otherDeductRemarks = !empty($otherRemarksArr) ? implode(', ', array_unique($otherRemarksArr)) : '';
 
             $totalDeductions = round(
                 $payeTax + $pension + $retention + $iou + $medLoan + $coopLoan +
@@ -3395,15 +3407,43 @@ class SalaryBreakdownApiController extends Controller
         } catch (\Throwable $e) {}
 
         $otherDeduct = 0.00;
-        $otherDeductSetup = null;
+        $otherDeductItems = [];
+        $otherRemarksList = [];
+        $otherDeductBal = 0.00;
         try {
-            $otherDeductSetup = DB::table('other_deductions_setup')
-                ->where('staff_id', $staffId)
-                ->where('is_active', 1)
-                ->where('balance_remaining', '>', 0)
-                ->first();
-            if ($otherDeductSetup) {
-                $otherDeduct = min((float)$otherDeductSetup->monthly_deduction, (float)$otherDeductSetup->balance_remaining);
+            if (\Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups')) {
+                $otherSetups = DB::table('other_deduction_setups')
+                    ->where('staffId', $staffId)
+                    ->where('is_active', 1)
+                    ->where(function($q) {
+                        $q->where('balance_remaining', '>', 0)
+                          ->orWhere('total_amount', '>', 0);
+                    })
+                    ->where('start_month', '<=', $currentMonthStr)
+                    ->where(function($q) use ($currentMonthStr) {
+                        $q->whereNull('end_month')
+                          ->orWhere('end_month', '=', '')
+                          ->orWhere('end_month', '>=', $currentMonthStr);
+                    })
+                    ->get();
+                foreach ($otherSetups as $os) {
+                    $bal = (float)$os->balance_remaining > 0
+                        ? (float)$os->balance_remaining
+                        : ((float)$os->total_amount > 0 ? (float)$os->total_amount : (float)$os->monthly_deduction);
+                    $amt = min((float)$os->monthly_deduction, $bal);
+                    $otherDeduct += $amt;
+                    $otherDeductBal += $bal;
+                    if (!empty($os->remarks)) {
+                        $otherRemarksList[] = trim($os->remarks);
+                    }
+                    $otherDeductItems[] = [
+                        'id' => $os->id,
+                        'remarks' => $os->remarks ?? '',
+                        'amount' => $amt,
+                        'balance_remaining' => $bal,
+                        'monthly_deduction' => (float)$os->monthly_deduction,
+                    ];
+                }
             }
         } catch (\Throwable $e) {}
 
@@ -3492,7 +3532,13 @@ class SalaryBreakdownApiController extends Controller
                 'absence_penalty' => ['amount' => $absencePenaltyDeduct, 'balance_remaining' => $absencePenaltySetup ? (float)$absencePenaltySetup->balance_remaining : 0.00, 'label' => 'Absence Penalty'],
                 'leave_of_absence' => ['amount' => $leaveOfAbsenceDeduct, 'days_absent' => $loaDays, 'label' => 'Leave of Absence'],
                 'mid_month_adjustment' => ['amount' => $midMonthAdjustment, 'unworked_days' => $dojDaysDeducted, 'label' => 'Mid-Month Appointment Adj.'],
-                'other_deductions' => ['amount' => $otherDeduct, 'balance_remaining' => $otherDeductSetup ? (float)$otherDeductSetup->balance_remaining : 0.00, 'label' => 'Other Deductions'],
+                'other_deductions' => [
+                    'amount' => $otherDeduct,
+                    'balance_remaining' => $otherDeductBal,
+                    'remarks' => implode(', ', array_unique($otherRemarksList)),
+                    'items' => $otherDeductItems,
+                    'label' => !empty($otherRemarksList) ? 'Other Deductions (' . implode(', ', array_unique($otherRemarksList)) . ')' : 'Other Deductions'
+                ],
                 'total_deductions' => round($totalDeductions, 2)
             ],
             'summary' => [

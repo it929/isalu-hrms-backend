@@ -1339,10 +1339,10 @@ class NextJsPayrollApiController extends Controller
                     }
                 }
 
-                // Revert other_deduction_setups balance_remaining
+                // Revert other_deduction_setups balance_remaining (supports multiple setups)
                 if ((float)($od->other_deductions ?? 0) > 0) {
                     $currentMonthStr = sprintf("%04d-%02d", $year, $month);
-                    $setup = DB::table('other_deduction_setups')
+                    $setups = DB::table('other_deduction_setups')
                         ->where('staffId', $staffId)
                         ->where('start_month', '<=', $currentMonthStr)
                         ->where(function($q) use ($currentMonthStr) {
@@ -1350,14 +1350,40 @@ class NextJsPayrollApiController extends Controller
                               ->orWhere('end_month', '=', '')
                               ->orWhere('end_month', '>=', $currentMonthStr);
                         })
-                        ->orderBy('is_active', 'desc')
                         ->orderBy('id', 'desc')
-                        ->first();
-                    if ($setup) {
+                        ->get();
+
+                    $revertPool = (float)$od->other_deductions;
+                    foreach ($setups as $setup) {
+                        if ($revertPool <= 0) {
+                            break;
+                        }
+                        $totalCap = (float)$setup->total_amount > 0
+                            ? (float)$setup->total_amount
+                            : ((float)$setup->monthly_deduction * max(1, (int)($setup->duration_months ?? 1)));
+                        $currentBal = (float)$setup->balance_remaining;
+                        $room = max(0.0, $totalCap - $currentBal);
+                        $restoreAmt = min($revertPool, (float)$setup->monthly_deduction, $room);
+
+                        if ($restoreAmt > 0) {
+                            $newBal = min($totalCap, $currentBal + $restoreAmt);
+                            DB::table('other_deduction_setups')
+                                ->where('id', $setup->id)
+                                ->update([
+                                    'balance_remaining' => $newBal,
+                                    'is_active' => 1
+                                ]);
+                            $revertPool -= $restoreAmt;
+                        }
+                    }
+
+                    // If any pool remains and setups exist, add remainder to the most recent setup
+                    if ($revertPool > 0 && $setups->isNotEmpty()) {
+                        $firstSetup = $setups->first();
                         DB::table('other_deduction_setups')
-                            ->where('id', $setup->id)
+                            ->where('id', $firstSetup->id)
                             ->update([
-                                'balance_remaining' => DB::raw('balance_remaining + ' . (float)$od->other_deductions),
+                                'balance_remaining' => DB::raw('balance_remaining + ' . $revertPool),
                                 'is_active' => 1
                             ]);
                     }
@@ -1630,8 +1656,8 @@ class NextJsPayrollApiController extends Controller
                     ->orderBy('id', 'desc')
                     ->first();
 
-                // Check if there is an active other deduction setup
-                $otherDeductionSetup = DB::table('other_deduction_setups')
+                // Check if there are active other deduction setups (supports multiple active setups per staff)
+                $otherDeductionSetups = DB::table('other_deduction_setups')
                     ->where('staffId', $emp->ID)
                     ->where('is_active', 1)
                     ->where(function($q) {
@@ -1644,8 +1670,8 @@ class NextJsPayrollApiController extends Controller
                           ->orWhere('end_month', '=', '')
                           ->orWhere('end_month', '>=', $currentMonthStr);
                     })
-                    ->orderBy('id', 'desc')
-                    ->first();
+                    ->orderBy('id', 'asc')
+                    ->get();
 
                 // Check if there is an active coop asset finance deduction setup
                 $coopAssetFinanceSetup = DB::table('coop_asset_finance_deduction_setups')
@@ -1768,22 +1794,25 @@ class NextJsPayrollApiController extends Controller
                         ->update($updateData);
                 }
 
-                // Process Other Deduction Setup
-                if ($otherDeductionSetup) {
-                    $otherDeductBal = (float)$otherDeductionSetup->balance_remaining > 0
-                        ? (float)$otherDeductionSetup->balance_remaining
-                        : ((float)$otherDeductionSetup->total_amount > 0 ? (float)$otherDeductionSetup->total_amount : (float)$otherDeductionSetup->monthly_deduction);
-                    $otherDeductions = min((float)$otherDeductionSetup->monthly_deduction, $otherDeductBal);
-                    
-                    // Update remaining balance on setups table
-                    $newBalance = max(0.00, $otherDeductBal - $otherDeductions);
-                    $updateData = ['balance_remaining' => $newBalance];
-                    if ($newBalance <= 0) {
-                        $updateData['is_active'] = 0;
+                // Process Other Deduction Setups (supports multiple active setups per staff)
+                if ($otherDeductionSetups->isNotEmpty()) {
+                    foreach ($otherDeductionSetups as $odSetup) {
+                        $otherDeductBal = (float)$odSetup->balance_remaining > 0
+                            ? (float)$odSetup->balance_remaining
+                            : ((float)$odSetup->total_amount > 0 ? (float)$odSetup->total_amount : (float)$odSetup->monthly_deduction);
+                        $odAmt = min((float)$odSetup->monthly_deduction, $otherDeductBal);
+                        $otherDeductions += $odAmt;
+
+                        // Update remaining balance on setups table
+                        $newBalance = max(0.00, $otherDeductBal - $odAmt);
+                        $updateData = ['balance_remaining' => $newBalance];
+                        if ($newBalance <= 0) {
+                            $updateData['is_active'] = 0;
+                        }
+                        DB::table('other_deduction_setups')
+                            ->where('id', $odSetup->id)
+                            ->update($updateData);
                     }
-                    DB::table('other_deduction_setups')
-                        ->where('id', $otherDeductionSetup->id)
-                        ->update($updateData);
                 }
 
                 // Process Coop Asset Finance Deduction Setup
