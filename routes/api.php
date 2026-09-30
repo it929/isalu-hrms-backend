@@ -163,6 +163,42 @@ Route::prefix('nextjs')->group(function () {
         Route::post('/approve-transfers',   [\App\Http\Controllers\Api\HrStaffStatusApiController::class, 'approveOrRejectTransfers']);
     });
 
+    // HR - Advice to Resign Module
+    Route::prefix('advice-to-resign')->group(function () {
+        Route::get('/staff', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'getStaffList']);
+        Route::get('/', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'update']);
+        Route::post('/{id}/action', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'updateStatus']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'destroy']);
+        Route::get('/{id}/letter', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'getLetterData']);
+        Route::post('/{id}/staff-apply', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'staffApply']);
+        Route::post('/{id}/hr-approve', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'hrApprove']);
+        Route::post('/{id}/audit-review', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'auditReview']);
+        Route::post('/{id}/finance-pay', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'financePay']);
+        Route::get('/{id}/settlement', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'getSettlement']);
+        Route::get('/{id}/download-pdf', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'downloadSettlementPdf']);
+        Route::post('/{id}/send-email', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'sendSettlementEmail']);
+    });
+    Route::prefix('hr/advice-to-resign')->group(function () {
+        Route::get('/staff', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'getStaffList']);
+        Route::get('/', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'update']);
+        Route::post('/{id}/action', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'updateStatus']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'destroy']);
+        Route::get('/{id}/letter', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'getLetterData']);
+        Route::post('/{id}/staff-apply', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'staffApply']);
+        Route::post('/{id}/hr-approve', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'hrApprove']);
+        Route::post('/{id}/audit-review', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'auditReview']);
+        Route::post('/{id}/finance-pay', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'financePay']);
+        Route::get('/{id}/settlement', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'getSettlement']);
+        Route::get('/{id}/download-pdf', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'downloadSettlementPdf']);
+        Route::post('/{id}/send-email', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'sendSettlementEmail']);
+    });
+
     // HR - Department & Designation submodules
     Route::get('/hr/basic/section', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'getDepartments']);
     Route::post('/hr/basic/section', [\App\Http\Controllers\Api\HrBasicParameterApiController::class, 'handleDepartment']);
@@ -529,6 +565,25 @@ Route::prefix('nextjs')->group(function () {
             Route::post('/update-retention-months', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateRetentionMonths']);
             Route::post('/update-medical-loan-balance', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateMedicalLoanBalance']);
             Route::post('/update-coop-loan-balance', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateCoopLoanBalance']);
+        });
+
+        // Advice to Resign Module (under payroll and top-level)
+        Route::prefix('advice-to-resign')->group(function () {
+            Route::get('/staff', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'getStaffList']);
+            Route::get('/', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'store']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'show']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'update']);
+            Route::post('/{id}/action', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'updateStatus']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'destroy']);
+            Route::get('/{id}/letter', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'getLetterData']);
+            Route::post('/{id}/staff-apply', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'staffApply']);
+            Route::post('/{id}/hr-approve', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'hrApprove']);
+            Route::post('/{id}/audit-review', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'auditReview']);
+            Route::post('/{id}/finance-pay', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'financePay']);
+            Route::get('/{id}/settlement', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'getSettlement']);
+            Route::get('/{id}/download-pdf', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'downloadSettlementPdf']);
+            Route::post('/{id}/send-email', [\App\Http\Controllers\Api\AdviceToResignApiController::class, 'sendSettlementEmail']);
         });
 
         // Pension Activation
