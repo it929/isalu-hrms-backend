@@ -388,6 +388,8 @@ class LogUserActivityMiddleware
             $target = $request->input('target_type') === 'department' ? 'Department' : 'All Staff';
             return "Applied Bulk Salary Increment for {$target}{$detail}";
         }
+        if (str_contains($cleanPath, 'payroll/salary-increments/multi-department')) return "Applied Multi-Department Bulk Salary Increment";
+        if (str_contains($cleanPath, 'payroll/salary-increments/upload')) return "Uploaded Bulk Salary Increment Spreadsheet";
         if (str_contains($cleanPath, 'payroll/salary-increments/revert')) return "Reverted Staff Salary Increment" . $this->getStaffNameById($request->input('staff_id'));
         if (str_contains($cleanPath, 'payroll/payslip/send-email')) return "Dispatched Payslip via Email" . $this->getStaffNameById($request->input('staff_id'));
         if (str_contains($cleanPath, 'payroll/print-activation')) return "Toggled Payslip Print Activation";

@@ -12,10 +12,18 @@ class SalaryIncrementApiTest extends TestCase
 
     private $testEmployeeId = null;
     private $testEmployeeId2 = null;
+    private $testDepartmentId = null;
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Create isolated test department
+        $this->testDepartmentId = DB::table('tbldepartment')->insertGetId([
+            'courtID' => '9',
+            'department' => 'TEST_INC_DEPT',
+            'head' => 0,
+        ]);
 
         // Create test employees
         $this->testEmployeeId = DB::table('tblper')->insertGetId([
@@ -28,7 +36,7 @@ class SalaryIncrementApiTest extends TestCase
             'fileNo' => 'INC9901',
             'courtID' => 9,
             'divisionID' => 1,
-            'departmentID' => 79,
+            'departmentID' => $this->testDepartmentId,
             'unitID' => 21,
             'designation' => 'Doctor',
         ]);
@@ -43,7 +51,7 @@ class SalaryIncrementApiTest extends TestCase
             'fileNo' => 'INC9902',
             'courtID' => 9,
             'divisionID' => 1,
-            'departmentID' => 79,
+            'departmentID' => $this->testDepartmentId,
             'unitID' => 21,
             'designation' => 'Nurse',
         ]);
@@ -85,6 +93,9 @@ class SalaryIncrementApiTest extends TestCase
             DB::table('salary_increments')->where('staff_id', $this->testEmployeeId2)->delete();
             DB::table('salary_structures')->where('staffId', $this->testEmployeeId2)->delete();
             DB::table('tblper')->where('ID', $this->testEmployeeId2)->delete();
+        }
+        if ($this->testDepartmentId) {
+            DB::table('tbldepartment')->where('id', $this->testDepartmentId)->delete();
         }
         parent::tearDown();
     }
@@ -175,7 +186,7 @@ class SalaryIncrementApiTest extends TestCase
     {
         $response = $this->postJson('/api/nextjs/payroll/salary-increments/bulk', [
             'target_type' => 'department',
-            'department_id' => 79,
+            'department_id' => $this->testDepartmentId,
             'increment_type' => 'percentage',
             'percentage' => 10,
             'effective_date' => '2026-08-01',
@@ -187,7 +198,7 @@ class SalaryIncrementApiTest extends TestCase
         $this->assertGreaterThanOrEqual(2, $response->json('data.affected_count'));
 
         // Check history endpoint
-        $historyRes = $this->getJson('/api/nextjs/payroll/salary-increments/history?department_id=79');
+        $historyRes = $this->getJson("/api/nextjs/payroll/salary-increments/history?department_id={$this->testDepartmentId}");
         $historyRes->assertStatus(200);
         $historyRes->assertJsonPath('status', 'success');
         $this->assertNotEmpty($historyRes->json('data'));
@@ -227,4 +238,180 @@ class SalaryIncrementApiTest extends TestCase
         $response->assertStatus(200);
         $this->assertEquals('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $response->headers->get('content-type'));
     }
+
+    public function test_download_template_xlsx_and_csv()
+    {
+        // 1. XLSX
+        $resXlsx = $this->get('/api/nextjs/payroll/salary-increments/template?format=xlsx');
+        $resXlsx->assertStatus(200);
+        $this->assertEquals('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $resXlsx->headers->get('content-type'));
+
+        // 2. CSV
+        $resCsv = $this->get('/api/nextjs/payroll/salary-increments/template?format=csv');
+        $resCsv->assertStatus(200);
+        $this->assertEquals('text/csv; charset=UTF-8', $resCsv->headers->get('content-type'));
+        $content = $resCsv->streamedContent();
+        $firstLine = strtok($content, "\r\n");
+        $this->assertStringContainsString('Staff ID', $firstLine);
+        $this->assertStringContainsString('Department', $firstLine);
+        $this->assertStringContainsString('Increment Amount', $firstLine);
+        $this->assertStringContainsString('Increment Percentage', $firstLine);
+        $this->assertStringContainsString('Effective Date', $firstLine);
+        $this->assertStringNotContainsString("fileNo", $content);
+        $this->assertStringNotContainsString("Current Gross", $content);
+        $this->assertStringNotContainsString("New Gross", $content);
+    }
+
+    public function test_apply_multi_department_increments()
+    {
+        $payload = [
+            'effective_date' => '2026-10-01',
+            'default_reason' => 'Annual Departmental Adjustment',
+            'departments' => [
+                [
+                    'department_id' => $this->testDepartmentId,
+                    'increment_type' => 'fixed_amount',
+                    'amount' => 50000,
+                    'percentage' => null,
+                    'reason' => 'Medical dept ₦50,000 allowance bump'
+                ]
+            ]
+        ];
+
+        $response = $this->postJson('/api/nextjs/payroll/salary-increments/multi-department', $payload);
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', 'success');
+        $this->assertGreaterThanOrEqual(2, $response->json('data.affected_count'));
+
+        // Verify that staff in dept 79 got their new gross (1,000,000 + 50,000 = 1,050,000)
+        $struct = DB::table('salary_structures')->where('staffId', $this->testEmployeeId)->first();
+        $this->assertEquals(210000.00, (float)$struct->basic_salary); // 20% of 1,050,000
+    }
+
+    public function test_preview_and_upload_bulk_spreadsheet()
+    {
+        // 5-column streamlined bulk template (Staff ID, Department, Increment Amount, Increment Percentage, Effective Date)
+        $csvContent = "Staff ID,Department,Increment Amount,Increment Percentage,Effective Date\n";
+        $csvContent .= "{$this->testEmployeeId},Medical,25000,,2026-10-01\n";
+        $csvContent .= "{$this->testEmployeeId2},Medical,,10,2026-10-01\n";
+
+        $file = \Illuminate\Http\UploadedFile::fake()->createWithContent('salary_increments.csv', $csvContent);
+
+        // 1. Preview
+        $previewRes = $this->postJson('/api/nextjs/payroll/salary-increments/preview-upload', [
+            'file' => $file
+        ]);
+        $previewRes->assertStatus(200);
+        $previewRes->assertJsonPath('status', 'success');
+        $this->assertEquals(2, $previewRes->json('data.valid_count'));
+
+        // 2. Upload
+        $uploadFile = \Illuminate\Http\UploadedFile::fake()->createWithContent('salary_increments.csv', $csvContent);
+        $uploadRes = $this->postJson('/api/nextjs/payroll/salary-increments/upload', [
+            'file' => $uploadFile
+        ]);
+        $uploadRes->assertStatus(200);
+        $uploadRes->assertJsonPath('status', 'success');
+        $this->assertEquals(2, $uploadRes->json('data.updated_count'));
+
+        // Verify records
+        $struct1 = DB::table('salary_structures')->where('staffId', $this->testEmployeeId)->first();
+        // 1,000,000 + 25,000 = 1,025,000 -> basic = 205,000
+        $this->assertEquals(205000.00, (float)$struct1->basic_salary);
+
+        $struct2 = DB::table('salary_structures')->where('staffId', $this->testEmployeeId2)->first();
+        // 1,000,000 * 1.10 = 1,100,000 -> basic = 220,000
+        $this->assertEquals(220000.00, (float)$struct2->basic_salary);
+    }
+
+    public function test_apply_single_decrement_fixed_and_percentage()
+    {
+        // 1. Decrement fixed by ₦100,000 (1,000,000 -> 900,000)
+        $fixedDecRes = $this->postJson('/api/nextjs/payroll/salary-increments/single', [
+            'staff_id' => $this->testEmployeeId,
+            'increment_type' => 'decrement_fixed',
+            'amount' => 100000,
+            'effective_date' => '2026-10-01',
+            'reason' => 'Voluntary salary reduction',
+        ]);
+
+        $fixedDecRes->assertStatus(200);
+        $fixedDecRes->assertJsonPath('status', 'success');
+        $fixedDecRes->assertJsonPath('data.new_gross', 900000);
+        $fixedDecRes->assertJsonPath('data.increase_amount', -100000);
+
+        // Verify salary structure
+        $struct = DB::table('salary_structures')->where('staffId', $this->testEmployeeId)->first();
+        $this->assertEquals(180000.00, (float)$struct->basic_salary); // 20% of 900,000
+
+        // Verify audit log has negative increase_amount
+        $log = DB::table('salary_increments')->where('staff_id', $this->testEmployeeId)->latest('id')->first();
+        $this->assertEquals(-100000.00, (float)$log->increase_amount);
+        $this->assertEquals(900000.00, (float)$log->new_gross_salary);
+
+        // 2. Decrement by percentage (10% cut on testEmployeeId2: 1,000,000 -> 900,000)
+        $pctDecRes = $this->postJson('/api/nextjs/payroll/salary-increments/single', [
+            'staff_id' => $this->testEmployeeId2,
+            'increment_type' => 'decrement_percentage',
+            'percentage' => 10,
+            'effective_date' => '2026-10-01',
+            'reason' => 'Restructuring adjustment',
+        ]);
+
+        $pctDecRes->assertStatus(200);
+        $pctDecRes->assertJsonPath('status', 'success');
+        $pctDecRes->assertJsonPath('data.new_gross', 900000);
+        $pctDecRes->assertJsonPath('data.increase_amount', -100000);
+
+        // 3. Validation: prevent reducing salary below 0
+        $invalidDecRes = $this->postJson('/api/nextjs/payroll/salary-increments/single', [
+            'staff_id' => $this->testEmployeeId,
+            'increment_type' => 'decrement_fixed',
+            'amount' => 1500000, // Exceeds current gross of 900,000
+            'effective_date' => '2026-10-01',
+        ]);
+
+        $invalidDecRes->assertStatus(422);
+    }
+
+    public function test_preview_and_upload_bulk_spreadsheet_with_decrements()
+    {
+        // Test mixed file: Employee 1 gets -₦50,000 reduction, Employee 2 gets -10% reduction
+        $csvContent = "Staff ID,Department,Increment Amount,Increment Percentage,Effective Date\n";
+        $csvContent .= "{$this->testEmployeeId},Medical,-50000,,2026-10-01\n";
+        $csvContent .= "{$this->testEmployeeId2},Medical,,-10%,2026-10-01\n";
+
+        $file = \Illuminate\Http\UploadedFile::fake()->createWithContent('salary_decrements.csv', $csvContent);
+
+        // 1. Preview
+        $previewRes = $this->postJson('/api/nextjs/payroll/salary-increments/preview-upload', [
+            'file' => $file
+        ]);
+        $previewRes->assertStatus(200);
+        $previewRes->assertJsonPath('status', 'success');
+        $this->assertEquals(2, $previewRes->json('data.valid_count'));
+        $this->assertEquals(2, $previewRes->json('data.decrements_count'));
+        $this->assertEquals(0, $previewRes->json('data.increments_count'));
+        $this->assertLessThan(0, $previewRes->json('data.total_monthly_increase'));
+
+        // 2. Upload
+        $uploadFile = \Illuminate\Http\UploadedFile::fake()->createWithContent('salary_decrements.csv', $csvContent);
+        $uploadRes = $this->postJson('/api/nextjs/payroll/salary-increments/upload', [
+            'file' => $uploadFile
+        ]);
+        $uploadRes->assertStatus(200);
+        $uploadRes->assertJsonPath('status', 'success');
+        $this->assertEquals(2, $uploadRes->json('data.updated_count'));
+        $this->assertEquals(2, $uploadRes->json('data.decrements_count'));
+
+        // Verify Employee 1: 1,000,000 - 50,000 = 950,000 -> basic 190,000
+        $struct1 = DB::table('salary_structures')->where('staffId', $this->testEmployeeId)->first();
+        $this->assertEquals(190000.00, (float)$struct1->basic_salary);
+
+        // Verify Employee 2: 1,000,000 - 10% = 900,000 -> basic 180,000
+        $struct2 = DB::table('salary_structures')->where('staffId', $this->testEmployeeId2)->first();
+        $this->assertEquals(180000.00, (float)$struct2->basic_salary);
+    }
 }
+
+
