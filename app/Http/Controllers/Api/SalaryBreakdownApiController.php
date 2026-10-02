@@ -521,10 +521,24 @@ class SalaryBreakdownApiController extends Controller
             $otherDeductItems = [];
 
             foreach ($otherDeductSetups as $setup) {
-                $bal = (float)$setup->balance_remaining > 0
-                    ? (float)$setup->balance_remaining
-                    : ((float)$setup->total_amount > 0 ? (float)$setup->total_amount : (float)$setup->monthly_deduction);
-                $amt = min((float)$setup->monthly_deduction, $bal);
+                $isDayBased = ($setup->calculation_mode === 'days' || (float)($setup->deduction_days ?? 0) > 0);
+                $dailyRate = $setup->daily_rate ? (float)$setup->daily_rate : null;
+
+                if (!$isComputed && $isDayBased && $totalBasicAllowances > 0) {
+                    $dInM = (int)($setup->days_in_month ?: $daysInMonth);
+                    if ($dInM < 28 || $dInM > 31) {
+                        $dInM = $daysInMonth;
+                    }
+                    $dailyRate = round($totalBasicAllowances / (float)$dInM, 2);
+                    $amt = round((float)$setup->deduction_days * $dailyRate, 2);
+                    $bal = $amt;
+                } else {
+                    $bal = (float)$setup->balance_remaining > 0
+                        ? (float)$setup->balance_remaining
+                        : ((float)$setup->total_amount > 0 ? (float)$setup->total_amount : (float)$setup->monthly_deduction);
+                    $amt = min((float)$setup->monthly_deduction, $bal);
+                }
+
                 if (!$isComputed) {
                     $otherDeduct += $amt;
                     $otherDeductBal += $bal;
@@ -540,11 +554,12 @@ class SalaryBreakdownApiController extends Controller
                     'id' => $setup->id,
                     'remarks' => $setup->remarks ?? '',
                     'amount' => $isComputed ? (float)$setup->monthly_deduction : $amt,
-                    'monthly_deduction' => (float)$setup->monthly_deduction,
-                    'balance_remaining' => (float)$setup->balance_remaining,
+                    'monthly_deduction' => (!$isComputed && $isDayBased) ? $amt : (float)$setup->monthly_deduction,
+                    'balance_remaining' => (!$isComputed && $isDayBased) ? $bal : (float)$setup->balance_remaining,
                     'calculation_mode' => $setup->calculation_mode,
                     'deduction_days' => $setup->deduction_days ? (float)$setup->deduction_days : null,
-                    'daily_rate' => $setup->daily_rate ? (float)$setup->daily_rate : null,
+                    'daily_rate' => $dailyRate,
+                    'monthly_salary' => (!$isComputed && $isDayBased && $totalBasicAllowances > 0) ? $totalBasicAllowances : ($setup->monthly_salary ? (float)$setup->monthly_salary : null),
                     'deduction_type' => $setup->deduction_type,
                     'start_month' => $setup->start_month,
                     'end_month' => $setup->end_month,
@@ -2283,7 +2298,21 @@ class SalaryBreakdownApiController extends Controller
                 $othBal = (float)$othSetup->balance_remaining > 0
                     ? (float)$othSetup->balance_remaining
                     : ((float)$othSetup->total_amount > 0 ? (float)$othSetup->total_amount : (float)$othSetup->monthly_deduction);
-                $otherDeduct += min((float)$othSetup->monthly_deduction, $othBal);
+                
+                if ($othSetup->calculation_mode === 'days' || (float)($othSetup->deduction_days ?? 0) > 0) {
+                    if ($basicAllowances > 0) {
+                        $dInM = (int)($othSetup->days_in_month ?: $daysInPayrollMonth);
+                        if ($dInM < 28 || $dInM > 31) $dInM = $daysInPayrollMonth;
+                        $dRate = round($basicAllowances / (float)$dInM, 2);
+                        $othAmt = round((float)$othSetup->deduction_days * $dRate, 2);
+                        $otherDeduct += $othAmt;
+                    } else {
+                        $otherDeduct += min((float)$othSetup->monthly_deduction, $othBal);
+                    }
+                } else {
+                    $otherDeduct += min((float)$othSetup->monthly_deduction, $othBal);
+                }
+
                 if (!empty($othSetup->remarks)) {
                     $otherRemarksArr[] = trim($othSetup->remarks);
                 }
@@ -3427,10 +3456,19 @@ class SalaryBreakdownApiController extends Controller
                     })
                     ->get();
                 foreach ($otherSetups as $os) {
-                    $bal = (float)$os->balance_remaining > 0
-                        ? (float)$os->balance_remaining
-                        : ((float)$os->total_amount > 0 ? (float)$os->total_amount : (float)$os->monthly_deduction);
-                    $amt = min((float)$os->monthly_deduction, $bal);
+                    $isDayBased = ($os->calculation_mode === 'days' || (float)($os->deduction_days ?? 0) > 0);
+                    if ($isDayBased && $totalBasicAllowances > 0) {
+                        $dInM = (int)($os->days_in_month ?: $daysInPayrollMonth);
+                        if ($dInM < 28 || $dInM > 31) $dInM = $daysInPayrollMonth;
+                        $dRate = round($totalBasicAllowances / (float)$dInM, 2);
+                        $amt = round((float)$os->deduction_days * $dRate, 2);
+                        $bal = $amt;
+                    } else {
+                        $bal = (float)$os->balance_remaining > 0
+                            ? (float)$os->balance_remaining
+                            : ((float)$os->total_amount > 0 ? (float)$os->total_amount : (float)$os->monthly_deduction);
+                        $amt = min((float)$os->monthly_deduction, $bal);
+                    }
                     $otherDeduct += $amt;
                     $otherDeductBal += $bal;
                     if (!empty($os->remarks)) {
@@ -3441,7 +3479,7 @@ class SalaryBreakdownApiController extends Controller
                         'remarks' => $os->remarks ?? '',
                         'amount' => $amt,
                         'balance_remaining' => $bal,
-                        'monthly_deduction' => (float)$os->monthly_deduction,
+                        'monthly_deduction' => (float)$amt,
                     ];
                 }
             }

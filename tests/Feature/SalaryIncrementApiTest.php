@@ -234,9 +234,15 @@ class SalaryIncrementApiTest extends TestCase
 
     public function test_export_increment_history()
     {
-        $response = $this->get('/api/nextjs/payroll/salary-increments/export');
-        $response->assertStatus(200);
-        $this->assertEquals('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $response->headers->get('content-type'));
+        // 1. XLSX
+        $responseXlsx = $this->get('/api/nextjs/payroll/salary-increments/export?format=xlsx');
+        $responseXlsx->assertStatus(200);
+        $this->assertEquals('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $responseXlsx->headers->get('content-type'));
+
+        // 2. CSV
+        $responseCsv = $this->get('/api/nextjs/payroll/salary-increments/export?format=csv');
+        $responseCsv->assertStatus(200);
+        $this->assertStringContainsString('text/csv', $responseCsv->headers->get('content-type'));
     }
 
     public function test_download_template_xlsx_and_csv()

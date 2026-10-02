@@ -1387,6 +1387,21 @@ class NextJsPayrollApiController extends Controller
                                 'is_active' => 1
                             ]);
                     }
+
+                    // Ensure all day-based other deductions covering this month are active so they will be recalculated with new gross salary
+                    DB::table('other_deduction_setups')
+                        ->where('staffId', $staffId)
+                        ->where(function($calcQ) {
+                            $calcQ->where('calculation_mode', 'days')
+                                  ->orWhere('deduction_days', '>', 0);
+                        })
+                        ->where('start_month', '<=', $currentMonthStr)
+                        ->where(function($q) use ($currentMonthStr) {
+                            $q->whereNull('end_month')
+                              ->orWhere('end_month', '=', '')
+                              ->orWhere('end_month', '>=', $currentMonthStr);
+                        })
+                        ->update(['is_active' => 1]);
                 }
 
                 // Revert coop_asset_finance_deduction_setups balance_remaining
@@ -1639,13 +1654,20 @@ class NextJsPayrollApiController extends Controller
                     ->orderBy('id', 'desc')
                     ->first();
 
-                // Check if there is an active absence penalty setup
+                // Check if there is an active absence penalty setup (or day-based penalty for this month)
                 $absencePenaltySetup = DB::table('absence_penalty_deduction_setups')
                     ->where('staffId', $emp->ID)
-                    ->where('is_active', 1)
-                    ->where(function($q) {
-                        $q->where('balance_remaining', '>', 0)
-                          ->orWhere('total_amount', '>', 0);
+                    ->where(function($q) use ($currentMonthStr) {
+                        $q->where('is_active', 1)
+                          ->orWhere(function($sub) use ($currentMonthStr) {
+                              $sub->where('start_month', '<=', $currentMonthStr)
+                                  ->where(function($endQ) use ($currentMonthStr) {
+                                      $endQ->whereNull('end_month')
+                                           ->orWhere('end_month', '=', '')
+                                           ->orWhere('end_month', '>=', $currentMonthStr);
+                                  })
+                                  ->where('penalty_days', '>', 0);
+                          });
                     })
                     ->where('start_month', '<=', $currentMonthStr)
                     ->where(function($q) use ($currentMonthStr) {
@@ -1656,13 +1678,23 @@ class NextJsPayrollApiController extends Controller
                     ->orderBy('id', 'desc')
                     ->first();
 
-                // Check if there are active other deduction setups (supports multiple active setups per staff)
+                // Check if there are active other deduction setups (supports multiple active setups per staff, including day deductions covering this month)
                 $otherDeductionSetups = DB::table('other_deduction_setups')
                     ->where('staffId', $emp->ID)
-                    ->where('is_active', 1)
-                    ->where(function($q) {
-                        $q->where('balance_remaining', '>', 0)
-                          ->orWhere('total_amount', '>', 0);
+                    ->where(function($q) use ($currentMonthStr) {
+                        $q->where('is_active', 1)
+                          ->orWhere(function($sub) use ($currentMonthStr) {
+                              $sub->where('start_month', '<=', $currentMonthStr)
+                                  ->where(function($endQ) use ($currentMonthStr) {
+                                      $endQ->whereNull('end_month')
+                                           ->orWhere('end_month', '=', '')
+                                           ->orWhere('end_month', '>=', $currentMonthStr);
+                                  })
+                                  ->where(function($calcQ) {
+                                      $calcQ->where('calculation_mode', 'days')
+                                            ->orWhere('deduction_days', '>', 0);
+                                  });
+                          });
                     })
                     ->where('start_month', '<=', $currentMonthStr)
                     ->where(function($q) use ($currentMonthStr) {
@@ -1776,8 +1808,38 @@ class NextJsPayrollApiController extends Controller
                         ->update($updateData);
                 }
 
+                $staffGrossSalary = (float)$basic + (float)$housing + (float)$transport + (float)$medical + (float)$utility + (float)$meal;
+                if ($staffGrossSalary <= 0 && (float)$declareSalary > 0) {
+                    $staffGrossSalary = (float)$declareSalary;
+                }
+
                 // Process Absence Penalty Setup
                 if ($absencePenaltySetup) {
+                    // Recalculate absence penalty with the employee's new gross salary (upon recompute or salary increment/decrement)
+                    if ((float)($absencePenaltySetup->penalty_days ?? 0) > 0 && $staffGrossSalary > 0) {
+                        $daysInMonth = $daysInPayrollMonth;
+                        $newDailyRate = round($staffGrossSalary / (float)$daysInMonth, 2);
+                        $newTotalAmount = round((float)$absencePenaltySetup->penalty_days * $newDailyRate, 2);
+
+                        $absencePenaltySetup->monthly_salary = $staffGrossSalary;
+                        $absencePenaltySetup->daily_salary = $newDailyRate;
+                        $absencePenaltySetup->total_amount = $newTotalAmount;
+                        $absencePenaltySetup->monthly_deduction = $newTotalAmount;
+                        $absencePenaltySetup->balance_remaining = $newTotalAmount;
+
+                        DB::table('absence_penalty_deduction_setups')
+                            ->where('id', $absencePenaltySetup->id)
+                            ->update([
+                                'monthly_salary'    => $staffGrossSalary,
+                                'daily_salary'      => $newDailyRate,
+                                'total_amount'      => $newTotalAmount,
+                                'monthly_deduction' => $newTotalAmount,
+                                'balance_remaining' => $newTotalAmount,
+                                'is_active'         => 1,
+                                'updated_at'        => now(),
+                            ]);
+                    }
+
                     $absBal = (float)$absencePenaltySetup->balance_remaining > 0
                         ? (float)$absencePenaltySetup->balance_remaining
                         : ((float)$absencePenaltySetup->total_amount > 0 ? (float)$absencePenaltySetup->total_amount : (float)$absencePenaltySetup->monthly_deduction);
@@ -1797,6 +1859,38 @@ class NextJsPayrollApiController extends Controller
                 // Process Other Deduction Setups (supports multiple active setups per staff)
                 if ($otherDeductionSetups->isNotEmpty()) {
                     foreach ($otherDeductionSetups as $odSetup) {
+                        // Recalculate day-based deduction with the employee's new gross salary (upon recompute or salary increment/decrement)
+                        if ($odSetup->calculation_mode === 'days' || (float)($odSetup->deduction_days ?? 0) > 0) {
+                            if ($staffGrossSalary > 0) {
+                                $daysInMonth = (int)($odSetup->days_in_month ?: $daysInPayrollMonth);
+                                if ($daysInMonth < 28 || $daysInMonth > 31) {
+                                    $daysInMonth = $daysInPayrollMonth;
+                                }
+                                $newDailyRate = round($staffGrossSalary / (float)$daysInMonth, 2);
+                                $newTotalAmount = round((float)$odSetup->deduction_days * $newDailyRate, 2);
+
+                                $odSetup->monthly_salary = $staffGrossSalary;
+                                $odSetup->daily_rate = $newDailyRate;
+                                $odSetup->days_in_month = $daysInMonth;
+                                $odSetup->total_amount = $newTotalAmount;
+                                $odSetup->monthly_deduction = $newTotalAmount;
+                                $odSetup->balance_remaining = $newTotalAmount;
+
+                                DB::table('other_deduction_setups')
+                                    ->where('id', $odSetup->id)
+                                    ->update([
+                                        'monthly_salary'    => $staffGrossSalary,
+                                        'daily_rate'        => $newDailyRate,
+                                        'days_in_month'     => $daysInMonth,
+                                        'total_amount'      => $newTotalAmount,
+                                        'monthly_deduction' => $newTotalAmount,
+                                        'balance_remaining' => $newTotalAmount,
+                                        'is_active'         => 1,
+                                        'updated_at'        => now(),
+                                    ]);
+                            }
+                        }
+
                         $otherDeductBal = (float)$odSetup->balance_remaining > 0
                             ? (float)$odSetup->balance_remaining
                             : ((float)$odSetup->total_amount > 0 ? (float)$odSetup->total_amount : (float)$odSetup->monthly_deduction);

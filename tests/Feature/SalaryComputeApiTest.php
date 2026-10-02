@@ -811,4 +811,96 @@ class SalaryComputeApiTest extends TestCase
         $this->assertNotNull($conpt);
         $this->assertEquals(5000.00, (float)$conpt->other_deductions);
     }
+
+    public function test_recompute_recalculates_day_based_other_deduction_with_new_gross_salary()
+    {
+        $superAdminRole = DB::table('assign_user_role')->where('roleID', 1)->first();
+        $headers = ['X-User-Id' => $superAdminRole ? $superAdminRole->userID : 1];
+
+        $employee = DB::table('tblper')->where('ID', $this->testEmployeeId)->first();
+
+        // 1. Initial Salary Structure: Gross = 120,000 (Daily rate for 30 days = 4,000)
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $employee->ID],
+            [
+                'basic_salary' => 60000.00,
+                'housing_allowance' => 30000.00,
+                'transport_allowance' => 30000.00,
+                'medical_allowance' => 0.00,
+                'utility_allowance' => 0.00,
+                'meal_allowance' => 0.00,
+                'pension_rate' => 0.00,
+                'tax_rate' => 0.00,
+                'pen_act' => 0,
+                'reten_act' => 0,
+                'created_at' => now()
+            ]
+        );
+
+        DB::table('other_deduction_setups')->where('staffId', $employee->ID)->delete();
+
+        // 2. Day-based other deduction setup: 2 days @ 4,000/day = 8,000
+        $otherDeductionId = DB::table('other_deduction_setups')->insertGetId([
+            'staffId' => $employee->ID,
+            'deduction_type' => 'one_time',
+            'calculation_mode' => 'days',
+            'deduction_days' => 2.00,
+            'daily_rate' => 4000.00,
+            'monthly_salary' => 120000.00,
+            'days_in_month' => 30,
+            'total_amount' => 8000.00,
+            'duration_months' => 1,
+            'monthly_deduction' => 8000.00,
+            'balance_remaining' => 8000.00,
+            'start_month' => '2026-06',
+            'end_month' => '2026-06',
+            'is_active' => 1,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // 3. Compute payroll for June 2026
+        $res = $this->postJson('/api/nextjs/payroll/compute', [
+            'month' => 'JUNE',
+            'year' => '2026'
+        ], $headers);
+        $res->assertStatus(200);
+
+        $conpt1 = DB::table('payroll_conpt')
+            ->where('staffID', $employee->ID)
+            ->where('month', 6)
+            ->where('year', 2026)
+            ->first();
+        $this->assertNotNull($conpt1);
+        $this->assertEquals(8000.00, (float)$conpt1->other_deductions);
+
+        // 4. Update salary structure to higher gross: basic becomes 120,000 (New Gross = 180,000; Daily rate for 30 days = 6,000; 2 days = 12,000)
+        DB::table('salary_structures')->where('staffId', $employee->ID)->update([
+            'basic_salary' => 120000.00
+        ]);
+
+        // 5. Recompute payroll for June 2026
+        $resRecompute = $this->postJson('/api/nextjs/payroll/compute', [
+            'month' => 'JUNE',
+            'year' => '2026'
+        ], $headers);
+        $resRecompute->assertStatus(200);
+
+        // 6. Assert other_deductions in payroll_conpt is recalculated to 12,000.00
+        $conpt2 = DB::table('payroll_conpt')
+            ->where('staffID', $employee->ID)
+            ->where('month', 6)
+            ->where('year', 2026)
+            ->first();
+        $this->assertNotNull($conpt2);
+        $this->assertEquals(12000.00, (float)$conpt2->other_deductions);
+
+        // 7. Verify setup record was updated with the new gross salary and recalculated amounts
+        $setup = DB::table('other_deduction_setups')->where('id', $otherDeductionId)->first();
+        $this->assertEquals(180000.00, (float)$setup->monthly_salary);
+        $this->assertEquals(6000.00, (float)$setup->daily_rate);
+        $this->assertEquals(12000.00, (float)$setup->total_amount);
+        $this->assertEquals(12000.00, (float)$setup->monthly_deduction);
+        $this->assertEquals(0.00, (float)$setup->balance_remaining);
+    }
 }

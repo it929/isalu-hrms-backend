@@ -160,15 +160,27 @@ class SalaryIncrementApiController extends Controller
 
             $total = $query->count();
 
-            $records = $query->select(
+            $sortBy = strtolower($request->query('sort_by', 'name'));
+            $sortOrder = strtolower($request->query('sort_order', 'asc'));
+
+            $recordsQuery = $query->select(
                 'si.*',
                 DB::raw("CONCAT(p.surname, ' ', p.first_name, ' ', COALESCE(p.othernames, '')) as staff_name"),
                 'dept.department',
                 'des.designation',
                 'u.name as created_by_name'
-            )
-            ->orderBy('si.id', 'desc')
-            ->paginate($perPage);
+            );
+
+            if ($sortBy === 'id' || $sortBy === 'date') {
+                $recordsQuery->orderBy('si.id', $sortOrder === 'asc' ? 'asc' : 'desc');
+            } else {
+                // Default: Alphabetical order by staff surname then first name
+                $recordsQuery->orderBy('p.surname', $sortOrder === 'desc' ? 'desc' : 'asc')
+                             ->orderBy('p.first_name', $sortOrder === 'desc' ? 'desc' : 'asc')
+                             ->orderBy('si.id', 'desc');
+            }
+
+            $records = $recordsQuery->paginate($perPage);
 
             $summary = [
                 'total_increments' => $total,
@@ -1441,25 +1453,75 @@ class SalaryIncrementApiController extends Controller
                 $query->where('p.departmentID', $departmentId);
             }
 
-            $records = $query->select(
+            $format = strtolower($request->query('format', 'xlsx'));
+            $sortBy = strtolower($request->query('sort_by', 'name'));
+            $sortOrder = strtolower($request->query('sort_order', 'asc'));
+
+            $recordsQuery = $query->select(
                 'si.*',
                 DB::raw("CONCAT(p.surname, ' ', p.first_name, ' ', COALESCE(p.othernames, '')) as staff_name"),
                 'dept.department',
                 'des.designation',
                 'u.name as created_by_name'
-            )
-            ->orderBy('si.id', 'desc')
-            ->get();
+            );
 
-            $spreadsheet = new Spreadsheet();
-            $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('Salary Increments');
+            if ($sortBy === 'id' || $sortBy === 'date') {
+                $recordsQuery->orderBy('si.id', $sortOrder === 'asc' ? 'asc' : 'desc');
+            } else {
+                $recordsQuery->orderBy('p.surname', $sortOrder === 'desc' ? 'desc' : 'asc')
+                             ->orderBy('p.first_name', $sortOrder === 'desc' ? 'desc' : 'asc')
+                             ->orderBy('si.id', 'desc');
+            }
+
+            $records = $recordsQuery->get();
 
             $columns = [
                 'ID', 'STAFF ID', 'STAFF NAME', 'DEPARTMENT', 'DESIGNATION',
                 'TYPE', 'PREVIOUS GROSS (₦)', 'NEW GROSS (₦)', 'INCREASE AMOUNT (₦)',
                 'EFFECTIVE DATE', 'REASON / REMARKS', 'APPLIED BY', 'STATUS', 'DATE RECORDED'
             ];
+
+            if ($format === 'csv') {
+                $filename = "Salary_Increments_Audit_" . date('Y_m_d') . ".csv";
+                $headers = [
+                    'Content-Type'        => 'text/csv; charset=UTF-8',
+                    'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                    'Pragma'              => 'no-cache',
+                    'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                    'Expires'             => '0',
+                ];
+
+                $callback = function () use ($columns, $records) {
+                    $handle = fopen('php://output', 'w');
+                    fputs($handle, "\xEF\xBB\xBF");
+                    fputcsv($handle, $columns);
+                    foreach ($records as $r) {
+                        fputcsv($handle, [
+                            $r->id,
+                            $r->staff_id,
+                            $r->staff_name,
+                            $r->department ?? 'General',
+                            $r->designation ?? 'Staff',
+                            strtoupper(str_replace('_', ' ', $r->increment_type)),
+                            number_format((float)$r->previous_gross_salary, 2, '.', ''),
+                            number_format((float)$r->new_gross_salary, 2, '.', ''),
+                            number_format((float)$r->increase_amount, 2, '.', ''),
+                            $r->effective_date ?? '—',
+                            $r->reason ?? '—',
+                            $r->created_by_name ?? 'Admin',
+                            strtoupper($r->status),
+                            $r->created_at,
+                        ]);
+                    }
+                    fclose($handle);
+                };
+
+                return response()->stream($callback, 200, $headers);
+            }
+
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Salary Increments');
 
             $totalCols = count($columns);
             $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($totalCols);
