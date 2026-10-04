@@ -938,7 +938,11 @@ class NextJsPayrollApiController extends Controller
             ->orderBy('p.first_name', 'ASC')
             ->get();
 
-            $mapped = $allRows->map(function ($row) use ($revolvingLoanBalances, $coopLoanBalances, $coopSavingsBalances, $medicalLoanBalances, $coopAssetFinanceBalances, $loanSetupDeductions) {
+            $staffIds = $allRows->pluck('staffID')->filter()->unique()->values()->toArray();
+            $adjustmentsMap = $this->getStaffAdjustmentsMap($staffIds, $monthInt, $yearInt);
+
+            $mapped = $allRows->map(function ($row) use ($revolvingLoanBalances, $coopLoanBalances, $coopSavingsBalances, $medicalLoanBalances, $coopAssetFinanceBalances, $loanSetupDeductions, $adjustmentsMap) {
+                $adj = $adjustmentsMap[$row->staffID] ?? null;
                 return [
                     'IDNO'               => $row->staffID ?? '',
                     'NAME'               => $row->name   ?? '',
@@ -972,7 +976,6 @@ class NextJsPayrollApiController extends Controller
                     'COOP.ASSET.'        => number_format((float)($row->coop_asset_finance ?? 0.00), 2, '.', ''),
                     'COP. ASSET FIN'     => number_format((float)($coopAssetFinanceBalances[$row->staffID] ?? 0.00), 2, '.', ''),
                     'MEDICAL DEBT'       => number_format((float)($medicalLoanBalances[$row->staffID] ?? 0.00), 2, '.', ''),
-                    'LEAVE OF ABSENCE DEDUCTION' => number_format((float)($row->leave_of_absence_deduction ?? 0.00), 2, '.', ''),
                     'ACC. NO'            => $row->AccNo   ?? '',
                     'BANK'               => $row->bankName ?? '',
                     'CODE'               => '',
@@ -981,14 +984,24 @@ class NextJsPayrollApiController extends Controller
                     'vstage'             => (int)($row->vstage ?? 0),
                     'audit_checked'      => (int)($row->audit_checked ?? 0),
                     'is_paid'            => (int)($row->is_paid ?? 0),
+                    'salary_adjustment'  => $adj,
                 ];
             });
 
+            $totalIncrements = collect($adjustmentsMap)->where('is_increment', true)->count();
+            $totalDecrements = collect($adjustmentsMap)->where('is_decrement', true)->count();
+            $totalIncAmt = collect($adjustmentsMap)->where('is_increment', true)->sum('diff_amount');
+            $totalDecAmt = collect($adjustmentsMap)->where('is_decrement', true)->sum('diff_amount');
+
             $summary = [
-                'totalStaff'       => $total,
-                'totalGrossIncome' => number_format($allRows->sum(fn($r) => (float)$r->gross_pay), 2, '.', ''),
-                'totalDeductions'  => number_format($allRows->sum(fn($r) => (float)$r->total_deductions), 2, '.', ''),
-                'totalNetPay'      => number_format($allRows->sum(fn($r) => (float)$r->net_pay), 2, '.', ''),
+                'totalStaff'            => $total,
+                'totalGrossIncome'      => number_format($allRows->sum(fn($r) => (float)$r->gross_pay), 2, '.', ''),
+                'totalDeductions'       => number_format($allRows->sum(fn($r) => (float)$r->total_deductions), 2, '.', ''),
+                'totalNetPay'           => number_format($allRows->sum(fn($r) => (float)$r->net_pay), 2, '.', ''),
+                'totalIncrements'       => $totalIncrements,
+                'totalDecrements'       => $totalDecrements,
+                'totalIncrementAmount'  => number_format($totalIncAmt, 2, '.', ''),
+                'totalDecrementAmount'  => number_format($totalDecAmt, 2, '.', ''),
             ];
 
             $offset    = ($page - 1) * max(1, $perPage);
@@ -1071,8 +1084,10 @@ class NextJsPayrollApiController extends Controller
             $dynamicByStaff[$sid][$cvid] += (float) $dr->amount;
         }
 
+        $adjustmentsMap = $this->getStaffAdjustmentsMap($staffIds, $monthInt, $yearInt);
+
         // 4. Map each row to the 34-column template
-        $mapped = $allRows->map(function ($row) use ($dynamicByStaff, $revolvingLoanBalances, $coopLoanBalances, $coopSavingsBalances, $medicalLoanBalances, $coopAssetFinanceBalances, $loanSetupDeductions) {
+        $mapped = $allRows->map(function ($row) use ($dynamicByStaff, $revolvingLoanBalances, $coopLoanBalances, $coopSavingsBalances, $medicalLoanBalances, $coopAssetFinanceBalances, $loanSetupDeductions, $adjustmentsMap) {
             $sid = $row->staffid;
             $cvs = $dynamicByStaff[$sid] ?? [];
 
@@ -1099,6 +1114,8 @@ class NextJsPayrollApiController extends Controller
             // Other Deduction = Total Deductions minus all explicitly mapped deductions
             $explicitDeductions = $pTax + $pension + $iou + $loan + $coopSaving + $coopLoan;
             $otherDeduction     = max(0, $totalDedn - $explicitDeductions);
+
+            $adj = $adjustmentsMap[$sid] ?? null;
 
             return [
                 'IDNO'               => $row->staffid ?? '',
@@ -1137,15 +1154,25 @@ class NextJsPayrollApiController extends Controller
                 'BANK'               => $row->bankName ?? '',
                 'CODE'               => '',
                 'PAYER ID'           => $row->payer_id ?? '',
+                'salary_adjustment'  => $adj,
             ];
         });
 
+        $totalIncrements = collect($adjustmentsMap)->where('is_increment', true)->count();
+        $totalDecrements = collect($adjustmentsMap)->where('is_decrement', true)->count();
+        $totalIncAmt = collect($adjustmentsMap)->where('is_increment', true)->sum('diff_amount');
+        $totalDecAmt = collect($adjustmentsMap)->where('is_decrement', true)->sum('diff_amount');
+
         // 5. Compute summary totals from all rows
         $summary = [
-            'totalStaff'       => $total,
-            'totalGrossIncome' => number_format($allRows->sum(fn($r) => (float)($r->TEarn  ?? 0)), 2, '.', ''),
-            'totalDeductions'  => number_format($allRows->sum(fn($r) => (float)($r->TD     ?? 0)), 2, '.', ''),
-            'totalNetPay'      => number_format($allRows->sum(fn($r) => (float)($r->NetPay ?? 0)), 2, '.', ''),
+            'totalStaff'            => $total,
+            'totalGrossIncome'      => number_format($allRows->sum(fn($r) => (float)($r->TEarn  ?? 0)), 2, '.', ''),
+            'totalDeductions'       => number_format($allRows->sum(fn($r) => (float)($r->TD     ?? 0)), 2, '.', ''),
+            'totalNetPay'           => number_format($allRows->sum(fn($r) => (float)($r->NetPay ?? 0)), 2, '.', ''),
+            'totalIncrements'       => $totalIncrements,
+            'totalDecrements'       => $totalDecrements,
+            'totalIncrementAmount'  => number_format($totalIncAmt, 2, '.', ''),
+            'totalDecrementAmount'  => number_format($totalDecAmt, 2, '.', ''),
         ];
 
         // 6. Paginate in PHP (all records were fetched for dynamic join; pagination returned to client)
@@ -2320,10 +2347,313 @@ class NextJsPayrollApiController extends Controller
 
         $response['hr_signature'] = $hrSignature;
 
+        // Check if a salary increment or decrement took effect for this staff in this month
+        $salaryAdjustment = $this->getStaffSalaryAdjustment(
+            $personData->ID,
+            $month,
+            $year,
+            (float)$matchedRow['BASIC'],
+            (float)$matchedRow['TOTAL INCOME']
+        );
+
+        $response['salary_adjustment'] = $salaryAdjustment;
+        $response['payslip']['salary_adjustment'] = $salaryAdjustment;
+
         return response()->json([
             'status' => 'success',
             'data' => $response
         ]);
+    }
+
+    /**
+     * Helper: Parse effective date string into year, month, day, considering Nigerian/UK DD/MM/YYYY
+     * as well as standard YYYY-MM-DD and textual formats.
+     */
+    private function parseEffectiveMonthYear(string $dateStr): ?array
+    {
+        $dateStr = trim($dateStr);
+        if ($dateStr === '') {
+            return null;
+        }
+
+        // Pattern 1: YYYY-MM-DD or YYYY/MM/DD or YYYY-M-D
+        if (preg_match('#^(\d{4})[/-](\d{1,2})[/-](\d{1,2})#', $dateStr, $m)) {
+            $yr = (int)$m[1];
+            $mth = (int)$m[2];
+            $day = (int)$m[3];
+            if ($mth >= 1 && $mth <= 12 && $day >= 1 && $day <= 31) {
+                return ['year' => $yr, 'month' => $mth, 'day' => $day];
+            }
+        }
+
+        // Pattern 2: DD/MM/YYYY or D/M/YYYY or DD-MM-YYYY (Nigerian / UK standard format: 01/09/2026 or 1/9/2026 is Day 1, Month 9 September, Year 2026)
+        if (preg_match('#^(\d{1,2})[/-](\d{1,2})[/-](\d{4})#', $dateStr, $m)) {
+            $day = (int)$m[1];
+            $mth = (int)$m[2];
+            $yr = (int)$m[3];
+            if ($mth >= 1 && $mth <= 12 && $day >= 1 && $day <= 31) {
+                return ['year' => $yr, 'month' => $mth, 'day' => $day];
+            }
+        }
+
+        // Pattern 3: Textual month e.g. "01 Sep 2026" or "1 September 2026"
+        $time = strtotime($dateStr);
+        if ($time !== false) {
+            return [
+                'year' => (int)date('Y', $time),
+                'month' => (int)date('n', $time),
+                'day' => (int)date('j', $time),
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Helper: Resolve salary adjustments map for multiple staff in a specific month and year.
+     * Strictly verifies that previous salary actually increased before displaying increment,
+     * and actually decreased before displaying decrement.
+     */
+    private function getStaffAdjustmentsMap(array $staffIds, int $monthInt, int $yearInt): array
+    {
+        $map = [];
+        if (empty($staffIds) || $monthInt <= 0 || $yearInt <= 0) {
+            return $map;
+        }
+
+        // 1. Fetch salary_increments for these staff
+        $allIncrements = DB::table('salary_increments')
+            ->whereIn('staff_id', $staffIds)
+            ->where('status', '!=', 'reverted')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->groupBy('staff_id');
+
+        foreach ($staffIds as $sid) {
+            $staffIncs = $allIncrements->get($sid);
+            if ($staffIncs) {
+                foreach ($staffIncs as $inc) {
+                    $effDate = trim($inc->effective_date ?? '');
+                    if ($effDate === '' && !empty($inc->created_at)) {
+                        $effDate = (string)$inc->created_at;
+                    }
+
+                    $parsed = $this->parseEffectiveMonthYear($effDate);
+                    if ($parsed && $parsed['month'] === $monthInt && $parsed['year'] === $yearInt) {
+                        $prevGross = (float)($inc->previous_gross_salary ?? 0);
+                        $newGross = (float)($inc->new_gross_salary ?? 0);
+                        $increaseAmt = (float)($inc->increase_amount ?? 0);
+                        $prevBasic = (float)($inc->previous_basic ?? 0);
+                        $newBasic = (float)($inc->new_basic ?? 0);
+
+                        if ($increaseAmt == 0 && ($newGross != $prevGross)) {
+                            $increaseAmt = round($newGross - $prevGross, 2);
+                        }
+
+                        $grossDiff = ($newGross > 0 && $prevGross > 0) ? round($newGross - $prevGross, 2) : $increaseAmt;
+                        $basicDiff = round($newBasic - $prevBasic, 2);
+
+                        // Strictly verify whether previous salary actually increased or decreased
+                        $actuallyIncreased = ($grossDiff > 0.01) || ($newGross > $prevGross && $prevGross > 0) || ($increaseAmt > 0.01) || ($grossDiff == 0 && $basicDiff > 0.01);
+                        $actuallyDecreased = ($grossDiff < -0.01) || ($newGross < $prevGross && $newGross > 0) || ($increaseAmt < -0.01) || ($grossDiff == 0 && $basicDiff < -0.01);
+
+                        $incType = strtolower($inc->increment_type ?? '');
+                        $isDecrementIntent = str_contains($incType, 'decrement') || ((float)($inc->amount ?? 0) < 0) || ((float)($inc->percentage ?? 0) < 0) || ($increaseAmt < -0.01);
+
+                        if ($isDecrementIntent) {
+                            // Only display decrement if previous salary actually decreased!
+                            if ($actuallyDecreased && !$actuallyIncreased) {
+                                $diffAmount = abs($grossDiff != 0 ? $grossDiff : ($increaseAmt != 0 ? $increaseAmt : $basicDiff));
+                                $percentage = $inc->percentage !== null ? abs((float)$inc->percentage) : null;
+                                if ($percentage === null && $prevGross > 0) {
+                                    $percentage = round(($diffAmount / $prevGross) * 100, 2);
+                                }
+                                $dateFormatted = date('d M, Y', mktime(0, 0, 0, $parsed['month'], $parsed['day'] ?? 1, $parsed['year']));
+
+                                $map[$sid] = [
+                                    'has_adjustment' => true,
+                                    'action' => 'decrement',
+                                    'is_increment' => false,
+                                    'is_decrement' => true,
+                                    'type' => 'decrement',
+                                    'title' => 'Salary Decrement Effective This Month',
+                                    'badge_label' => 'SALARY DECREMENT',
+                                    'diff_amount' => $diffAmount,
+                                    'formatted_diff' => '-₦' . number_format($diffAmount, 2),
+                                    'sign' => '-',
+                                    'increase_amount' => -$diffAmount,
+                                    'percentage' => $percentage,
+                                    'previous_gross' => $prevGross,
+                                    'new_gross' => $newGross,
+                                    'previous_basic' => $prevBasic,
+                                    'new_basic' => $newBasic,
+                                    'effective_date' => $inc->effective_date,
+                                    'effective_date_formatted' => $dateFormatted,
+                                    'reason' => $inc->reason ?: 'Salary reduction adjustment',
+                                    'message' => "Notice: A salary decrement of ₦" . number_format($diffAmount, 2) . ($percentage ? " (-{$percentage}%)" : "") . " took effect this month. Previous Gross: ₦" . number_format($prevGross, 2) . " → New Gross: ₦" . number_format($newGross, 2) . ".",
+                                ];
+                                break;
+                            }
+                        } else {
+                            // Only display increment if previous salary actually increased!
+                            if ($actuallyIncreased && !$actuallyDecreased) {
+                                $diffAmount = abs($grossDiff != 0 ? $grossDiff : ($increaseAmt != 0 ? $increaseAmt : $basicDiff));
+                                $percentage = $inc->percentage !== null ? abs((float)$inc->percentage) : null;
+                                if ($percentage === null && $prevGross > 0) {
+                                    $percentage = round(($diffAmount / $prevGross) * 100, 2);
+                                }
+                                $dateFormatted = date('d M, Y', mktime(0, 0, 0, $parsed['month'], $parsed['day'] ?? 1, $parsed['year']));
+
+                                $map[$sid] = [
+                                    'has_adjustment' => true,
+                                    'action' => 'increment',
+                                    'is_increment' => true,
+                                    'is_decrement' => false,
+                                    'type' => 'increment',
+                                    'title' => 'Salary Increment Effective This Month',
+                                    'badge_label' => 'SALARY INCREMENT',
+                                    'diff_amount' => $diffAmount,
+                                    'formatted_diff' => '+₦' . number_format($diffAmount, 2),
+                                    'sign' => '+',
+                                    'increase_amount' => $diffAmount,
+                                    'percentage' => $percentage,
+                                    'previous_gross' => $prevGross,
+                                    'new_gross' => $newGross,
+                                    'previous_basic' => $prevBasic,
+                                    'new_basic' => $newBasic,
+                                    'effective_date' => $inc->effective_date,
+                                    'effective_date_formatted' => $dateFormatted,
+                                    'reason' => $inc->reason ?: 'Salary increment adjustment',
+                                    'message' => "Notice: A salary increment of ₦" . number_format($diffAmount, 2) . ($percentage ? " (+{$percentage}%)" : "") . " took effect this month. Previous Gross: ₦" . number_format($prevGross, 2) . " → New Gross: ₦" . number_format($newGross, 2) . ".",
+                                ];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Helper: Resolve salary increment / decrement adjustment that took effect in the given month and year.
+     * Strictly verifies that previous salary actually increased before displaying increment,
+     * and actually decreased before displaying decrement.
+     */
+    private function getStaffSalaryAdjustment(int $staffId, string $month, string $year, float $currentBasic = 0, float $currentGross = 0): ?array
+    {
+        $yearInt = (int)$year;
+        $monthInt = 0;
+        if (is_numeric($month)) {
+            $monthInt = (int)$month;
+        } else {
+            $monthNames = [
+                'JANUARY' => 1, 'FEBRUARY' => 2, 'MARCH' => 3, 'APRIL' => 4,
+                'MAY' => 5, 'JUNE' => 6, 'JULY' => 7, 'AUGUST' => 8,
+                'SEPTEMBER' => 9, 'OCTOBER' => 10, 'NOVEMBER' => 11, 'DECEMBER' => 12
+            ];
+            $monthInt = $monthNames[strtoupper(trim($month))] ?? (int)date('n', strtotime($month));
+        }
+
+        if ($monthInt <= 0 || $yearInt <= 0) {
+            return null;
+        }
+
+        // 1. Check salary_increments table using the strict map helper
+        $map = $this->getStaffAdjustmentsMap([$staffId], $monthInt, $yearInt);
+        if (isset($map[$staffId])) {
+            return $map[$staffId];
+        }
+
+        // 2. Fallback: check if previous month's payroll record had a different basic or gross salary
+        $prevMonth = $monthInt - 1;
+        $prevYear = $yearInt;
+        if ($prevMonth < 1) {
+            $prevMonth = 12;
+            $prevYear--;
+        }
+
+        $prevRun = DB::table('payroll_runs')
+            ->where('month', $prevMonth)
+            ->where('year', $prevYear)
+            ->first();
+
+        if ($prevRun && ($currentBasic > 0 || $currentGross > 0)) {
+            $prevConpt = DB::table('payroll_conpt')
+                ->where('payroll_run_id', $prevRun->id)
+                ->where('staffID', $staffId)
+                ->first();
+
+            if ($prevConpt) {
+                $prevBasic = (float)($prevConpt->BASIC ?? $prevConpt->basic ?? 0);
+                $prevGross = (float)($prevConpt->TOTAL_INCOME ?? $prevConpt->total_income ?? $prevConpt->gross_pay ?? 0);
+
+                $basicDiff = round($currentBasic - $prevBasic, 2);
+                $grossDiff = ($currentGross > 0 && $prevGross > 0) ? round($currentGross - $prevGross, 2) : $basicDiff;
+
+                // Strictly check if previous salary actually increased or decreased
+                $actuallyInc = ($grossDiff > 0.01) || ($grossDiff == 0 && $basicDiff > 0.01);
+                $actuallyDec = ($grossDiff < -0.01) || ($grossDiff == 0 && $basicDiff < -0.01);
+
+                if ($actuallyInc && !$actuallyDec) {
+                    $diffAmount = abs($grossDiff);
+                    $pct = ($prevGross > 0) ? round(($diffAmount / $prevGross) * 100, 2) : ($prevBasic > 0 ? round((abs($basicDiff) / $prevBasic) * 100, 2) : null);
+
+                    return [
+                        'has_adjustment' => true,
+                        'action' => 'increment',
+                        'is_increment' => true,
+                        'is_decrement' => false,
+                        'type' => 'increment',
+                        'title' => 'Salary Increment Effective This Month',
+                        'badge_label' => 'SALARY INCREMENT',
+                        'diff_amount' => $diffAmount,
+                        'formatted_diff' => '+₦' . number_format($diffAmount, 2),
+                        'sign' => '+',
+                        'increase_amount' => $diffAmount,
+                        'percentage' => $pct,
+                        'previous_gross' => $prevGross,
+                        'new_gross' => $currentGross,
+                        'previous_basic' => $prevBasic,
+                        'new_basic' => $currentBasic,
+                        'effective_date' => null,
+                        'effective_date_formatted' => null,
+                        'reason' => 'Monthly payroll salary adjustment',
+                        'message' => "Notice: A salary increment of ₦" . number_format($diffAmount, 2) . ($pct ? " (+{$pct}%)" : "") . " took effect this month compared to previous month.",
+                    ];
+                } elseif ($actuallyDec && !$actuallyInc) {
+                    $diffAmount = abs($grossDiff);
+                    $pct = ($prevGross > 0) ? round(($diffAmount / $prevGross) * 100, 2) : ($prevBasic > 0 ? round((abs($basicDiff) / $prevBasic) * 100, 2) : null);
+
+                    return [
+                        'has_adjustment' => true,
+                        'action' => 'decrement',
+                        'is_increment' => false,
+                        'is_decrement' => true,
+                        'type' => 'decrement',
+                        'title' => 'Salary Decrement Effective This Month',
+                        'badge_label' => 'SALARY DECREMENT',
+                        'diff_amount' => $diffAmount,
+                        'formatted_diff' => '-₦' . number_format($diffAmount, 2),
+                        'sign' => '-',
+                        'increase_amount' => -$diffAmount,
+                        'percentage' => $pct,
+                        'previous_gross' => $prevGross,
+                        'new_gross' => $currentGross,
+                        'previous_basic' => $prevBasic,
+                        'new_basic' => $currentBasic,
+                        'effective_date' => null,
+                        'effective_date_formatted' => null,
+                        'reason' => 'Monthly payroll salary adjustment',
+                        'message' => "Notice: A salary decrement of ₦" . number_format($diffAmount, 2) . ($pct ? " (-{$pct}%)" : "") . " took effect this month compared to previous month.",
+                    ];
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -2551,6 +2881,51 @@ class NextJsPayrollApiController extends Controller
 
             $signatureHtml = $hrSignature ? '<img src="' . $hrSignature . '" alt="HR Head Signature" style="max-height: 70px; display: block;" />' : '<em>No signature on file</em>';
 
+            $salaryAdjustment = $this->getStaffSalaryAdjustment(
+                $personData->ID,
+                $month,
+                $year,
+                (float)$matchedRow['BASIC'],
+                (float)$matchedRow['TOTAL INCOME']
+            );
+
+            $adjustmentHtml = '';
+            if ($salaryAdjustment && !empty($salaryAdjustment['has_adjustment'])) {
+                $isDec = $salaryAdjustment['is_decrement'];
+                $bgColor = $isDec ? '#fffbeb' : '#ecfdf5';
+                $borderColor = $isDec ? '#f59e0b' : '#10b981';
+                $textColor = $isDec ? '#92400e' : '#065f46';
+                $subTextColor = $isDec ? '#b45309' : '#047857';
+                $badgeBg = $isDec ? '#fef3c7' : '#d1fae5';
+                $icon = $isDec ? '&#9660;' : '&#9650;';
+                $title = htmlspecialchars($salaryAdjustment['title']);
+                $badge = htmlspecialchars($salaryAdjustment['badge_label']);
+                $msg = htmlspecialchars($salaryAdjustment['message']);
+                $reason = !empty($salaryAdjustment['reason']) ? "<div style='margin-top: 4px; font-size: 12px; color: {$subTextColor};'><strong>Reason:</strong> " . htmlspecialchars($salaryAdjustment['reason']) . "</div>" : "";
+                $effDate = !empty($salaryAdjustment['effective_date_formatted']) ? "<div style='margin-top: 2px; font-size: 12px; color: {$subTextColor};'><strong>Effective Date:</strong> " . htmlspecialchars($salaryAdjustment['effective_date_formatted']) . "</div>" : "";
+
+                $adjustmentHtml = "
+                <div style='background-color: {$bgColor}; border: 1px solid {$borderColor}; border-left: 5px solid {$borderColor}; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px;'>
+                    <div style='display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;'>
+                        <span style='background-color: {$badgeBg}; color: {$textColor}; font-weight: bold; font-size: 11px; padding: 2px 8px; border-radius: 4px; letter-spacing: 0.5px;'>
+                            {$icon} {$badge}
+                        </span>
+                        <span style='font-size: 12px; font-weight: bold; color: {$textColor};'>
+                            {$salaryAdjustment['formatted_diff']} " . ($salaryAdjustment['percentage'] ? "({$salaryAdjustment['percentage']}%)" : "") . "
+                        </span>
+                    </div>
+                    <div style='font-size: 13px; font-weight: 600; color: {$textColor}; margin-bottom: 3px;'>
+                        {$title}
+                    </div>
+                    <div style='font-size: 12px; color: {$subTextColor}; line-height: 1.4;'>
+                        {$msg}
+                    </div>
+                    {$reason}
+                    {$effDate}
+                </div>
+                ";
+            }
+
             $html = "
             <html>
             <body style='font-family: Arial, sans-serif; color: #333;'>
@@ -2564,6 +2939,8 @@ class NextJsPayrollApiController extends Controller
                         <tr><td style='padding: 5px; font-weight: bold;'>Department:</td><td style='padding: 5px;'>{$department}</td></tr>
                         <tr><td style='padding: 5px; font-weight: bold;'>Designation:</td><td style='padding: 5px;'>{$designation}</td></tr>
                     </table>
+
+                    {$adjustmentHtml}
 
                     <div style='margin-bottom: 20px;'>
                         <h3 style='background-color: #f2f2f2; padding: 8px; margin-top: 0;'>Earnings</h3>
@@ -2724,6 +3101,51 @@ class NextJsPayrollApiController extends Controller
 
                 $signatureHtml = $hrSignature ? '<img src="' . $hrSignature . '" alt="HR Head Signature" style="max-height: 70px; display: block;" />' : '<em>No signature on file</em>';
 
+                $salaryAdjustment = $this->getStaffSalaryAdjustment(
+                    $personData->ID,
+                    $month,
+                    $year,
+                    (float)$row['BASIC'],
+                    (float)$row['TOTAL INCOME']
+                );
+
+                $adjustmentHtml = '';
+                if ($salaryAdjustment && !empty($salaryAdjustment['has_adjustment'])) {
+                    $isDec = $salaryAdjustment['is_decrement'];
+                    $bgColor = $isDec ? '#fffbeb' : '#ecfdf5';
+                    $borderColor = $isDec ? '#f59e0b' : '#10b981';
+                    $textColor = $isDec ? '#92400e' : '#065f46';
+                    $subTextColor = $isDec ? '#b45309' : '#047857';
+                    $badgeBg = $isDec ? '#fef3c7' : '#d1fae5';
+                    $icon = $isDec ? '&#9660;' : '&#9650;';
+                    $title = htmlspecialchars($salaryAdjustment['title']);
+                    $badge = htmlspecialchars($salaryAdjustment['badge_label']);
+                    $msg = htmlspecialchars($salaryAdjustment['message']);
+                    $reason = !empty($salaryAdjustment['reason']) ? "<div style='margin-top: 4px; font-size: 12px; color: {$subTextColor};'><strong>Reason:</strong> " . htmlspecialchars($salaryAdjustment['reason']) . "</div>" : "";
+                    $effDate = !empty($salaryAdjustment['effective_date_formatted']) ? "<div style='margin-top: 2px; font-size: 12px; color: {$subTextColor};'><strong>Effective Date:</strong> " . htmlspecialchars($salaryAdjustment['effective_date_formatted']) . "</div>" : "";
+
+                    $adjustmentHtml = "
+                    <div style='background-color: {$bgColor}; border: 1px solid {$borderColor}; border-left: 5px solid {$borderColor}; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px;'>
+                        <div style='display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;'>
+                            <span style='background-color: {$badgeBg}; color: {$textColor}; font-weight: bold; font-size: 11px; padding: 2px 8px; border-radius: 4px; letter-spacing: 0.5px;'>
+                                {$icon} {$badge}
+                            </span>
+                            <span style='font-size: 12px; font-weight: bold; color: {$textColor};'>
+                                {$salaryAdjustment['formatted_diff']} " . ($salaryAdjustment['percentage'] ? "({$salaryAdjustment['percentage']}%)" : "") . "
+                            </span>
+                        </div>
+                        <div style='font-size: 13px; font-weight: 600; color: {$textColor}; margin-bottom: 3px;'>
+                            {$title}
+                        </div>
+                        <div style='font-size: 12px; color: {$subTextColor}; line-height: 1.4;'>
+                            {$msg}
+                        </div>
+                        {$reason}
+                        {$effDate}
+                    </div>
+                    ";
+                }
+
                 $html = "
                 <html>
                 <body style='font-family: Arial, sans-serif; color: #333;'>
@@ -2737,6 +3159,8 @@ class NextJsPayrollApiController extends Controller
                             <tr><td style='padding: 5px; font-weight: bold;'>Department:</td><td style='padding: 5px;'>{$department}</td></tr>
                             <tr><td style='padding: 5px; font-weight: bold;'>Designation:</td><td style='padding: 5px;'>{$designation}</td></tr>
                         </table>
+
+                        {$adjustmentHtml}
 
                         <div style='margin-bottom: 20px;'>
                             <h3 style='background-color: #f2f2f2; padding: 8px; margin-top: 0;'>Earnings</h3>

@@ -123,6 +123,8 @@ class SalaryStructureApiController extends Controller
                 'structure_type' => 'nullable|string|in:first,current',
             ]);
 
+            $userId = $request->header('X-User-Id');
+
             // Ensure the staff member exists in tblper
             $staffExists = DB::table('tblper')->where('ID', $validated['staffId'])->exists();
             if (!$staffExists) {
@@ -137,6 +139,35 @@ class SalaryStructureApiController extends Controller
 
             $existing = DB::table('salary_structures')->where('staffId', $validated['staffId'])->first();
             if ($existing) {
+                $prevGross = (float)$existing->basic_salary + (float)$existing->housing_allowance + (float)$existing->transport_allowance +
+                             (float)$existing->medical_allowance + (float)$existing->utility_allowance + (float)$existing->meal_allowance;
+                $newGross = (float)$validated['gross_salary'];
+                $diff = round($newGross - $prevGross, 2);
+
+                if ($prevGross > 0 && abs($diff) >= 0.01) {
+                    $isDec = ($diff < 0);
+                    $type = $isDec ? 'decrement_amount' : 'new_gross';
+                    $pct = round(($diff / $prevGross) * 100, 2);
+
+                    DB::table('salary_increments')->insert([
+                        'staff_id' => $validated['staffId'],
+                        'increment_type' => $type,
+                        'percentage' => $pct,
+                        'amount' => $diff,
+                        'previous_gross_salary' => $prevGross,
+                        'new_gross_salary' => $newGross,
+                        'increase_amount' => $diff,
+                        'previous_basic' => (float)$existing->basic_salary,
+                        'new_basic' => $calculated['basic_salary'],
+                        'effective_date' => date('Y-m-d'),
+                        'reason' => 'Salary structure direct adjustment',
+                        'created_by' => $userId,
+                        'status' => 'applied',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
                 DB::table('salary_structures')->where('staffId', $validated['staffId'])->update($data);
             } else {
                 $data['created_at'] = now();
