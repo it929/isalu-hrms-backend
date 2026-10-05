@@ -122,6 +122,7 @@
                                         <option value="dismissal">Dismissal</option>
                                         <option value="maternity leave">Maternity Leave</option>
                                         <option value="study leave">Study Leave</option>
+                                        <option value="temporary leave">Temporary Leave</option>
                                         <option value="elevation">Elevation</option>
                                         <option value="resignation">Resignation</option>
                                         <option value="retirement">Retirement</option>
