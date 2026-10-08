@@ -1210,7 +1210,10 @@ class NextJsPayrollApiController extends Controller
                 $monthNames = [
                     'JANUARY' => 1, 'FEBRUARY' => 2, 'MARCH' => 3, 'APRIL' => 4,
                     'MAY' => 5, 'JUNE' => 6, 'JULY' => 7, 'AUGUST' => 8,
-                    'SEPTEMBER' => 9, 'OCTOBER' => 10, 'NOVEMBER' => 11, 'DECEMBER' => 12
+                    'SEPTEMBER' => 9, 'OCTOBER' => 10, 'NOVEMBER' => 11, 'DECEMBER' => 12,
+                    'JAN' => 1, 'FEB' => 2, 'MAR' => 3, 'APR' => 4,
+                    'JUN' => 6, 'JUL' => 7, 'AUG' => 8,
+                    'SEP' => 9, 'OCT' => 10, 'NOV' => 11, 'DEC' => 12,
                 ];
                 $month = $monthNames[$monthInput] ?? 0;
             }
@@ -1592,36 +1595,8 @@ class NextJsPayrollApiController extends Controller
                     ? $emp->appointment_date
                     : (!empty($emp->doj) && $emp->doj !== '0000-00-00' ? $emp->doj : null);
 
-                // Auto-record unworked days before appointment as approved Leave of Absence for new staff if missing
-                if (!empty($effectiveJoinDate) && \Illuminate\Support\Facades\Schema::hasTable('leave_of_absent')) {
-                    try {
-                        $dojDate = \Carbon\Carbon::parse($effectiveJoinDate);
-                        if ($dojDate->year === $year && $dojDate->month === $month && $dojDate->day > 1) {
-                            $startOfMonthStr = $dojDate->copy()->startOfMonth()->format('Y-m-d');
-                            $dayBeforeApptStr = $dojDate->copy()->subDay()->format('Y-m-d');
-                            $hasLoa = DB::table('leave_of_absent')
-                                ->where('staffId', $emp->ID)
-                                ->where('start_date', '<=', $dayBeforeApptStr)
-                                ->where('end_date', '>=', $startOfMonthStr)
-                                ->exists();
-                            if (!$hasLoa) {
-                                DB::table('leave_of_absent')->insert([
-                                    'staffId'         => $emp->ID,
-                                    'start_date'      => $startOfMonthStr,
-                                    'end_date'        => $dayBeforeApptStr,
-                                    'reason_of_leave' => 'Leave of absence for new staff (unworked days before appointment)',
-                                    'status'          => 2, // Approved
-                                    'created_at'      => now(),
-                                    'updated_at'      => now(),
-                                ]);
-                            }
-                        }
-                    } catch (\Throwable $e) { /* ignore */ }
-                }
-
-                $loaDays = $this->getLoaDaysForMonth($emp->ID, $year, $month);
+                // For staff that join in the middle of the month (day > 1), calculate and record unworked days to other deduction (not LOA)
                 $dojDaysDeducted = 0;
-
                 if (!empty($effectiveJoinDate)) {
                     try {
                         $dojDate = \Carbon\Carbon::parse($effectiveJoinDate);
@@ -1631,11 +1606,84 @@ class NextJsPayrollApiController extends Controller
                         if ($dojDate->greaterThan($endOfMonth)) {
                             $dojDaysDeducted = $daysInPayrollMonth;
                         } elseif ($dojDate->year === $year && $dojDate->month === $month) {
-                            $daysBefore = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
-                            $dojDaysDeducted = max(0, $daysBefore - $loaDays);
+                            if ($dojDate->day > 1) {
+                                $unworkedDays = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
+                                $dojDaysDeducted = $unworkedDays;
+                                $currentMonthStr = sprintf("%04d-%02d", $year, $month);
+                                $dayBefore = $dojDate->copy()->subDay()->day;
+
+                                // Clean up any legacy LOA auto-created for this staff's unworked days before appointment
+                                if (\Illuminate\Support\Facades\Schema::hasTable('leave_of_absent')) {
+                                    DB::table('leave_of_absent')
+                                        ->where('staffId', $emp->ID)
+                                        ->where(function($q) {
+                                            $q->where('reason_of_leave', 'like', '%unworked days before appointment%')
+                                              ->orWhere('reason_of_leave', 'like', 'Leave of absence for new staff%');
+                                        })
+                                        ->delete();
+                                }
+
+                                if (\Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups')) {
+                                    $dailyRate = $staffGrossSalary > 0 ? round($staffGrossSalary / (float)$daysInPayrollMonth, 2) : 0.00;
+                                    $deductTotal = round($unworkedDays * $dailyRate, 2);
+
+                                    $existingSetup = DB::table('other_deduction_setups')
+                                        ->where('staffId', $emp->ID)
+                                        ->where('start_month', $currentMonthStr)
+                                        ->where(function($q) {
+                                            $q->where('calculation_mode', 'days')
+                                              ->orWhere('remarks', 'like', '%unworked days%')
+                                              ->orWhere('remarks', 'like', '%Mid-month%');
+                                        })
+                                        ->first();
+
+                                    if ($existingSetup) {
+                                        DB::table('other_deduction_setups')
+                                            ->where('id', $existingSetup->id)
+                                            ->update([
+                                                'deduction_type'    => 'one_time',
+                                                'calculation_mode' => 'days',
+                                                'deduction_days'   => $unworkedDays,
+                                                'days_in_month'    => $daysInPayrollMonth,
+                                                'daily_rate'       => $dailyRate,
+                                                'monthly_salary'   => $staffGrossSalary,
+                                                'total_amount'     => $deductTotal,
+                                                'duration_months'  => 1,
+                                                'monthly_deduction'=> $deductTotal,
+                                                'balance_remaining'=> $deductTotal,
+                                                'end_month'        => $currentMonthStr,
+                                                'remarks'          => "Mid-month appointment deduction (1st to {$dayBefore}th - {$unworkedDays} unworked days)",
+                                                'is_active'        => 1,
+                                                'updated_at'       => now(),
+                                            ]);
+                                    } else {
+                                        DB::table('other_deduction_setups')->insert([
+                                            'staffId'          => $emp->ID,
+                                            'deduction_type'   => 'one_time',
+                                            'calculation_mode' => 'days',
+                                            'deduction_days'   => $unworkedDays,
+                                            'days_in_month'    => $daysInPayrollMonth,
+                                            'daily_rate'       => $dailyRate,
+                                            'monthly_salary'   => $staffGrossSalary,
+                                            'total_amount'     => $deductTotal,
+                                            'duration_months'  => 1,
+                                            'monthly_deduction'=> $deductTotal,
+                                            'balance_remaining'=> $deductTotal,
+                                            'start_month'      => $currentMonthStr,
+                                            'end_month'        => $currentMonthStr,
+                                            'remarks'          => "Mid-month appointment deduction (1st to {$dayBefore}th - {$unworkedDays} unworked days)",
+                                            'is_active'        => 1,
+                                            'created_at'       => now(),
+                                            'updated_at'       => now(),
+                                        ]);
+                                    }
+                                }
+                            }
                         }
                     } catch (\Throwable $e) { /* ignore */ }
                 }
+
+                $loaDays = $this->getLoaDaysForMonth($emp->ID, $year, $month);
                 $paidDays = max(0, $daysInPayrollMonth - $loaDays - $dojDaysDeducted);
 
                 // Check if there is an active coop loan setup
@@ -2053,7 +2101,7 @@ class NextJsPayrollApiController extends Controller
 
                 // Compute leave of absence deduction: (grossPay / daysInPayrollMonth) * days_of_absent
                 $leaveOfAbsenceDeduction = round(($grossPay / (float)$daysInPayrollMonth) * $loaDays, 2);
-                $midMonthDeduction = round(($grossPay / (float)$daysInPayrollMonth) * $dojDaysDeducted, 2);
+                $midMonthDeduction = 0.00; // Handled and deducted via other_deduction_setups -> other_deductions
 
                 // Compute retention using first_salary_structure if active and num_rente_months is less than 20
                 $firstStruct = DB::table('first_salary_structure')->where('staffId', $emp->ID)->first();
@@ -2080,7 +2128,7 @@ class NextJsPayrollApiController extends Controller
                 $totalDeductions = round(
                     $payeTax + $pension + $loanDeduction + $coopSavings + $otherDeductions +
                     $iouSum + $absencePenalty + $retention + $surcharges + $medicalLoan +
-                    $coopLoanRpyt + $coopAssetFinance + $leaveOfAbsenceDeduction + $midMonthDeduction,
+                    $coopLoanRpyt + $coopAssetFinance + $leaveOfAbsenceDeduction,
                     2
                 );
                 $netPay = ($paidDays === 0) ? 0.00 : round($grossPay - $totalDeductions, 2);
@@ -2147,6 +2195,13 @@ class NextJsPayrollApiController extends Controller
         $leaves = DB::table('leave_of_absent')
             ->where('staffId', $staffId)
             ->where('status', 2) // Approved
+            ->where(function($q) {
+                $q->whereNull('reason_of_leave')
+                  ->orWhere(function($sub) {
+                      $sub->where('reason_of_leave', 'not like', '%unworked days before appointment%')
+                          ->where('reason_of_leave', 'not like', 'Leave of absence for new staff%');
+                  });
+            })
             ->where(function($query) use ($firstDay, $lastDay) {
                 $query->whereBetween('start_date', [$firstDay, $lastDay])
                       ->orWhereBetween('end_date', [$firstDay, $lastDay])
@@ -2161,6 +2216,17 @@ class NextJsPayrollApiController extends Controller
         $startOfMonth = \Carbon\Carbon::create($year, $month, 1)->startOfMonth();
         $endOfMonth = \Carbon\Carbon::create($year, $month, 1)->endOfMonth();
 
+        // If staff joined mid-month in this period, LOA can only ever count from appointment date onwards
+        $empDoj = DB::table('tblper')->where('ID', $staffId)->value('appointment_date') ?: DB::table('tblper')->where('ID', $staffId)->value('doj');
+        if (!empty($empDoj)) {
+            $dojCarbon = \Carbon\Carbon::parse($empDoj);
+            if ($dojCarbon->year === $year && $dojCarbon->month === $month && $dojCarbon->day > 1) {
+                if ($startOfMonth->lessThan($dojCarbon)) {
+                    $startOfMonth = $dojCarbon->copy();
+                }
+            }
+        }
+
         foreach ($leaves as $leave) {
             $start = \Carbon\Carbon::parse($leave->start_date);
             $end = \Carbon\Carbon::parse($leave->end_date);
@@ -2168,7 +2234,9 @@ class NextJsPayrollApiController extends Controller
             $overlapStart = $start->greaterThan($startOfMonth) ? $start : $startOfMonth;
             $overlapEnd = $end->lessThan($endOfMonth) ? $end : $endOfMonth;
 
-            $totalDays += $overlapStart->diffInDays($overlapEnd) + 1;
+            if ($overlapStart->lessThanOrEqualTo($overlapEnd)) {
+                $totalDays += $overlapStart->diffInDays($overlapEnd) + 1;
+            }
         }
         return (int)$totalDays;
     }

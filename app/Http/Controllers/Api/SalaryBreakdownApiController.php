@@ -494,6 +494,98 @@ class SalaryBreakdownApiController extends Controller
                 }
             }
 
+            $daysInPayrollMonth = (int) \Carbon\Carbon::create($year, $month, 1)->daysInMonth;
+            if ($daysInPayrollMonth < 28 || $daysInPayrollMonth > 31) {
+                $daysInPayrollMonth = 30;
+            }
+            $daysInMonth = $daysInPayrollMonth;
+
+            // Check if employee joined mid-month (doj or appointment_date)
+            $effectiveJoinDate = !empty($staff->appointment_date) && $staff->appointment_date !== '0000-00-00'
+                ? $staff->appointment_date
+                : (!empty($staff->doj) && $staff->doj !== '0000-00-00' ? $staff->doj : null);
+
+            // Automatically record unworked days before appointment as other deduction (NOT LOA) for new staff
+            if (!empty($effectiveJoinDate)) {
+                try {
+                    $dojDate = \Carbon\Carbon::parse($effectiveJoinDate);
+                    if ($dojDate->year === $year && $dojDate->month === $month && $dojDate->day > 1) {
+                        $unworkedDays = max(0, min($daysInMonth, $dojDate->day - 1));
+                        $dayBeforeApptDay = $dojDate->copy()->subDay()->day;
+
+                        // Delete legacy LOA records for unworked days before appointment
+                        if (\Illuminate\Support\Facades\Schema::hasTable('leave_of_absent')) {
+                            DB::table('leave_of_absent')
+                                ->where('staffId', $staffId)
+                                ->where(function($q) {
+                                    $q->where('reason_of_leave', 'like', '%unworked days before appointment%')
+                                      ->orWhere('reason_of_leave', 'like', 'Leave of absence for new staff%');
+                                })
+                                ->delete();
+                        }
+
+                        if (\Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups')) {
+                            $dRate = ($daysInMonth > 0 && $totalBasicAllowances > 0) ? round($totalBasicAllowances / (float)$daysInMonth, 2) : 0.00;
+                            $amt = round($unworkedDays * $dRate, 2);
+
+                            $existingSetup = DB::table('other_deduction_setups')
+                                ->where('staffId', $staffId)
+                                ->where('start_month', $currentMonthStr)
+                                ->where(function($q) {
+                                    $q->where('calculation_mode', 'days')
+                                      ->orWhere('remarks', 'like', '%unworked days%')
+                                      ->orWhere('remarks', 'like', '%Mid-month%');
+                                })
+                                ->first();
+
+                            if ($existingSetup) {
+                                $updateData = [
+                                    'deduction_type'    => 'one_time',
+                                    'calculation_mode' => 'days',
+                                    'deduction_days'   => $unworkedDays,
+                                    'days_in_month'    => $daysInMonth,
+                                    'end_month'        => $currentMonthStr,
+                                    'remarks'          => "Mid-month appointment deduction (1st to {$dayBeforeApptDay}th - {$unworkedDays} unworked days)",
+                                    'is_active'        => 1,
+                                    'updated_at'       => now(),
+                                ];
+                                if ($totalBasicAllowances > 0) {
+                                    $updateData['daily_rate'] = $dRate;
+                                    $updateData['monthly_salary'] = $totalBasicAllowances;
+                                    $updateData['total_amount'] = $amt;
+                                    $updateData['duration_months'] = 1;
+                                    $updateData['monthly_deduction'] = $amt;
+                                    $updateData['balance_remaining'] = $amt;
+                                }
+                                DB::table('other_deduction_setups')
+                                    ->where('id', $existingSetup->id)
+                                    ->update($updateData);
+                            } else {
+                                DB::table('other_deduction_setups')->insert([
+                                    'staffId'          => $staffId,
+                                    'deduction_type'   => 'one_time',
+                                    'calculation_mode' => 'days',
+                                    'deduction_days'   => $unworkedDays,
+                                    'days_in_month'    => $daysInMonth,
+                                    'daily_rate'       => $dRate,
+                                    'monthly_salary'   => $totalBasicAllowances,
+                                    'total_amount'     => $amt,
+                                    'duration_months'  => 1,
+                                    'monthly_deduction'=> $amt,
+                                    'balance_remaining'=> $amt,
+                                    'start_month'      => $currentMonthStr,
+                                    'end_month'        => $currentMonthStr,
+                                    'remarks'          => "Mid-month appointment deduction (1st to {$dayBeforeApptDay}th - {$unworkedDays} unworked days)",
+                                    'is_active'        => 1,
+                                    'created_at'       => now(),
+                                    'updated_at'       => now(),
+                                ]);
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) { /* ignore */ }
+            }
+
             // 12. Other Deduction Setup
             $otherDeductQuery = DB::table('other_deduction_setups')
                 ->where('staffId', $staffId)
@@ -504,12 +596,14 @@ class SalaryBreakdownApiController extends Controller
                       ->orWhere('end_month', '>=', $currentMonthStr);
                 });
 
-            // When payroll is not yet computed, only select active setups with remaining balance
+            // When payroll is not yet computed, only select active setups with remaining balance (or day-based setups)
             if (!$isComputed) {
                 $otherDeductQuery->where('is_active', 1)
                     ->where(function($q) {
                         $q->where('balance_remaining', '>', 0)
-                          ->orWhere('total_amount', '>', 0);
+                          ->orWhere('total_amount', '>', 0)
+                          ->orWhere('calculation_mode', '=', 'days')
+                          ->orWhere('deduction_days', '>', 0);
                     });
             }
 
@@ -524,13 +618,19 @@ class SalaryBreakdownApiController extends Controller
                 $isDayBased = ($setup->calculation_mode === 'days' || (float)($setup->deduction_days ?? 0) > 0);
                 $dailyRate = $setup->daily_rate ? (float)$setup->daily_rate : null;
 
-                if (!$isComputed && $isDayBased && $totalBasicAllowances > 0) {
+                if (!$isComputed && $isDayBased && ($totalBasicAllowances > 0 || (float)($setup->daily_rate ?? 0) > 0 || (float)($setup->monthly_deduction ?? 0) > 0)) {
                     $dInM = (int)($setup->days_in_month ?: $daysInMonth);
                     if ($dInM < 28 || $dInM > 31) {
                         $dInM = $daysInMonth;
                     }
-                    $dailyRate = round($totalBasicAllowances / (float)$dInM, 2);
-                    $amt = round((float)$setup->deduction_days * $dailyRate, 2);
+                    if (!$dailyRate || $dailyRate <= 0) {
+                        $dailyRate = round($totalBasicAllowances / (float)$dInM, 2);
+                    }
+                    if ((float)($setup->monthly_deduction ?? 0) > 0) {
+                        $amt = (float)$setup->monthly_deduction;
+                    } else {
+                        $amt = round((float)$setup->deduction_days * $dailyRate, 2);
+                    }
                     $bal = $amt;
                 } else {
                     $bal = (float)$setup->balance_remaining > 0
@@ -568,38 +668,6 @@ class SalaryBreakdownApiController extends Controller
 
             $otherRemarksTag = !empty($otherRemarksList) ? implode(', ', array_unique($otherRemarksList)) : null;
 
-            // Check if employee joined mid-month (doj or appointment_date)
-            $effectiveJoinDate = !empty($staff->appointment_date) && $staff->appointment_date !== '0000-00-00'
-                ? $staff->appointment_date
-                : (!empty($staff->doj) && $staff->doj !== '0000-00-00' ? $staff->doj : null);
-
-            // Automatically record unworked days before appointment as approved Leave of Absence for new staff if missing
-            if (!empty($effectiveJoinDate) && \Illuminate\Support\Facades\Schema::hasTable('leave_of_absent')) {
-                try {
-                    $dojDate = \Carbon\Carbon::parse($effectiveJoinDate);
-                    if ($dojDate->year === $year && $dojDate->month === $month && $dojDate->day > 1) {
-                        $startOfMonthStr = $dojDate->copy()->startOfMonth()->format('Y-m-d');
-                        $dayBeforeApptStr = $dojDate->copy()->subDay()->format('Y-m-d');
-                        $hasLoa = DB::table('leave_of_absent')
-                            ->where('staffId', $staffId)
-                            ->where('start_date', '<=', $dayBeforeApptStr)
-                            ->where('end_date', '>=', $startOfMonthStr)
-                            ->exists();
-                        if (!$hasLoa) {
-                            DB::table('leave_of_absent')->insert([
-                                'staffId'         => $staffId,
-                                'start_date'      => $startOfMonthStr,
-                                'end_date'        => $dayBeforeApptStr,
-                                'reason_of_leave' => 'Leave of absence for new staff (unworked days before appointment)',
-                                'status'          => 2, // Approved
-                                'created_at'      => now(),
-                                'updated_at'      => now(),
-                            ]);
-                        }
-                    }
-                } catch (\Throwable $e) { /* ignore */ }
-            }
-
             // 13. Leave of Absence Deduction
             $loaDays = 0;
             try {
@@ -610,6 +678,13 @@ class SalaryBreakdownApiController extends Controller
                     $leaves = DB::table('leave_of_absent')
                         ->where('staffId', $staffId)
                         ->where('status', 2) // Approved
+                        ->where(function($q) {
+                            $q->whereNull('reason_of_leave')
+                              ->orWhere(function($sub) {
+                                  $sub->where('reason_of_leave', 'not like', '%unworked days before appointment%')
+                                      ->where('reason_of_leave', 'not like', 'Leave of absence for new staff%');
+                              });
+                        })
                         ->where(function($query) use ($firstDay, $lastDay) {
                             $query->whereBetween('start_date', [$firstDay, $lastDay])
                                   ->orWhereBetween('end_date', [$firstDay, $lastDay])
@@ -623,12 +698,24 @@ class SalaryBreakdownApiController extends Controller
                     $startOfMonth = \Carbon\Carbon::create($year, $month, 1)->startOfMonth();
                     $endOfMonth = \Carbon\Carbon::create($year, $month, 1)->endOfMonth();
 
+                    // If staff joined mid-month in this period, LOA only applies from appointment date onwards
+                    if (!empty($effectiveJoinDate)) {
+                        $dojCarbon = \Carbon\Carbon::parse($effectiveJoinDate);
+                        if ($dojCarbon->year === $year && $dojCarbon->month === $month && $dojCarbon->day > 1) {
+                            if ($startOfMonth->lessThan($dojCarbon)) {
+                                $startOfMonth = $dojCarbon->copy();
+                            }
+                        }
+                    }
+
                     foreach ($leaves as $leave) {
                         $start = \Carbon\Carbon::parse($leave->start_date);
                         $end = \Carbon\Carbon::parse($leave->end_date);
                         $overlapStart = $start->greaterThan($startOfMonth) ? $start : $startOfMonth;
                         $overlapEnd = $end->lessThan($endOfMonth) ? $end : $endOfMonth;
-                        $loaDays += ($overlapStart->diffInDays($overlapEnd) + 1);
+                        if ($overlapStart->lessThanOrEqualTo($overlapEnd)) {
+                            $loaDays += ($overlapStart->diffInDays($overlapEnd) + 1);
+                        }
                     }
                 }
             } catch (\Throwable $e) {
@@ -656,7 +743,7 @@ class SalaryBreakdownApiController extends Controller
                     } elseif ($dojDate->year === $year && $dojDate->month === $month) {
                         $appointmentDay = (int)$dojDate->day;
                         $daysBefore = max(0, min($daysInPayrollMonth, $appointmentDay - 1));
-                        $dojDaysDeducted = max(0, $daysBefore - $loaDays);
+                        $dojDaysDeducted = $daysBefore;
                     }
                 } catch (\Throwable $e) { /* ignore */ }
             }
@@ -690,12 +777,12 @@ class SalaryBreakdownApiController extends Controller
                 $totalDeductions = (float)$computedRecord->total_deductions;
                 $netPay = (float)$computedRecord->net_pay;
                 $paidDays = isset($computedRecord->paid_days) ? (int)$computedRecord->paid_days : $daysInPayrollMonth;
-                $loaDays = max(0, $daysInPayrollMonth - $paidDays);
-                $midMonthAdjustment = max(0.00, round(($grossPay / (float)$daysInPayrollMonth) * $dojDaysDeducted, 2));
+                $loaDays = max(0, $daysInPayrollMonth - $paidDays - $dojDaysDeducted);
+                $midMonthAdjustment = 0.00; // Handled and deducted via other_deductions
             } else {
                 $paidDays = max(0, $daysInPayrollMonth - $loaDays - $dojDaysDeducted);
                 $leaveOfAbsenceDeduct = round(($grossPay / (float)$daysInPayrollMonth) * $loaDays, 2);
-                $midMonthAdjustment = round(($grossPay / (float)$daysInPayrollMonth) * $dojDaysDeducted, 2);
+                $midMonthAdjustment = 0.00; // Handled and deducted via other_deductions
 
                 // Method 1: Prorate Monthly PAYE Tax by Paid Days / Days in Month
                 $payeTax = ($paidDays > 0) ? round($fullMonthlyTax * ($paidDays / (float)$daysInPayrollMonth), 2) : 0.00;
@@ -705,7 +792,7 @@ class SalaryBreakdownApiController extends Controller
 
                 $totalDeductions = $payeTax + $pension + $retention + $iouSum + $medicalLoanDeduct + $coopLoanDeduct +
                                    $coopSavingsDeduct + $coopAssetDeduct + $surchargeDeduct + $absencePenaltyDeduct +
-                                   $loanDeduct + $otherDeduct + $leaveOfAbsenceDeduct + $midMonthAdjustment;
+                                   $loanDeduct + $otherDeduct + $leaveOfAbsenceDeduct;
 
                 $netPay = ($paidDays === 0) ? 0.00 : round($grossPay - $totalDeductions, 2);
             }
@@ -2095,7 +2182,9 @@ class SalaryBreakdownApiController extends Controller
             ->where('is_active', 1)
             ->where(function($q) {
                 $q->where('balance_remaining', '>', 0)
-                  ->orWhere('total_amount', '>', 0);
+                  ->orWhere('total_amount', '>', 0)
+                  ->orWhere('calculation_mode', '=', 'days')
+                  ->orWhere('deduction_days', '>', 0);
             })
             ->where('start_month', '<=', $currentMonthStr)
             ->where(function($q) use ($currentMonthStr) {
@@ -2113,6 +2202,13 @@ class SalaryBreakdownApiController extends Controller
                 $leaves = DB::table('leave_of_absent')
                     ->whereIn('staffId', $staffIds)
                     ->where('status', 2)
+                    ->where(function($q) {
+                        $q->whereNull('reason_of_leave')
+                          ->orWhere(function($sub) {
+                              $sub->where('reason_of_leave', 'not like', '%unworked days before appointment%')
+                                  ->where('reason_of_leave', 'not like', 'Leave of absence for new staff%');
+                          });
+                    })
                     ->where(function($query) use ($firstDay, $lastDay) {
                         $query->whereBetween('start_date', [$firstDay, $lastDay])
                               ->orWhereBetween('end_date', [$firstDay, $lastDay])
@@ -2126,13 +2222,32 @@ class SalaryBreakdownApiController extends Controller
                 $startOfMonth = \Carbon\Carbon::create($year, $month, 1)->startOfMonth();
                 $endOfMonth = \Carbon\Carbon::create($year, $month, 1)->endOfMonth();
 
+                $staffDojMap = $allStaff->mapWithKeys(function($s) {
+                    $d = !empty($s->appointment_date) && $s->appointment_date !== '0000-00-00'
+                        ? $s->appointment_date
+                        : (!empty($s->doj) && $s->doj !== '0000-00-00' ? $s->doj : null);
+                    return [$s->id => $d];
+                });
+
                 foreach ($leaves as $leave) {
                     $start = \Carbon\Carbon::parse($leave->start_date);
                     $end = \Carbon\Carbon::parse($leave->end_date);
-                    $overlapStart = $start->greaterThan($startOfMonth) ? $start : $startOfMonth;
+                    $sMonth = $startOfMonth->copy();
+                    $empDoj = $staffDojMap[$leave->staffId] ?? null;
+                    if (!empty($empDoj)) {
+                        $dojCarbon = \Carbon\Carbon::parse($empDoj);
+                        if ($dojCarbon->year === $year && $dojCarbon->month === $month && $dojCarbon->day > 1) {
+                            if ($sMonth->lessThan($dojCarbon)) {
+                                $sMonth = $dojCarbon;
+                            }
+                        }
+                    }
+                    $overlapStart = $start->greaterThan($sMonth) ? $start : $sMonth;
                     $overlapEnd = $end->lessThan($endOfMonth) ? $end : $endOfMonth;
-                    $days = ($overlapStart->diffInDays($overlapEnd) + 1);
-                    $loaDaysByStaff[$leave->staffId] = ($loaDaysByStaff[$leave->staffId] ?? 0) + $days;
+                    if ($overlapStart->lessThanOrEqualTo($overlapEnd)) {
+                        $days = ($overlapStart->diffInDays($overlapEnd) + 1);
+                        $loaDaysByStaff[$leave->staffId] = ($loaDaysByStaff[$leave->staffId] ?? 0) + $days;
+                    }
                 }
             }
         } catch (\Throwable $e) { /* ignore */ }
@@ -2182,12 +2297,12 @@ class SalaryBreakdownApiController extends Controller
                         $dojDaysDeducted = $daysInPayrollMonth;
                     } elseif ($dojDate->year === $year && $dojDate->month === $month) {
                         $daysBefore = max(0, min($daysInPayrollMonth, $dojDate->day - 1));
-                        $dojDaysDeducted = max(0, $daysBefore - $loaDays);
+                        $dojDaysDeducted = $daysBefore;
                     }
                 } catch (\Throwable $e) { /* ignore */ }
             }
             $paidDays = max(0, $daysInPayrollMonth - $loaDays - $dojDaysDeducted);
-            $midMonthAdjustment = round(($grossPay / (float)$daysInPayrollMonth) * $dojDaysDeducted, 2);
+            $midMonthAdjustment = 0.00; // Handled and deducted via other_deductions
             $leaveOfAbsence = round(($grossPay / (float)$daysInPayrollMonth) * $loaDays, 2);
 
             // PAYE Tax (Nigeria 2025/2026 progressive bands)
@@ -2327,7 +2442,7 @@ class SalaryBreakdownApiController extends Controller
             $totalDeductions = round(
                 $payeTax + $pension + $retention + $iou + $medLoan + $coopLoan +
                 $coopSavings + $coopAsset + $surcharge + $absencePenalty +
-                $regularLoan + $otherDeduct + $leaveOfAbsence + $midMonthAdjustment,
+                $regularLoan + $otherDeduct + $leaveOfAbsence,
                 2
             );
 
@@ -3248,21 +3363,28 @@ class SalaryBreakdownApiController extends Controller
             $isShiftWorker = ($staff && isset($staff->office_shift) && (int)$staff->office_shift === 1);
             $dailySalaryRate = ($daysInPayrollMonth > 0) ? ($totalBasicAllowances / (float)$daysInPayrollMonth) : 0.00;
 
+            $mStart = $monthStart;
+            if ($effectiveJoinDate && $effectiveJoinDate->year === $year && $effectiveJoinDate->month === $month && $effectiveJoinDate->day > 1) {
+                $mStart = max($mStart, $effectiveJoinDate->format('Y-m-d'));
+            }
+
             foreach ($approvedLoas as $loa) {
-                $lStart = max($monthStart, $loa->startDate);
+                $lStart = max($mStart, $loa->startDate);
                 $lEnd = min($monthEnd, $loa->endDate);
 
-                if ($isShiftWorker) {
-                    $curD = \Carbon\Carbon::parse($lStart);
-                    $endD = \Carbon\Carbon::parse($lEnd);
-                    while ($curD->lte($endD)) {
-                        if (!$curD->isWeekend()) {
-                            $loaDays++;
+                if ($lStart <= $lEnd) {
+                    if ($isShiftWorker) {
+                        $curD = \Carbon\Carbon::parse($lStart);
+                        $endD = \Carbon\Carbon::parse($lEnd);
+                        while ($curD->lte($endD)) {
+                            if (!$curD->isWeekend()) {
+                                $loaDays++;
+                            }
+                            $curD->addDay();
                         }
-                        $curD->addDay();
+                    } else {
+                        $loaDays += \Carbon\Carbon::parse($lStart)->diffInDays(\Carbon\Carbon::parse($lEnd)) + 1;
                     }
-                } else {
-                    $loaDays += \Carbon\Carbon::parse($lStart)->diffInDays(\Carbon\Carbon::parse($lEnd)) + 1;
                 }
             }
 
@@ -3277,8 +3399,8 @@ class SalaryBreakdownApiController extends Controller
         if ($effectiveJoinDate && $effectiveJoinDate->year === $year && $effectiveJoinDate->month === $month && $effectiveJoinDate->day > 1) {
             $dailyRate = ($daysInPayrollMonth > 0) ? ($totalBasicAllowances / (float)$daysInPayrollMonth) : 0.00;
             $daysBefore = max(0, min($daysInPayrollMonth, $effectiveJoinDate->day - 1));
-            $dojDaysDeducted = max(0, $daysBefore - $loaDays);
-            $midMonthAdjustment = round($dailyRate * $dojDaysDeducted, 2);
+            $dojDaysDeducted = $daysBefore;
+            $midMonthAdjustment = 0.00; // Handled and deducted via other_deductions
         }
 
         $paidDays = max(0, $daysInPayrollMonth - $loaDays - $dojDaysDeducted);
@@ -3452,7 +3574,9 @@ class SalaryBreakdownApiController extends Controller
                     ->where('is_active', 1)
                     ->where(function($q) {
                         $q->where('balance_remaining', '>', 0)
-                          ->orWhere('total_amount', '>', 0);
+                          ->orWhere('total_amount', '>', 0)
+                          ->orWhere('calculation_mode', '=', 'days')
+                          ->orWhere('deduction_days', '>', 0);
                     })
                     ->where('start_month', '<=', $currentMonthStr)
                     ->where(function($q) use ($currentMonthStr) {
@@ -3508,14 +3632,14 @@ class SalaryBreakdownApiController extends Controller
         $totalDeductions = $payeTax + $pension + $retention + $iouDeduct + $loanDeduct +
                            $medicalLoanDeduct + $coopLoanDeduct + $coopSavingsDeduct +
                            $coopAssetDeduct + $surchargeDeduct + $absencePenaltyDeduct +
-                           $otherDeduct + $leaveOfAbsenceDeduct + $midMonthAdjustment;
+                           $otherDeduct + $leaveOfAbsenceDeduct;
 
         $netPay = ($paidDays === 0) ? 0.00 : max(0.00, $grossPay - $totalDeductions);
 
         // Combined Loans & other deductions for compact summary table display
         $otherDeductionsCombined = $loanDeduct + $medicalLoanDeduct + $coopLoanDeduct +
                                    $coopSavingsDeduct + $coopAssetDeduct + $surchargeDeduct +
-                                   $absencePenaltyDeduct + $otherDeduct + $leaveOfAbsenceDeduct + $midMonthAdjustment;
+                                   $absencePenaltyDeduct + $otherDeduct + $leaveOfAbsenceDeduct;
 
         // Check if payroll run was officially computed
         $isComputed = false;

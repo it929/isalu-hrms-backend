@@ -149,22 +149,39 @@ class HrStaffApiController extends Controller
                 'progress_regID'=> 19,
             ]);
 
-            // If new staff joins mid-month (day > 1), automatically record unworked days as approved Leave of Absence
+            // If new staff joins mid-month (day > 1), automatically calculate and record unworked days to other deduction (not LOA)
             if (!empty($request->date_of_joining)) {
                 try {
                     $doj = \Carbon\Carbon::parse($request->date_of_joining);
-                    if ($doj->day > 1 && \Illuminate\Support\Facades\Schema::hasTable('leave_of_absent')) {
-                        $startOfJoinMonth = $doj->copy()->startOfMonth()->format('Y-m-d');
-                        $dayBeforeJoin = $doj->copy()->subDay()->format('Y-m-d');
-                        DB::table('leave_of_absent')->insert([
-                            'staffId'         => $staffId,
-                            'start_date'      => $startOfJoinMonth,
-                            'end_date'        => $dayBeforeJoin,
-                            'reason_of_leave' => 'Leave of absence for new staff (unworked days before appointment)',
-                            'status'          => 2, // Approved
-                            'created_at'      => now(),
-                            'updated_at'      => now(),
-                        ]);
+                    if ($doj->day > 1 && \Illuminate\Support\Facades\Schema::hasTable('other_deduction_setups')) {
+                        $unworkedDays = $doj->day - 1;
+                        $daysInMonth = (int)$doj->daysInMonth;
+                        $monthStr = $doj->format('Y-m');
+                        $dayBeforeJoin = $doj->copy()->subDay()->day;
+
+                        DB::table('other_deduction_setups')->updateOrInsert(
+                            [
+                                'staffId'          => $staffId,
+                                'start_month'      => $monthStr,
+                                'calculation_mode' => 'days',
+                            ],
+                            [
+                                'deduction_type'    => 'one_time',
+                                'deduction_days'    => $unworkedDays,
+                                'days_in_month'     => $daysInMonth,
+                                'daily_rate'        => 0.00,
+                                'monthly_salary'    => 0.00,
+                                'total_amount'      => 0.00,
+                                'duration_months'   => 1,
+                                'monthly_deduction' => 0.00,
+                                'balance_remaining' => 0.00,
+                                'end_month'         => $monthStr,
+                                'remarks'           => "Mid-month joining deduction (1st to {$dayBeforeJoin}th - {$unworkedDays} unworked days)",
+                                'is_active'         => 1,
+                                'created_at'        => now(),
+                                'updated_at'        => now(),
+                            ]
+                        );
                     }
                 } catch (\Throwable $e) { /* ignore */ }
             }

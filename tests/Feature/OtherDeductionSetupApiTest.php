@@ -32,6 +32,21 @@ class OtherDeductionSetupApiTest extends TestCase
 
         $headers = ['X-User-Id' => $user->UserID ?? 1];
 
+        // Ensure salary structure exists for user so net pay is sufficient
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $user->ID],
+            [
+                'basic_salary' => 150000.00,
+                'housing_allowance' => 0.00,
+                'transport_allowance' => 0.00,
+                'medical_allowance' => 0.00,
+                'utility_allowance' => 0.00,
+                'meal_allowance' => 0.00,
+                'pension_rate' => 0.00,
+                'tax_rate' => 0.00,
+            ]
+        );
+
         // Fetch configurations
         $response = $this->getJson('/api/nextjs/payroll/other-deduction-setups', $headers);
         $response->assertStatus(200)
