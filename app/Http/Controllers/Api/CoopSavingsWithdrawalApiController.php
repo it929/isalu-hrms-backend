@@ -374,6 +374,8 @@ class CoopSavingsWithdrawalApiController extends Controller
             if ($status !== 'all') {
                 if ($status === 'rejected') {
                     $query->whereIn('w.status', ['hr_rejected', 'audit_rejected', 'finance_rejected']);
+                } elseif ($status === 'hr_approved') {
+                    $query->whereIn('w.status', ['hr_approved', 'audit_approved']);
                 } else {
                     $query->where('w.status', $status);
                 }
@@ -409,7 +411,7 @@ class CoopSavingsWithdrawalApiController extends Controller
             $stats = [
                 'total_applications' => (clone $baseStatsQuery)->count(),
                 'pending_count'      => (clone $baseStatsQuery)->where('status', 'pending')->count(),
-                'hr_review_count'    => (clone $baseStatsQuery)->where('status', 'hr_approved')->count(),
+                'hr_review_count'    => (clone $baseStatsQuery)->whereIn('status', ['hr_approved', 'audit_approved'])->count(),
                 'audit_review_count' => (clone $baseStatsQuery)->where('status', 'audit_approved')->count(),
                 'paid_count'         => (clone $baseStatsQuery)->where('status', 'paid')->count(),
                 'rejected_count'     => (clone $baseStatsQuery)->whereIn('status', ['hr_rejected', 'audit_rejected', 'finance_rejected'])->count(),
@@ -533,7 +535,7 @@ class CoopSavingsWithdrawalApiController extends Controller
 
                 return response()->json([
                     'status' => 'success',
-                    'message' => "Application {$withdrawal->withdrawal_reference} approved by HR Head and forwarded to Audit for review.",
+                    'message' => "Application {$withdrawal->withdrawal_reference} approved by HR Head and forwarded to Finance for payment.",
                     'data' => $withdrawal,
                 ]);
             } elseif ($action === 'reject') {
@@ -653,8 +655,8 @@ class CoopSavingsWithdrawalApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Withdrawal record not found.'], 404);
             }
 
-            if ($withdrawal->status !== 'audit_approved' && !$ctx['isSuperAdmin']) {
-                return response()->json(['status' => 'error', 'message' => "Application must be approved by Audit before payment."], 422);
+            if (!in_array($withdrawal->status, ['hr_approved', 'audit_approved']) && !$ctx['isSuperAdmin']) {
+                return response()->json(['status' => 'error', 'message' => "Application must be approved by HR Head before payment."], 422);
             }
 
             $action = $request->input('action', 'pay');
