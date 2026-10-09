@@ -185,7 +185,20 @@ class RefundApiController extends Controller
                 });
             }
 
-            $records = $query->orderBy('rr.id', 'desc')->get()->map(function ($row) {
+            $rawRecords = $query->orderBy('rr.id', 'desc')->get();
+            $refundIds = $rawRecords->pluck('id')->all();
+
+            $approvals = !empty($refundIds)
+                ? DB::table('refund_approvals as ra')
+                    ->leftJoin('users as u', 'u.id', '=', 'ra.approver_id')
+                    ->whereIn('ra.refund_id', $refundIds)
+                    ->select('ra.*', 'u.name as approver_name')
+                    ->orderBy('ra.id', 'asc')
+                    ->get()
+                    ->groupBy('refund_id')
+                : collect();
+
+            $records = $rawRecords->map(function ($row) use ($approvals) {
                 $row->name = trim("{$row->surname} {$row->first_name} {$row->othernames}");
                 $gross = (float)($row->current_gross_salary ?? 0);
                 if ($gross <= 0 && !empty($row->current_declare_salary)) {
@@ -195,6 +208,119 @@ class RefundApiController extends Controller
                 if (!isset($row->gross_salary) || (float)$row->gross_salary <= 0) {
                     $row->gross_salary = $gross;
                 }
+
+                // Compile all remarks across the lifecycle
+                $trail = [];
+                $recordedLevels = [];
+                $trailApprovals = $approvals->get($row->id);
+
+                if ($trailApprovals && $trailApprovals->isNotEmpty()) {
+                    foreach ($trailApprovals as $appr) {
+                        $lvl = strtoupper($appr->level);
+                        $stageLabel = match($lvl) {
+                            'HOD' => 'HOD Review',
+                            'HR', 'ADMIN' => 'HR Review',
+                            'AUDIT' => 'Audit Review',
+                            'FINANCE' => 'Finance Review',
+                            default => $appr->level . ' Review'
+                        };
+                        $statusLabel = match((int)$appr->status) {
+                            1 => (in_array($lvl, ['HR', 'AUDIT']) ? 'Recommended' : ($lvl === 'FINANCE' ? 'Paid & Completed' : 'Approved')),
+                            2 => 'Rejected',
+                            default => 'Pending'
+                        };
+
+                        $remarksText = trim($appr->remarks ?? '');
+                        if ($remarksText !== '') {
+                            $trail[] = [
+                                'id'            => $appr->id,
+                                'level'         => $appr->level,
+                                'stage_label'   => $stageLabel,
+                                'status'        => (int)$appr->status,
+                                'status_label'  => $statusLabel,
+                                'approver_name' => $appr->approver_name ?? 'System',
+                                'remarks'       => $remarksText,
+                                'date'          => $appr->created_at ? \Carbon\Carbon::parse($appr->created_at)->format('d/m/Y h:i A') : null,
+                                'raw_date'      => $appr->created_at,
+                            ];
+                            $recordedLevels[] = $lvl;
+                        }
+                    }
+                }
+
+                // Supplement from stage columns if not already in trail
+                if (!in_array('HOD', $recordedLevels) && !empty(trim($row->hod_remarks ?? ''))) {
+                    $trail[] = [
+                        'level'         => 'HOD',
+                        'stage_label'   => 'HOD Review',
+                        'status'        => (int)$row->hod_status,
+                        'status_label'  => (int)$row->hod_status === 1 ? 'Approved' : ((int)$row->hod_status === 2 ? 'Rejected' : 'Pending'),
+                        'approver_name' => $row->hod_name ?? 'HOD',
+                        'remarks'       => trim($row->hod_remarks),
+                        'date'          => $row->hod_date ? \Carbon\Carbon::parse($row->hod_date)->format('d/m/Y h:i A') : null,
+                        'raw_date'      => $row->hod_date,
+                    ];
+                }
+                if (!in_array('HR', $recordedLevels) && !in_array('ADMIN', $recordedLevels) && !empty(trim($row->admin_remarks ?? ''))) {
+                    $trail[] = [
+                        'level'         => 'HR',
+                        'stage_label'   => 'HR Review',
+                        'status'        => (int)$row->admin_status,
+                        'status_label'  => (int)$row->admin_status === 1 ? 'Recommended' : ((int)$row->admin_status === 2 ? 'Rejected' : 'Pending'),
+                        'approver_name' => $row->admin_name ?? 'HR Admin',
+                        'remarks'       => trim($row->admin_remarks),
+                        'date'          => $row->admin_date ? \Carbon\Carbon::parse($row->admin_date)->format('d/m/Y h:i A') : null,
+                        'raw_date'      => $row->admin_date,
+                    ];
+                }
+                if (!in_array('AUDIT', $recordedLevels) && !empty(trim($row->audit_remarks ?? ''))) {
+                    $trail[] = [
+                        'level'         => 'Audit',
+                        'stage_label'   => 'Audit Review',
+                        'status'        => (int)$row->audit_status,
+                        'status_label'  => (int)$row->audit_status === 1 ? 'Recommended' : ((int)$row->audit_status === 2 ? 'Rejected' : 'Pending'),
+                        'approver_name' => $row->audit_name ?? 'Audit Staff',
+                        'remarks'       => trim($row->audit_remarks),
+                        'date'          => $row->audit_date ? \Carbon\Carbon::parse($row->audit_date)->format('d/m/Y h:i A') : null,
+                        'raw_date'      => $row->audit_date,
+                    ];
+                }
+                if (!in_array('FINANCE', $recordedLevels) && !empty(trim($row->finance_remarks ?? ''))) {
+                    $trail[] = [
+                        'level'         => 'Finance',
+                        'stage_label'   => 'Finance Review',
+                        'status'        => (int)$row->finance_status,
+                        'status_label'  => (int)$row->finance_status === 1 ? 'Paid & Completed' : ((int)$row->finance_status === 2 ? 'Rejected' : 'Pending'),
+                        'approver_name' => $row->finance_name ?? 'Finance Staff',
+                        'remarks'       => trim($row->finance_remarks),
+                        'date'          => $row->finance_date ? \Carbon\Carbon::parse($row->finance_date)->format('d/m/Y h:i A') : null,
+                        'raw_date'      => $row->finance_date,
+                    ];
+                }
+                if (empty($trail) && !empty(trim($row->remarks ?? ''))) {
+                    $trail[] = [
+                        'level'         => 'General',
+                        'stage_label'   => 'Review Note',
+                        'status'        => (int)$row->status,
+                        'status_label'  => 'Note',
+                        'approver_name' => 'Reviewer',
+                        'remarks'       => trim($row->remarks),
+                        'date'          => $row->updated_at ? \Carbon\Carbon::parse($row->updated_at)->format('d/m/Y h:i A') : null,
+                        'raw_date'      => $row->updated_at,
+                    ];
+                }
+
+                $row->remarks_trail = $trail;
+
+                if (!empty($trail)) {
+                    $row->all_remarks = implode("\n\n", array_map(function ($item) {
+                        $hdr = "[{$item['stage_label']}]" . ($item['approver_name'] ? " by {$item['approver_name']}" : '') . ($item['date'] ? " ({$item['date']})" : '');
+                        return $hdr . ":\n" . $item['remarks'];
+                    }, $trail));
+                } else {
+                    $row->all_remarks = $row->remarks ?? null;
+                }
+
                 return $row;
             });
 
@@ -337,6 +463,7 @@ class RefundApiController extends Controller
                 }
             }
 
+            DB::table('refund_approvals')->where('refund_id', $id)->delete();
             DB::table('refund_requests')->where('id', $id)->delete();
 
             return response()->json([
@@ -382,12 +509,15 @@ class RefundApiController extends Controller
 
             $remarks = $request->input('remarks');
             DB::table('refund_requests')->where('id', $id)->update([
-                'hod_status' => 1,
-                'hod_id'     => $ctx['userId'],
-                'hod_date'   => now(),
-                'remarks'    => $remarks,
-                'updated_at' => now(),
+                'hod_status'  => 1,
+                'hod_id'      => $ctx['userId'],
+                'hod_date'    => now(),
+                'hod_remarks' => $remarks,
+                'remarks'     => $remarks,
+                'updated_at'  => now(),
             ]);
+
+            $this->logApproval($id, 'HOD', $ctx['userId'], 1, $remarks);
 
             return response()->json(['status' => 'success', 'message' => 'Refund request approved by HOD.']);
         } catch (\Throwable $th) {
@@ -425,13 +555,16 @@ class RefundApiController extends Controller
 
             $remarks = $request->input('remarks');
             DB::table('refund_requests')->where('id', $id)->update([
-                'hod_status' => 2,
-                'status'     => 2, // Over-all status marked rejected
-                'hod_id'     => $ctx['userId'],
-                'hod_date'   => now(),
-                'remarks'    => $remarks,
-                'updated_at' => now(),
+                'hod_status'  => 2,
+                'status'      => 2, // Over-all status marked rejected
+                'hod_id'      => $ctx['userId'],
+                'hod_date'    => now(),
+                'hod_remarks' => $remarks,
+                'remarks'     => $remarks,
+                'updated_at'  => now(),
             ]);
+
+            $this->logApproval($id, 'HOD', $ctx['userId'], 2, $remarks);
 
             return response()->json(['status' => 'success', 'message' => 'Refund request rejected by HOD.']);
         } catch (\Throwable $th) {
@@ -478,11 +611,12 @@ class RefundApiController extends Controller
             $refundType = $request->input('refund_type', 'amount'); // 'amount' or 'days'
             $remarks = $request->input('remarks');
             $updateData = [
-                'admin_status' => 1,
-                'admin_id'     => $ctx['userId'],
-                'admin_date'   => now(),
-                'remarks'      => $remarks,
-                'updated_at'   => now(),
+                'admin_status'  => 1,
+                'admin_id'      => $ctx['userId'],
+                'admin_date'    => now(),
+                'admin_remarks' => $remarks,
+                'remarks'       => $remarks,
+                'updated_at'    => now(),
             ];
 
             if ($refundType === 'days') {
@@ -539,6 +673,8 @@ class RefundApiController extends Controller
 
             DB::table('refund_requests')->where('id', $id)->update($updateData);
 
+            $this->logApproval($id, 'HR', $ctx['userId'], 1, $remarks);
+
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Refund request setup and approved successfully by HR Admin.',
@@ -572,13 +708,16 @@ class RefundApiController extends Controller
  
             $remarks = $request->input('remarks');
             DB::table('refund_requests')->where('id', $id)->update([
-                'admin_status' => 2,
-                'status'       => 2, // Over-all status marked rejected
-                'admin_id'     => $ctx['userId'],
-                'admin_date'   => now(),
-                'remarks'      => $remarks,
-                'updated_at'   => now(),
+                'admin_status'  => 2,
+                'status'        => 2, // Over-all status marked rejected
+                'admin_id'      => $ctx['userId'],
+                'admin_date'    => now(),
+                'admin_remarks' => $remarks,
+                'remarks'       => $remarks,
+                'updated_at'    => now(),
             ]);
+
+            $this->logApproval($id, 'HR', $ctx['userId'], 2, $remarks);
  
             return response()->json(['status' => 'success', 'message' => 'Refund request rejected by HR Admin.']);
         } catch (\Throwable $th) {
@@ -610,12 +749,15 @@ class RefundApiController extends Controller
  
             $remarks = $request->input('remarks');
             DB::table('refund_requests')->where('id', $id)->update([
-                'audit_status' => 1,
-                'audit_id'     => $ctx['userId'],
-                'audit_date'   => now(),
-                'remarks'      => $remarks,
-                'updated_at'   => now(),
+                'audit_status'  => 1,
+                'audit_id'      => $ctx['userId'],
+                'audit_date'    => now(),
+                'audit_remarks' => $remarks,
+                'remarks'       => $remarks,
+                'updated_at'    => now(),
             ]);
+
+            $this->logApproval($id, 'Audit', $ctx['userId'], 1, $remarks);
  
             return response()->json(['status' => 'success', 'message' => 'Refund request recommended successfully by Audit.']);
         } catch (\Throwable $th) {
@@ -646,13 +788,16 @@ class RefundApiController extends Controller
  
             $remarks = $request->input('remarks');
             DB::table('refund_requests')->where('id', $id)->update([
-                'audit_status' => 2,
-                'status'       => 2, // Rejects overall application immediately
-                'audit_id'     => $ctx['userId'],
-                'audit_date'   => now(),
-                'remarks'      => $remarks,
-                'updated_at'   => now(),
+                'audit_status'  => 2,
+                'status'        => 2, // Rejects overall application immediately
+                'audit_id'      => $ctx['userId'],
+                'audit_date'    => now(),
+                'audit_remarks' => $remarks,
+                'remarks'       => $remarks,
+                'updated_at'    => now(),
             ]);
+
+            $this->logApproval($id, 'Audit', $ctx['userId'], 2, $remarks);
  
             return response()->json(['status' => 'success', 'message' => 'Refund request rejected by Audit.']);
         } catch (\Throwable $th) {
@@ -684,13 +829,16 @@ class RefundApiController extends Controller
  
             $remarks = $request->input('remarks');
             DB::table('refund_requests')->where('id', $id)->update([
-                'finance_status' => 1,
-                'status'         => 1, // Approved overall
-                'finance_id'     => $ctx['userId'],
-                'finance_date'   => now(),
-                'remarks'        => $remarks,
-                'updated_at'     => now(),
+                'finance_status'  => 1,
+                'status'          => 1, // Approved overall
+                'finance_id'      => $ctx['userId'],
+                'finance_date'    => now(),
+                'finance_remarks' => $remarks,
+                'remarks'         => $remarks,
+                'updated_at'      => now(),
             ]);
+
+            $this->logApproval($id, 'Finance', $ctx['userId'], 1, $remarks);
  
             return response()->json(['status' => 'success', 'message' => 'Refund request marked as paid and completed by Finance.']);
         } catch (\Throwable $th) {
@@ -721,18 +869,41 @@ class RefundApiController extends Controller
  
             $remarks = $request->input('remarks');
             DB::table('refund_requests')->where('id', $id)->update([
-                'finance_status' => 2,
-                'status'         => 2, // Rejected overall
-                'finance_id'     => $ctx['userId'],
-                'finance_date'   => now(),
-                'remarks'        => $remarks,
-                'updated_at'     => now(),
+                'finance_status'  => 2,
+                'status'          => 2, // Rejected overall
+                'finance_id'      => $ctx['userId'],
+                'finance_date'    => now(),
+                'finance_remarks' => $remarks,
+                'remarks'         => $remarks,
+                'updated_at'      => now(),
             ]);
+
+            $this->logApproval($id, 'Finance', $ctx['userId'], 2, $remarks);
  
             return response()->json(['status' => 'success', 'message' => 'Refund request rejected by Finance.']);
         } catch (\Throwable $th) {
             Log::error('RefundApiController financeReject: ' . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => $th->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Record an audit approval / review entry into refund_approvals.
+     */
+    protected function logApproval($refundId, $level, $approverId, $status, $remarks = null)
+    {
+        try {
+            DB::table('refund_approvals')->insert([
+                'refund_id'   => $refundId,
+                'level'       => $level,
+                'approver_id' => $approverId,
+                'status'      => $status,
+                'remarks'     => $remarks ? trim($remarks) : null,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning("Could not log refund approval: {$e->getMessage()}");
         }
     }
 }

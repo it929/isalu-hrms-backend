@@ -408,6 +408,14 @@ Route::prefix('nextjs')->group(function () {
             Route::delete('/{id}',                 [\App\Http\Controllers\Api\CoopSavingsWithdrawalApiController::class, 'destroy']);
         });
 
+        // Cooperative Records & Statements
+        Route::prefix('coop-records')->group(function () {
+            Route::get('/staff-list',      [\App\Http\Controllers\Api\CoopRecordsApiController::class, 'getStaffList']);
+            Route::get('/summary',         [\App\Http\Controllers\Api\CoopRecordsApiController::class, 'getSummary']);
+            Route::get('/ledger',          [\App\Http\Controllers\Api\CoopRecordsApiController::class, 'getLedger']);
+            Route::get('/statement-print', [\App\Http\Controllers\Api\CoopRecordsApiController::class, 'getPrintStatement']);
+        });
+
         // Medical Loan Entries
         Route::prefix('medical-loan-entries')->group(function () {
             Route::get('/',                     [\App\Http\Controllers\Api\MedicalLoanEntryApiController::class, 'index']);
