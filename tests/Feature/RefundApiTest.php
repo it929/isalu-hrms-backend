@@ -164,6 +164,18 @@ class RefundApiTest extends TestCase
         $this->assertEquals(1, $afterFinance->finance_status);
         $this->assertEquals(1, $afterFinance->status);
 
+        // 7b. Verify that index endpoint returns remarks_trail containing all stage remarks
+        $responseIndex = $this->getJson('/api/nextjs/payroll/refunds', $headers);
+        $responseIndex->assertStatus(200);
+        $records = collect($responseIndex->json('data'));
+        $found = $records->firstWhere('id', $refundId);
+        $this->assertNotNull($found);
+        $this->assertNotEmpty($found['remarks_trail']);
+        $trailRemarks = collect($found['remarks_trail'])->pluck('remarks')->all();
+        $this->assertContains('HR approved', $trailRemarks);
+        $this->assertContains('Audit approved', $trailRemarks);
+        $this->assertContains('Finance approved', $trailRemarks);
+
         // 8. Delete request (after approval, it should fail for non-admins but succeed for admin)
         $responseDelete = $this->deleteJson("/api/nextjs/payroll/refunds/{$refundId}", [], $headers);
         $responseDelete->assertStatus(200)
