@@ -28,8 +28,13 @@ trait ResolveUserContextTrait
 
         $roleIds = $userRoles->pluck('roleID')->toArray();
         $roleNames = $userRoles->pluck('rolename')->filter()->map(function ($role) {
-            return strtolower($role);
+            return strtolower(trim($role));
         })->toArray();
+
+        $activeRoleHeader = strtolower(trim($request->header('X-User-Role', '')));
+        if ($activeRoleHeader && !in_array($activeRoleHeader, $roleNames)) {
+            $roleNames[] = $activeRoleHeader;
+        }
 
         $isSuperAdmin = ($userRec && (int)$userRec->is_global === 1)
             || ($userRec && strtolower($userRec->user_type ?? '') === 'technical')
@@ -40,9 +45,19 @@ trait ResolveUserContextTrait
             || in_array('administrator', $roleNames)
             || in_array('admin', $roleNames);
 
+        $isHrHead = in_array(68, $roleIds) 
+            || in_array('hr head', $roleNames) 
+            || in_array('head of hr', $roleNames);
+
         $adminStaff = in_array(48, $roleIds) || in_array(68, $roleIds) || in_array('hr head', $roleNames) || in_array('head of hr', $roleNames) || in_array('hr', $roleNames);
 
+        $isAuditHead = in_array(70, $roleIds) || in_array('audit head', $roleNames) || in_array('head of audit', $roleNames);
+
         $isAuditStaff = in_array(34, $roleIds) || in_array(35, $roleIds) || in_array(70, $roleIds) || in_array('audit head', $roleNames) || in_array('head of audit', $roleNames) || in_array('audit', $roleNames);
+
+        $isFinanceHead = in_array(69, $roleIds) 
+            || in_array('finance head', $roleNames) 
+            || in_array('head of finance', $roleNames);
 
         $isFinanceStaff = in_array(36, $roleIds) || in_array(37, $roleIds) || in_array(69, $roleIds) || in_array('finance head', $roleNames) || in_array('head of finance', $roleNames) || in_array('finance', $roleNames);
 
@@ -124,6 +139,9 @@ trait ResolveUserContextTrait
                     $adminStaff = true;
                     $isDelegatedHr = true;
                     $delegatedHrPermissions = array_unique(array_merge($delegatedHrPermissions, $hrRoles));
+                    if (in_array('hr_head', $perms) || in_array('hr_approve', $perms) || in_array('hr_review', $perms)) {
+                        $isHrHead = true;
+                    }
                 }
 
                 // Check for Finance approval roles in delegation
@@ -132,6 +150,9 @@ trait ResolveUserContextTrait
                     $isFinanceStaff = true;
                     $isDelegatedFinance = true;
                     $delegatedFinancePermissions = array_unique(array_merge($delegatedFinancePermissions, $finRoles));
+                    if (in_array('finance_head', $perms) || in_array('finance_approve', $perms) || in_array('finance_payout', $perms)) {
+                        $isFinanceHead = true;
+                    }
                 }
 
                 // Check for Audit approval roles in delegation
@@ -140,6 +161,9 @@ trait ResolveUserContextTrait
                     $isAuditStaff = true;
                     $isDelegatedAudit = true;
                     $delegatedAuditPermissions = array_unique(array_merge($delegatedAuditPermissions, $audRoles));
+                    if (in_array('audit_head', $perms) || in_array('audit_approve', $perms)) {
+                        $isAuditHead = true;
+                    }
                 }
 
                 // Check for general HOD approval roles
@@ -169,14 +193,21 @@ trait ResolveUserContextTrait
                 $adminStaff = true;
                 $isDelegatedHr = true;
                 $delegatedHrPermissions = array_unique(array_merge($delegatedHrPermissions, $perms));
+                if (in_array('hr_head', $perms) || in_array('hr_approve', $perms) || in_array('hr_review', $perms)) {
+                    $isHrHead = true;
+                }
             }
         }
 
         return [
             'userId'                      => $userId,
+            'user'                        => $userRec,
             'isSuperAdmin'                => $isSuperAdmin,
+            'isHrHead'                    => $isHrHead,
             'isAdminStaff'                => $adminStaff,
+            'isAuditHead'                 => $isAuditHead,
             'isAuditStaff'                => $isAuditStaff,
+            'isFinanceHead'               => $isFinanceHead,
             'isFinanceStaff'              => $isFinanceStaff,
             'employee'                    => $employee,
             'isHod'                       => $isHod,
@@ -190,6 +221,24 @@ trait ResolveUserContextTrait
             'isDelegatedAudit'            => $isDelegatedAudit,
             'delegatedAuditPermissions'   => $delegatedAuditPermissions,
         ];
+    }
+
+    /**
+     * Check if user is Super Admin or HR Head.
+     */
+    private function canApproveHrHead($ctx): bool
+    {
+        if (!$ctx) return false;
+        return !empty($ctx['isSuperAdmin']) || !empty($ctx['isHrHead']);
+    }
+
+    /**
+     * Check if user is Super Admin or Finance Head.
+     */
+    private function canApproveFinanceHead($ctx): bool
+    {
+        if (!$ctx) return false;
+        return !empty($ctx['isSuperAdmin']) || !empty($ctx['isFinanceHead']);
     }
 
     /**

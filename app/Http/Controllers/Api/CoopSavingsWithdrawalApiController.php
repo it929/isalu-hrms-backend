@@ -26,7 +26,7 @@ class CoopSavingsWithdrawalApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            $isPrivileged = $ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAuditStaff'] ?? false);
+            $isPrivileged = $ctx['isSuperAdmin'] || !empty($ctx['isHrHead']) || $ctx['isAdminStaff'] || !empty($ctx['isFinanceHead']) || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAuditStaff'] ?? false);
             $search = trim($request->input('search', ''));
 
             $query = DB::table('tblper as p')
@@ -99,8 +99,11 @@ class CoopSavingsWithdrawalApiController extends Controller
                 'data' => $staff,
                 'isPrivileged' => $isPrivileged,
                 'isSuperAdmin' => $ctx['isSuperAdmin'],
+                'isHrHead' => !empty($ctx['isHrHead']),
                 'isAdminStaff' => $ctx['isAdminStaff'],
+                'isAuditHead' => !empty($ctx['isAuditHead']),
                 'isAuditStaff' => $ctx['isAuditStaff'] ?? false,
+                'isFinanceHead' => !empty($ctx['isFinanceHead']),
                 'isFinanceStaff' => $ctx['isFinanceStaff'] ?? false,
                 'currentEmployee' => $ctx['employee'] ? [
                     'id' => $ctx['employee']->ID,
@@ -126,7 +129,7 @@ class CoopSavingsWithdrawalApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            $isPrivileged = $ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAuditStaff'] ?? false);
+            $isPrivileged = $ctx['isSuperAdmin'] || !empty($ctx['isHrHead']) || $ctx['isAdminStaff'] || !empty($ctx['isFinanceHead']) || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAuditStaff'] ?? false);
             if (!$isPrivileged && (!$ctx['employee'] || (int)$ctx['employee']->ID !== (int)$staffId)) {
                 return response()->json(['status' => 'error', 'message' => 'Access denied.'], 403);
             }
@@ -342,7 +345,7 @@ class CoopSavingsWithdrawalApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            $isPrivileged = $ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAuditStaff'] ?? false);
+            $isPrivileged = $ctx['isSuperAdmin'] || !empty($ctx['isHrHead']) || $ctx['isAdminStaff'] || !empty($ctx['isFinanceHead']) || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAuditStaff'] ?? false);
 
             $page = max(1, (int)$request->input('page', 1));
             $perPage = min(100, max(5, (int)$request->input('per_page', 15)));
@@ -475,7 +478,7 @@ class CoopSavingsWithdrawalApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Withdrawal request not found.'], 404);
             }
 
-            $isPrivileged = $ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAuditStaff'] ?? false);
+            $isPrivileged = $ctx['isSuperAdmin'] || !empty($ctx['isHrHead']) || $ctx['isAdminStaff'] || !empty($ctx['isFinanceHead']) || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAuditStaff'] ?? false);
             if (!$isPrivileged && (!$ctx['employee'] || (int)$ctx['employee']->ID !== (int)$w->staffId)) {
                 return response()->json(['status' => 'error', 'message' => 'Access denied.'], 403);
             }
@@ -499,8 +502,8 @@ class CoopSavingsWithdrawalApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !$ctx['isAdminStaff']) {
-                return response()->json(['status' => 'error', 'message' => 'Access denied. Only HR Head / Administrator can perform HR review.'], 403);
+            if (!$ctx['isSuperAdmin'] && empty($ctx['isHrHead'])) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied. Only Super Admin or staff with HR Head role can perform HR review.'], 403);
             }
 
             $withdrawal = CoopSavingsWithdrawal::find($id);
@@ -646,8 +649,8 @@ class CoopSavingsWithdrawalApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized – X-User-Id header is required.'], 401);
             }
 
-            if (!$ctx['isSuperAdmin'] && !($ctx['isFinanceStaff'] ?? false)) {
-                return response()->json(['status' => 'error', 'message' => 'Access denied. Only Finance department or SuperAdmin can process payout.'], 403);
+            if (!$ctx['isSuperAdmin'] && empty($ctx['isFinanceHead'])) {
+                return response()->json(['status' => 'error', 'message' => 'Access denied. Only Super Admin or staff with Finance Head role can process payout.'], 403);
             }
 
             $withdrawal = CoopSavingsWithdrawal::find($id);
@@ -808,7 +811,7 @@ class CoopSavingsWithdrawalApiController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Withdrawal record not found.'], 404);
             }
 
-            $isPrivileged = $ctx['isSuperAdmin'] || $ctx['isAdminStaff'] || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAuditStaff'] ?? false);
+            $isPrivileged = $ctx['isSuperAdmin'] || !empty($ctx['isHrHead']) || $ctx['isAdminStaff'] || !empty($ctx['isFinanceHead']) || ($ctx['isFinanceStaff'] ?? false) || ($ctx['isAuditStaff'] ?? false);
             if (!$isPrivileged && (!$ctx['employee'] || (int)$ctx['employee']->ID !== (int)$w->staffId)) {
                 return response()->json(['status' => 'error', 'message' => 'Access denied.'], 403);
             }
