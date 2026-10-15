@@ -920,6 +920,114 @@ class ResignationSettlementLoaTest extends TestCase
         $updatedFss2 = DB::table('first_salary_structure')->where('staffId', $staffId)->first();
         $this->assertEquals(15, (int)$updatedFss2->num_rente_months);
     }
+
+    /**
+     * @test
+     */
+    public function test_payment_in_lieu_of_notice_deduction_and_update()
+    {
+        $user = DB::table('users')->first();
+        if (!$user) {
+            $this->markTestSkipped('No user found in DB.');
+        }
+
+        $staffId = DB::table('tblper')->insertGetId([
+            'UserID'            => $user->id,
+            'fileNo'            => 'TEST-LIEU-001',
+            'surname'           => 'LIEU',
+            'first_name'        => 'STAFF',
+            'staff_status'      => 1,
+            'status_value'      => 'active',
+            'appointment_date'  => '2025-01-01',
+            'created_at'        => now(),
+            'updated_at'        => now(),
+        ]);
+
+        DB::table('salary_structures')->updateOrInsert(
+            ['staffId' => $staffId],
+            [
+                'basic_salary'        => 60000.00,
+                'housing_allowance'   => 20000.00,
+                'transport_allowance' => 10000.00,
+                'medical_allowance'   => 5000.00,
+                'utility_allowance'   => 5000.00,
+                'meal_allowance'      => 0.00,
+                'pen_act'             => 0,
+                'created_at'          => now(),
+            ]
+        );
+
+        $resignationId = DB::table('resignation_requests')->insertGetId([
+            'staff_id'         => $staffId,
+            'reason'           => 'Relocating',
+            'resignation_date' => '2026-08-15',
+            'status'           => 1,
+            'hod_status'       => 1,
+            'admin_status'     => 1,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        $headers = [
+            'X-User-Id'   => $user->id,
+            'X-User-Role' => 'HR Head',
+        ];
+
+        // 1. Initial settlement should have Payment in Lieu of Notice at 0.00
+        $initResp = $this->getJson("/api/nextjs/payroll/resignation-settlement/settlement/{$resignationId}", $headers);
+        $initResp->assertStatus(200);
+        $initData = $initResp->json('data');
+        $this->assertEquals(0.00, $initData['payment_in_lieu_of_notice']['amount']);
+
+        // 2. Update notice in lieu: deduct 15 days from retention refund
+        $updateResp = $this->postJson('/api/nextjs/payroll/resignation-settlement/update-notice-in-lieu', [
+            'resignation_id'   => $resignationId,
+            'staff_id'         => $staffId,
+            'amount'           => 50000.00,
+            'days'             => 15,
+            'calculation_mode' => 'days',
+            'deduction_source' => 'retention',
+            'reason'           => 'Staff left before completing agreed notice period',
+        ], $headers);
+
+        $updateResp->assertStatus(200);
+        $updateResp->assertJson(['status' => 'success']);
+
+        // Verify in database
+        $dbRec = DB::table('resignation_requests')->where('id', $resignationId)->first();
+        $this->assertEquals(50000.00, (float)$dbRec->notice_in_lieu_amount);
+        $this->assertEquals(15, (int)$dbRec->notice_in_lieu_days);
+        $this->assertEquals('retention', $dbRec->notice_in_lieu_source);
+        $this->assertEquals('Staff left before completing agreed notice period', $dbRec->notice_in_lieu_reason);
+
+        // 3. Verify settlement breakdown captures Payment in Lieu of Notice in itemized deductions
+        $settlementResp = $this->getJson("/api/nextjs/payroll/resignation-settlement/settlement/{$resignationId}", $headers);
+        $settlementResp->assertStatus(200);
+        $settlement = $settlementResp->json('data');
+
+        $this->assertEquals(50000.00, (float)$settlement['payment_in_lieu_of_notice']['amount']);
+        $this->assertEquals(15, (int)$settlement['payment_in_lieu_of_notice']['days']);
+        $this->assertEquals('retention', $settlement['payment_in_lieu_of_notice']['source']);
+
+        // Itemized deductions must have "Payment in Lieu of Notice"
+        $lieuItem = collect($settlement['deductions']['itemized_deductions'])->firstWhere('name', 'Payment in Lieu of Notice');
+        $this->assertNotNull($lieuItem, 'Payment in Lieu of Notice should exist in itemized deductions');
+        $this->assertEquals(50000.00, (float)$lieuItem['amount']);
+        $this->assertStringContainsString('15 unserved day(s)', $lieuItem['note']);
+        $this->assertStringContainsString('Deducted from Retention Refund', $lieuItem['note']);
+
+        // 4. Test unauthorized regular staff cannot adjust notice in lieu
+        $forbiddenResp = $this->postJson('/api/nextjs/payroll/resignation-settlement/update-notice-in-lieu', [
+            'resignation_id'   => $resignationId,
+            'staff_id'         => $staffId,
+            'amount'           => 0.00,
+            'days'             => 0,
+        ], [
+            'X-User-Id'   => 999999,
+            'X-User-Role' => 'Staff',
+        ]);
+        $forbiddenResp->assertStatus(403);
+    }
 }
 
 
