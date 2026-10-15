@@ -644,6 +644,8 @@ class ResignationApiController extends Controller
                 'summary'          => $summary,
                 'user_permissions' => [
                     'is_super_admin'   => (bool)$ctx['isSuperAdmin'],
+                    'is_hr_head'       => (bool)$ctx['isHrHead'],
+                    'is_finance_head'  => (bool)$ctx['isFinanceHead'],
                     'is_admin_staff'   => (bool)$ctx['isAdminStaff'],
                     'is_audit_staff'   => (bool)$ctx['isAuditStaff'],
                     'is_finance_staff' => (bool)$ctx['isFinanceStaff'],
@@ -711,6 +713,8 @@ class ResignationApiController extends Controller
 
             $settlementData['user_permissions'] = [
                 'is_super_admin'   => (bool)$ctx['isSuperAdmin'],
+                'is_hr_head'       => (bool)$ctx['isHrHead'],
+                'is_finance_head'  => (bool)$ctx['isFinanceHead'],
                 'is_admin_staff'   => (bool)$ctx['isAdminStaff'],
                 'is_audit_staff'   => (bool)$ctx['isAuditStaff'],
                 'is_finance_staff' => (bool)$ctx['isFinanceStaff'],
@@ -1186,6 +1190,41 @@ class ResignationApiController extends Controller
         $loaDaysTotal = (int)$loaData['total_days'];
         $loaNote = $loaDaysTotal > 0 ? "{$loaDaysTotal} unpaid day(s)" : 'Nil';
 
+        // 5c. Payment in Lieu of Notice
+        $noticeInLieuAmount = (float)($resignation->notice_in_lieu_amount ?? 0.00);
+        $noticeInLieuDays = (int)($resignation->notice_in_lieu_days ?? 0);
+        $noticeInLieuMode = $resignation->notice_in_lieu_mode ?? 'amount';
+        $noticeInLieuSource = $resignation->notice_in_lieu_source ?? 'general';
+        $noticeInLieuReason = $resignation->notice_in_lieu_reason ?? '';
+        $noticeInLieuUpdatedAt = $resignation->notice_in_lieu_updated_at ?? null;
+
+        if ($isAdviceToResign && $noticeInLieuAmount <= 0 && \Illuminate\Support\Facades\Schema::hasTable('advice_to_resigns')) {
+            $advRec = DB::table('advice_to_resigns')->where('resignation_request_id', $id)->first();
+            if ($advRec && (float)($advRec->notice_in_lieu_amount ?? 0) > 0) {
+                $noticeInLieuAmount = (float)$advRec->notice_in_lieu_amount;
+                $noticeInLieuDays = (int)($advRec->notice_in_lieu_days ?? 0);
+                $noticeInLieuMode = $advRec->notice_in_lieu_mode ?? 'amount';
+                $noticeInLieuSource = $advRec->notice_in_lieu_source ?? 'general';
+                $noticeInLieuReason = $advRec->notice_in_lieu_reason ?? '';
+                $noticeInLieuUpdatedAt = $advRec->notice_in_lieu_updated_at ?? null;
+            }
+        }
+
+        $sourceDisplay = 'Exit settlement offset';
+        if ($noticeInLieuSource === 'retention') {
+            $sourceDisplay = 'Deducted from Retention Refund';
+        } elseif ($noticeInLieuSource === 'salary') {
+            $sourceDisplay = 'Deducted from Notice Salary';
+        } elseif ($noticeInLieuSource === 'coop_savings') {
+            $sourceDisplay = 'Deducted from Cooperative Savings';
+        }
+
+        $lieuNote = 'Nil';
+        if ($noticeInLieuAmount > 0) {
+            $daysPart = $noticeInLieuDays > 0 ? "{$noticeInLieuDays} unserved day(s)" : "Payment in Lieu";
+            $lieuNote = "{$daysPart} — {$sourceDisplay}" . ($noticeInLieuReason ? " ({$noticeInLieuReason})" : "");
+        }
+
         // Structured deductions mapping matching Salary Breakdown modal
         $itemizedDeductions = [
             ['name' => 'PAYE Tax',                         'amount' => $totalNoticePayeTax, 'note' => $totalNoticePayeTax > 0 ? 'Notice period tax' : 'Tax exempt (<= ₦800k threshold)'],
@@ -1199,6 +1238,7 @@ class ResignationApiController extends Controller
             ['name' => 'Surcharges / Penalties',            'amount' => $surchargeTotal, 'note' => $surchargeTotal > 0 ? 'Unpaid penalty charges' : 'Nil'],
             ['name' => 'Absence Penalty',                   'amount' => $absencePenalty, 'note' => $absencePenalty > 0 ? 'Unpaid penalty' : 'Nil'],
             ['name' => 'Leave of Absence (Unpaid Days)',    'amount' => $loaDeductTotal, 'note' => $loaNote],
+            ['name' => 'Payment in Lieu of Notice',         'amount' => $noticeInLieuAmount, 'note' => $lieuNote],
             ['name' => 'Regular Loan Repayment',            'amount' => $regularLoan, 'note' => $regularLoan > 0 ? 'Outstanding loan balance' : 'Nil'],
             ['name' => 'Other Deductions',                  'amount' => $otherDeductTotal, 'note' => $otherDeductTotal > 0 ? 'Other liabilities' : 'Nil'],
         ];
@@ -1307,8 +1347,17 @@ class ResignationApiController extends Controller
                 'total_bonuses_allowances'    => $activeBonusesTotal + $earningVarsTotal,
                 'total_final_earnings'        => $totalFinalEarnings,
                 'total_final_deductions'      => $totalDeductions,
+                'notice_in_lieu_deduction'    => $noticeInLieuAmount,
                 'net_settlement_amount'       => $netSettlement,
                 'settlement_type'             => $settlementType,
+            ],
+            'payment_in_lieu_of_notice' => [
+                'amount'     => $noticeInLieuAmount,
+                'days'       => $noticeInLieuDays,
+                'mode'       => $noticeInLieuMode,
+                'source'     => $noticeInLieuSource,
+                'reason'     => $noticeInLieuReason,
+                'updated_at' => $noticeInLieuUpdatedAt,
             ],
             'clearance_workflow' => [
                 'hr_approval' => [
@@ -1541,6 +1590,8 @@ class ResignationApiController extends Controller
                 } elseif (stripos($dName, 'Savings') !== false) {
                     $extraBadge = "<span style='color: #059669; font-size: 11px; font-weight: 600;'> (Refunded under Earnings)</span>";
                 } elseif (stripos($dName, 'Leave of Absence') !== false && $dAmt > 0 && !empty($dNote) && $dNote !== 'Nil') {
+                    $extraBadge = "<span style='color: #dc2626; font-size: 11px; font-weight: 600;'> ({$dNote})</span>";
+                } elseif (stripos($dName, 'Payment in Lieu') !== false && $dAmt > 0 && !empty($dNote) && $dNote !== 'Nil') {
                     $extraBadge = "<span style='color: #dc2626; font-size: 11px; font-weight: 600;'> ({$dNote})</span>";
                 }
 
@@ -2013,6 +2064,8 @@ class ResignationApiController extends Controller
                 } elseif (stripos($dName, 'Pension') !== false && $dAmt == 0) {
                     $extraBadge = "<span style='color: #64748b; font-size: 9px;'> (Not Enrolled)</span>";
                 } elseif (stripos($dName, 'Leave of Absence') !== false && $dAmt > 0 && !empty($dNote) && $dNote !== 'Nil') {
+                    $extraBadge = "<span style='color: #b91c1c; font-size: 9px; font-weight: bold;'> ({$dNote})</span>";
+                } elseif (stripos($dName, 'Payment in Lieu') !== false && $dAmt > 0 && !empty($dNote) && $dNote !== 'Nil') {
                     $extraBadge = "<span style='color: #b91c1c; font-size: 9px; font-weight: bold;'> ({$dNote})</span>";
                 }
 
@@ -3424,6 +3477,147 @@ class ResignationApiController extends Controller
             ], 422);
         } catch (\Throwable $th) {
             Log::error('ResignationAPI updateCoopLoanBalance: ' . $th->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => $th->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /api/nextjs/payroll/resignation-settlement/update-notice-in-lieu
+     * Update Payment in Lieu of Notice deduction for a resigning staff member.
+     */
+    public function updateNoticeInLieu(Request $request)
+    {
+        $ctx = $this->getUserContext($request);
+        if (!$ctx) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized'
+            ], 401);
+        }
+
+        $activeRole = strtolower(trim($request->header('X-User-Role', '')));
+        $canManage = !empty($ctx['isSuperAdmin']) 
+            || !empty($ctx['isHrHead']) 
+            || !empty($ctx['isFinanceHead'])
+            || in_array($activeRole, ['super admin', 'super administrator', 'superadmin', 'hr head', 'head of hr', 'finance head', 'head of finance']);
+
+        if (!$canManage) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Permission denied: Only Super Administrators, HR Head, and Finance Head are authorized to adjust Payment in Lieu of Notice.'
+            ], 403);
+        }
+
+        try {
+            $validated = $request->validate([
+                'resignation_id'    => 'nullable|integer',
+                'advice_id'         => 'nullable|integer',
+                'staff_id'          => 'nullable|integer',
+                'amount'            => 'required|numeric|min:0',
+                'days'              => 'nullable|integer|min:0|max:365',
+                'calculation_mode'  => 'nullable|string|in:days,amount',
+                'deduction_source'  => 'nullable|string|max:100',
+                'reason'            => 'nullable|string|max:500',
+            ]);
+
+            $amount = round((float)$validated['amount'], 2);
+            $days = isset($validated['days']) ? (int)$validated['days'] : 0;
+            $mode = $validated['calculation_mode'] ?? ($days > 0 ? 'days' : 'amount');
+            $source = $validated['deduction_source'] ?? 'general';
+            $reason = trim($validated['reason'] ?? '');
+            $resignationId = $validated['resignation_id'] ?? null;
+            $adviceId = $validated['advice_id'] ?? null;
+            $staffId = $validated['staff_id'] ?? null;
+            $userId = $ctx['userId'] ?? null;
+
+            // Resolve resignation_id from advice_id or staff_id if needed
+            if (!$resignationId && $adviceId) {
+                $adv = DB::table('advice_to_resigns')->where('id', $adviceId)->first();
+                if ($adv) {
+                    $resignationId = $adv->resignation_request_id;
+                    $staffId = $adv->staff_id;
+                }
+            }
+
+            if (!$resignationId && $staffId) {
+                $rr = DB::table('resignation_requests')->where('staff_id', $staffId)->latest('id')->first();
+                if ($rr) {
+                    $resignationId = $rr->id;
+                }
+            }
+
+            if ($resignationId) {
+                DB::table('resignation_requests')->where('id', $resignationId)->update([
+                    'notice_in_lieu_amount'     => $amount,
+                    'notice_in_lieu_days'       => $days,
+                    'notice_in_lieu_mode'       => $mode,
+                    'notice_in_lieu_source'     => $source,
+                    'notice_in_lieu_reason'     => $reason,
+                    'notice_in_lieu_updated_by' => $userId,
+                    'notice_in_lieu_updated_at' => now(),
+                    'updated_at'                => now(),
+                ]);
+            }
+
+            if ($adviceId) {
+                DB::table('advice_to_resigns')->where('id', $adviceId)->update([
+                    'notice_in_lieu_amount'     => $amount,
+                    'notice_in_lieu_days'       => $days,
+                    'notice_in_lieu_mode'       => $mode,
+                    'notice_in_lieu_source'     => $source,
+                    'notice_in_lieu_reason'     => $reason,
+                    'notice_in_lieu_updated_by' => $userId,
+                    'notice_in_lieu_updated_at' => now(),
+                    'updated_at'                => now(),
+                ]);
+            }
+
+            // Compute updated settlement
+            $updatedSettlement = null;
+            if ($adviceId) {
+                $adviceCtrl = app(\App\Http\Controllers\Api\AdviceToResignApiController::class);
+                $subReq = Request::create('', 'GET');
+                if ($request->hasHeader('X-User-Id')) $subReq->headers->set('X-User-Id', $request->header('X-User-Id'));
+                if ($request->hasHeader('X-User-Role')) $subReq->headers->set('X-User-Role', $request->header('X-User-Role'));
+                $subRes = $adviceCtrl->getSettlement($subReq, $adviceId);
+                $subData = $subRes->getData(true);
+                $updatedSettlement = $subData['settlement'] ?? ($subData['data']['settlement'] ?? null);
+            } elseif ($resignationId) {
+                $updatedSettlement = $this->computeDetailedSettlement((int)$resignationId);
+            }
+
+            $sourceLabel = 'General Settlement Pool';
+            if ($source === 'retention') $sourceLabel = 'Retention Savings Refund';
+            elseif ($source === 'salary') $sourceLabel = 'Notice Salary';
+            elseif ($source === 'coop_savings') $sourceLabel = 'Cooperative Savings Refund';
+
+            $msg = $amount > 0
+                ? "Payment in Lieu of Notice set to ₦" . number_format($amount, 2) . " (Deducted from {$sourceLabel})."
+                : "Payment in Lieu of Notice cleared / removed.";
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => $msg,
+                'data'    => [
+                    'resignation_id' => $resignationId,
+                    'advice_id'      => $adviceId,
+                    'amount'         => $amount,
+                    'days'           => $days,
+                    'source'         => $source,
+                    'settlement'     => $updatedSettlement,
+                ]
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Validation error.',
+                'errors'  => $ve->errors()
+            ], 422);
+        } catch (\Throwable $th) {
+            Log::error('ResignationAPI updateNoticeInLieu: ' . $th->getMessage());
             return response()->json([
                 'status'  => 'error',
                 'message' => $th->getMessage()

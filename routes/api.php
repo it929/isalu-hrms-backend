@@ -566,6 +566,7 @@ Route::prefix('nextjs')->group(function () {
             Route::post('/update-retention-months', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateRetentionMonths']);
             Route::post('/update-medical-loan-balance', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateMedicalLoanBalance']);
             Route::post('/update-coop-loan-balance', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateCoopLoanBalance']);
+            Route::post('/update-notice-in-lieu', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateNoticeInLieu']);
         });
 
         // Resignation Settlement Alias Group
@@ -576,6 +577,7 @@ Route::prefix('nextjs')->group(function () {
             Route::post('/update-retention-months', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateRetentionMonths']);
             Route::post('/update-medical-loan-balance', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateMedicalLoanBalance']);
             Route::post('/update-coop-loan-balance', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateCoopLoanBalance']);
+            Route::post('/update-notice-in-lieu', [\App\Http\Controllers\Api\ResignationApiController::class, 'updateNoticeInLieu']);
         });
 
         // Advice to Resign Module (under payroll and top-level)
